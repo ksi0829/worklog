@@ -1,17 +1,23 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import {
+  useState,
+  type CSSProperties,
+} from "react";
 import { useRouter } from "next/navigation";
 
 export default function ApprovalPage() {
   const router = useRouter();
 
-  const currentName =
-    typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
-  const currentTeam =
-    typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
-  const currentRole =
-    typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+  const [currentName] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("name") || "" : ""
+  );
+  const [currentTeam] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("team") || "" : ""
+  );
+  const [currentRole] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("role") || "" : ""
+  );
 
   return (
     <main style={styles.page}>
