@@ -8,6 +8,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type ScheduleItem = {
@@ -426,19 +427,11 @@ export default function SchedulePage() {
                 : {}),
             }}
           >
-            <div>
-              <div
-                style={{
-                  ...styles.title,
-                  ...(isMobileViewport
-                    ? styles.mobileTitle
-                    : {}),
-                }}
-              >
-                일정관리
-              </div>
-
-            </div>
+            <BrandLogo
+              subtitle="일정관리"
+              subtitleTag="h1"
+              size={isMobileViewport ? "compact" : "default"}
+            />
           </div>
 
           <div

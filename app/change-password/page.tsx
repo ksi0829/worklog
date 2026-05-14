@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createBrowserClient } from "@supabase/ssr";
 
 type Profile = {
@@ -168,7 +169,10 @@ export default function ChangePasswordPage() {
     <main style={styles.page}>
       <form style={styles.card} onSubmit={handleSubmit}>
         <div style={styles.topBar}>
-          <div style={styles.logo}>ZETA</div>
+          <BrandLogo
+            subtitle="계정관리"
+            subtitleTag="h1"
+          />
           <button
             type="button"
             style={styles.btnMini}
@@ -178,8 +182,6 @@ export default function ChangePasswordPage() {
             메인
           </button>
         </div>
-
-        <h1 style={styles.title}>계정관리</h1>
 
         <div style={styles.profileGrid}>
           <div style={styles.profileBox}>

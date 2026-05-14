@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createBrowserClient } from "@supabase/ssr";
 
 type Profile = {
@@ -697,12 +698,11 @@ export default function InputPageClient() {
           gap: 12,
         }}
       >
-        <div>
-          <div style={pageTitle}>
-            업무일지
-          </div>
-
-        </div>
+        <BrandLogo
+          subtitle="업무일지"
+          subtitleTag="h1"
+          size={viewport === "mobile" ? "compact" : "default"}
+        />
 
         <div
           style={{

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
@@ -103,15 +104,9 @@ export default function MainPage() {
     <div style={styles.page}>
       <div style={styles.container}>
         <div style={styles.header}>
-          <div>
-            <div style={styles.logo}>
-              ZETA
-            </div>
-
-            <div style={styles.subTitle}>
-              업무 통합 시스템
-            </div>
-          </div>
+          <BrandLogo
+            subtitle="업무 통합 시스템"
+          />
 
           <div style={styles.headerActions}>
             <button

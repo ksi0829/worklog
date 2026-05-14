@@ -8,6 +8,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase =
@@ -308,12 +309,11 @@ export default function ViewPage() {
     <>
       <div style={styles.page}>
         <div style={styles.header}>
-          <div>
-            <div style={styles.title}>
-              업무일지
-            </div>
-
-          </div>
+          <BrandLogo
+            subtitle="업무일지"
+            subtitleTag="h1"
+            size="compact"
+          />
 
           <div style={styles.right}>
             <div style={styles.userInfo}>

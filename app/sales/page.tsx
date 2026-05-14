@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/sales/styles";
 
@@ -434,10 +435,10 @@ export default function SalesPage() {
     <main style={styles.page}>
       <section style={styles.container}>
         <header style={styles.header}>
-          <div>
-            <div style={styles.logo}>ZETA</div>
-            <h1 style={styles.title}>영업관리</h1>
-          </div>
+          <BrandLogo
+            subtitle="영업관리"
+            subtitleTag="h1"
+          />
 
           <div style={styles.headerRight}>
             <div style={styles.accountInfo}>

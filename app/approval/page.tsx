@@ -5,6 +5,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 
 function subscribeStorage() {
   return () => {};
@@ -37,10 +38,10 @@ export default function ApprovalPage() {
     <main style={styles.page}>
       <section style={styles.container}>
         <header style={styles.header}>
-          <div>
-            <div style={styles.logo}>ZETA</div>
-            <h1 style={styles.title}>결재문서</h1>
-          </div>
+          <BrandLogo
+            subtitle="결재문서"
+            subtitleTag="h1"
+          />
 
           <div style={styles.headerRight}>
             <div style={styles.accountInfo}>

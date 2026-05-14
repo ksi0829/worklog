@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type Notice = {
@@ -146,10 +147,10 @@ export default function NoticesPage() {
     <main style={styles.page}>
       <section style={styles.container}>
         <header style={styles.header}>
-          <div>
-            <div style={styles.logo}>ZETA</div>
-            <h1 style={styles.title}>공지관리</h1>
-          </div>
+          <BrandLogo
+            subtitle="공지관리"
+            subtitleTag="h1"
+          />
           <button style={styles.backButton} onClick={() => router.push("/main")}>
             메인
           </button>

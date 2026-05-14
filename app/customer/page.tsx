@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/customer/styles";
 
@@ -383,10 +384,10 @@ export default function CustomerPage() {
     <main style={styles.page}>
       <section style={styles.container}>
         <header style={styles.header}>
-          <div>
-            <div style={styles.logo}>ZETA</div>
-            <h1 style={styles.title}>고객사 DB</h1>
-          </div>
+          <BrandLogo
+            subtitle="고객사 DB"
+            subtitleTag="h1"
+          />
 
           <div style={styles.headerRight}>
             <div style={styles.accountInfo}>

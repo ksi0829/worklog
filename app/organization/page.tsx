@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 
 type Member = {
   name: string;
@@ -103,10 +104,10 @@ export default function OrganizationPage() {
     <main style={styles.page}>
       <section style={styles.container}>
         <header style={styles.header}>
-          <div>
-            <div style={styles.logo}>ZETA</div>
-            <h1 style={styles.title}>조직도</h1>
-          </div>
+          <BrandLogo
+            subtitle="조직도"
+            subtitleTag="h1"
+          />
 
           <div style={styles.headerRight}>
             <div style={styles.accountInfo}>

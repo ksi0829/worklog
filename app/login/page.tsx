@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
@@ -120,28 +121,13 @@ export default function LoginPage() {
             "0 4px 12px rgba(0,0,0,0.04)",
         }}
       >
-        <div
-          style={{
-            fontSize: "28px",
-            fontWeight: 800,
-            color: "#0f172a",
-            marginBottom: "6px",
-            lineHeight: 1,
-            letterSpacing: "-0.5px",
-          }}
-        >
-          ZETA 로그인
-        </div>
-
-        <div
-          style={{
-            color: "#6b7280",
-            fontSize: "13px",
+        <BrandLogo
+          subtitle="업무 통합 시스템 로그인"
+          size="large"
+          containerStyle={{
             marginBottom: "24px",
           }}
-        >
-          ZETA 업무 통합 시스템
-        </div>
+        />
 
         <form
           onSubmit={handleLogin}
