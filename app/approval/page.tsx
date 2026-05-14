@@ -1,22 +1,36 @@
 "use client";
 
 import {
-  useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from "react";
 import { useRouter } from "next/navigation";
 
+function subscribeStorage() {
+  return () => {};
+}
+
+function readStorage(key: string) {
+  return typeof window !== "undefined" ? localStorage.getItem(key) || "" : "";
+}
+
 export default function ApprovalPage() {
   const router = useRouter();
 
-  const [currentName] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("name") || "" : ""
+  const currentName = useSyncExternalStore(
+    subscribeStorage,
+    () => readStorage("name"),
+    () => ""
   );
-  const [currentTeam] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("team") || "" : ""
+  const currentTeam = useSyncExternalStore(
+    subscribeStorage,
+    () => readStorage("team"),
+    () => ""
   );
-  const [currentRole] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("role") || "" : ""
+  const currentRole = useSyncExternalStore(
+    subscribeStorage,
+    () => readStorage("role"),
+    () => ""
   );
 
   return (
@@ -29,7 +43,7 @@ export default function ApprovalPage() {
           </div>
 
           <div style={styles.headerRight}>
-            <div style={styles.accountInfo} suppressHydrationWarning>
+            <div style={styles.accountInfo}>
               {currentName || "-"} / {currentTeam || "-"} / {currentRole || "-"}
             </div>
             <button style={styles.backButton} onClick={() => router.push("/main")}>
