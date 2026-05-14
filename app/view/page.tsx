@@ -40,16 +40,118 @@ type WorklogItem = {
   note: string | null;
 };
 
-const TEAM_ORDER = [
-  "연구개발",
-  "기술 1",
-  "기술 2",
-  "기술 3",
-  "구매기획총무",
-  "재무_인사",
-  "국내영업",
-  "해외영업",
+type CurrentOrgTeam = {
+  team: string;
+  leader: string;
+  members: string[];
+};
+
+type OrgMemberInfo = {
+  team: string;
+  leader: boolean;
+};
+
+const CURRENT_ORG: CurrentOrgTeam[] = [
+  {
+    team: "연구개발",
+    leader: "서중석",
+    members: ["윤지환"],
+  },
+  {
+    team: "기술 1팀",
+    leader: "한차현",
+    members: [
+      "한재영",
+      "권영일",
+      "김학",
+      "박상현",
+    ],
+  },
+  {
+    team: "기술 2팀",
+    leader: "이승준",
+    members: ["김종혁"],
+  },
+  {
+    team: "기술 3팀",
+    leader: "장동철",
+    members: ["양희원", "김성종"],
+  },
+  {
+    team: "구매기획총무",
+    leader: "권현진",
+    members: ["신훈식", "최하영"],
+  },
+  {
+    team: "재무_인사",
+    leader: "김혜정",
+    members: ["최인혜"],
+  },
+  {
+    team: "국내영업",
+    leader: "정대용",
+    members: ["김선일"],
+  },
+  {
+    team: "해외영업",
+    leader: "이양로",
+    members: ["반준영"],
+  },
 ];
+
+const TEAM_ORDER = CURRENT_ORG.map(
+  (team) => team.team
+);
+
+const ORG_MEMBER_MAP = new Map<
+  string,
+  OrgMemberInfo
+>(
+  CURRENT_ORG.flatMap((team) => {
+    const entries: [
+      string,
+      OrgMemberInfo
+    ][] = [
+      [
+        team.leader,
+        {
+          team: team.team,
+          leader: true,
+        },
+      ],
+    ];
+
+    team.members.forEach((name) => {
+      entries.push([
+        name,
+        {
+          team: team.team,
+          leader: false,
+        },
+      ]);
+    });
+
+    return entries;
+  })
+);
+
+function sortProfilesByOrg(
+  a: Profile,
+  b: Profile
+) {
+  const aInfo = ORG_MEMBER_MAP.get(a.name);
+  const bInfo = ORG_MEMBER_MAP.get(b.name);
+
+  if (aInfo?.leader && !bInfo?.leader)
+    return -1;
+  if (!aInfo?.leader && bInfo?.leader)
+    return 1;
+
+  return a.name.localeCompare(
+    b.name,
+    "ko-KR"
+  );
+}
 
 export default function ViewPage() {
   const router = useRouter();
@@ -73,7 +175,7 @@ export default function ViewPage() {
     useState<Worklog[]>([]);
 
   const [selectedTeam, setSelectedTeam] =
-    useState("기술 1");
+    useState("기술 1팀");
 
   const [modalOpen, setModalOpen] =
     useState(false);
@@ -100,13 +202,20 @@ export default function ViewPage() {
     useState(false);
 
   useEffect(() => {
-    setCurrentUser(
+    const storedName =
       localStorage.getItem("name") ||
-        ""
+      "";
+    const storedTeam =
+      localStorage.getItem("team") ||
+      "";
+
+    setCurrentUser(
+      storedName
     );
     setCurrentTeam(
-      localStorage.getItem("team") ||
-        ""
+      ORG_MEMBER_MAP.get(storedName)
+        ?.team ||
+        storedTeam
     );
     fetchProfiles();
   }, []);
@@ -157,30 +266,29 @@ export default function ViewPage() {
 
     if (!data) return;
 
-    const sorted = [...data].sort(
-      (a, b) => {
-        if (
-          a.role === "lead" &&
-          b.role !== "lead"
-        ) {
-          return -1;
-        }
+    const currentProfiles =
+      (data as Profile[])
+        .filter((profile) =>
+          ORG_MEMBER_MAP.has(
+            profile.name
+          )
+        )
+        .map((profile) => {
+          const orgInfo =
+            ORG_MEMBER_MAP.get(
+              profile.name
+            );
 
-        if (
-          a.role !== "lead" &&
-          b.role === "lead"
-        ) {
-          return 1;
-        }
+          return {
+            ...profile,
+            team:
+              orgInfo?.team ||
+              profile.team,
+          };
+        })
+        .sort(sortProfilesByOrg);
 
-        return a.name.localeCompare(
-          b.name,
-          "ko"
-        );
-      }
-    );
-
-    setProfiles(sorted);
+    setProfiles(currentProfiles);
   }
 
   async function fetchWorklogs() {
@@ -287,9 +395,12 @@ export default function ViewPage() {
       > = {};
 
       TEAM_ORDER.forEach((team) => {
-        grouped[team] = profiles.filter(
-          (v) => v.team === team
-        );
+        grouped[team] =
+          profiles
+            .filter(
+              (v) => v.team === team
+            )
+            .sort(sortProfilesByOrg);
       });
 
       return grouped;
