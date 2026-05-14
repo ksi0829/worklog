@@ -130,7 +130,7 @@ export default function LoginPage() {
             letterSpacing: "-0.5px",
           }}
         >
-          업무일지 로그인
+          ZETA 로그인
         </div>
 
         <div

@@ -103,6 +103,9 @@ export default function SchedulePage() {
   const [endDate, setEndDate] =
     useState("");
 
+  const [isMobileViewport, setIsMobileViewport] =
+    useState(false);
+
   const currentUser =
     typeof window !== "undefined"
       ? localStorage.getItem(
@@ -139,6 +142,31 @@ export default function SchedulePage() {
 
   useEffect(() => {
     fetchSchedules();
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(
+      "(max-width: 767px)"
+    );
+
+    const syncViewport = () => {
+      setIsMobileViewport(
+        mediaQuery.matches
+      );
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener(
+      "change",
+      syncViewport
+    );
+
+    return () => {
+      mediaQuery.removeEventListener(
+        "change",
+        syncViewport
+      );
+    };
   }, []);
 
   async function fetchSchedules() {
@@ -374,20 +402,60 @@ export default function SchedulePage() {
 
   return (
     <>
-      <div style={styles.page}>
-        <div style={styles.header}>
-          <div style={styles.left}>
+      <div
+        style={{
+          ...styles.page,
+          ...(isMobileViewport
+            ? styles.mobilePage
+            : {}),
+        }}
+      >
+        <div
+          style={{
+            ...styles.header,
+            ...(isMobileViewport
+              ? styles.mobileHeader
+              : {}),
+          }}
+        >
+          <div
+            style={{
+              ...styles.left,
+              ...(isMobileViewport
+                ? styles.mobileLeft
+                : {}),
+            }}
+          >
             <div>
-              <div style={styles.title}>
+              <div
+                style={{
+                  ...styles.title,
+                  ...(isMobileViewport
+                    ? styles.mobileTitle
+                    : {}),
+                }}
+              >
                 일정관리
               </div>
 
             </div>
           </div>
 
-          <div style={styles.center}>
+          <div
+            style={{
+              ...styles.center,
+              ...(isMobileViewport
+                ? styles.mobileCenter
+                : {}),
+            }}
+          >
             <button
-              style={styles.monthButton}
+              style={{
+                ...styles.monthButton,
+                ...(isMobileViewport
+                  ? styles.mobileMonthButton
+                  : {}),
+              }}
               onClick={() =>
                 moveMonth(-1)
               }
@@ -396,13 +464,23 @@ export default function SchedulePage() {
             </button>
 
             <div
-              style={styles.monthText}
+              style={{
+                ...styles.monthText,
+                ...(isMobileViewport
+                  ? styles.mobileMonthText
+                  : {}),
+              }}
             >
               {monthLabel}
             </div>
 
             <button
-              style={styles.monthButton}
+              style={{
+                ...styles.monthButton,
+                ...(isMobileViewport
+                  ? styles.mobileMonthButton
+                  : {}),
+              }}
               onClick={() =>
                 moveMonth(1)
               }
@@ -411,14 +489,33 @@ export default function SchedulePage() {
             </button>
           </div>
 
-          <div style={styles.right}>
-            <div style={styles.userInfo}>
+          <div
+            style={{
+              ...styles.right,
+              ...(isMobileViewport
+                ? styles.mobileRight
+                : {}),
+            }}
+          >
+            <div
+              style={{
+                ...styles.userInfo,
+                ...(isMobileViewport
+                  ? styles.mobileUserInfo
+                  : {}),
+              }}
+            >
               {currentTeam} /{" "}
               {currentUser}
             </div>
 
             <button
-              style={styles.topButton}
+              style={{
+                ...styles.topButton,
+                ...(isMobileViewport
+                  ? styles.mobileTopButton
+                  : {}),
+              }}
               onClick={() =>
                 router.push("/main")
               }
@@ -427,7 +524,12 @@ export default function SchedulePage() {
             </button>
 
             <button
-              style={styles.logoutButton}
+              style={{
+                ...styles.logoutButton,
+                ...(isMobileViewport
+                  ? styles.mobileTopButton
+                  : {}),
+              }}
               onClick={async () => {
                 await supabase.auth.signOut();
 
@@ -467,7 +569,14 @@ export default function SchedulePage() {
           </div>
         </div>
 
-        <div style={styles.calendarGrid}>
+        <div
+          style={{
+            ...styles.calendarGrid,
+            ...(isMobileViewport
+              ? styles.mobileCalendarGrid
+              : {}),
+          }}
+        >
           {days.map((day, index) => {
             if (!day) {
               return (
@@ -859,6 +968,10 @@ const styles: any = {
       "Pretendard, sans-serif",
   },
 
+  mobilePage: {
+    padding: "14px 12px 18px",
+  },
+
   header: {
     display: "grid",
     gridTemplateColumns:
@@ -867,10 +980,22 @@ const styles: any = {
     marginBottom: "12px",
   },
 
+  mobileHeader: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: "12px",
+    marginBottom: "18px",
+  },
+
   left: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
+  },
+
+  mobileLeft: {
+    justifyContent: "flex-start",
   },
 
   center: {
@@ -880,6 +1005,12 @@ const styles: any = {
     justifyContent: "center",
   },
 
+  mobileCenter: {
+    width: "100%",
+    justifyContent: "space-between",
+    gap: "8px",
+  },
+
   right: {
     display: "flex",
     justifyContent: "flex-end",
@@ -887,11 +1018,25 @@ const styles: any = {
     gap: "8px",
   },
 
+  mobileRight: {
+    width: "100%",
+    justifyContent: "flex-start",
+    alignItems: "stretch",
+    flexWrap: "wrap",
+  },
+
   userInfo: {
     fontSize: "12px",
     fontWeight: 700,
     color: "#64748b",
     marginRight: "4px",
+  },
+
+  mobileUserInfo: {
+    width: "100%",
+    marginRight: 0,
+    lineHeight: 1.4,
+    textAlign: "left",
   },
 
   topButton: {
@@ -903,6 +1048,14 @@ const styles: any = {
     fontSize: "12px",
     fontWeight: 700,
     cursor: "pointer",
+  },
+
+  mobileTopButton: {
+    flex: "1 1 0",
+    minWidth: "96px",
+    height: "42px",
+    padding: "0 12px",
+    whiteSpace: "nowrap",
   },
 
   logoutButton: {
@@ -929,6 +1082,12 @@ const styles: any = {
     lineHeight: 1,
   },
 
+  mobileTitle: {
+    fontSize: "24px",
+    lineHeight: 1.15,
+    whiteSpace: "nowrap",
+  },
+
   subTitle: {
     marginTop: "4px",
     fontSize: "12px",
@@ -946,12 +1105,26 @@ const styles: any = {
     fontSize: "18px",
   },
 
+  mobileMonthButton: {
+    width: "44px",
+    height: "44px",
+    flex: "0 0 44px",
+    fontSize: "22px",
+  },
+
   monthText: {
     fontSize: "20px",
     fontWeight: 800,
     color: "#111827",
     minWidth: "140px",
     textAlign: "center",
+  },
+
+  mobileMonthText: {
+    flex: "1 1 auto",
+    minWidth: 0,
+    fontSize: "22px",
+    whiteSpace: "nowrap",
   },
 
   weekRow: {
@@ -979,6 +1152,12 @@ const styles: any = {
       "repeat(7,1fr)",
     gap: "6px",
     height: "calc(100vh - 120px)",
+  },
+
+  mobileCalendarGrid: {
+    height: "auto",
+    minHeight: "calc(100vh - 210px)",
+    gap: "5px",
   },
 
   emptyDay: {

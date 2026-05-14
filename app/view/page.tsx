@@ -92,6 +92,12 @@ export default function ViewPage() {
   const [currentTeam, setCurrentTeam] =
     useState("");
 
+  const [isMobileViewport, setIsMobileViewport] =
+    useState(false);
+
+  const [mobileInputNotice, setMobileInputNotice] =
+    useState(false);
+
   useEffect(() => {
     setCurrentUser(
       localStorage.getItem("name") ||
@@ -105,8 +111,42 @@ export default function ViewPage() {
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia(
+      "(max-width: 767px)"
+    );
+
+    const syncViewport = () => {
+      setIsMobileViewport(
+        mediaQuery.matches
+      );
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener(
+      "change",
+      syncViewport
+    );
+
+    return () => {
+      mediaQuery.removeEventListener(
+        "change",
+        syncViewport
+      );
+    };
+  }, []);
+
+  useEffect(() => {
     fetchWorklogs();
   }, [selectedDate]);
+
+  function handleInputClick() {
+    if (isMobileViewport) {
+      setMobileInputNotice(true);
+      return;
+    }
+
+    router.push("/");
+  }
 
   async function fetchProfiles() {
     const { data } =
@@ -283,9 +323,7 @@ export default function ViewPage() {
 
             <button
               style={styles.topButton}
-              onClick={() =>
-                router.push("/")
-              }
+              onClick={handleInputClick}
             >
               입력
             </button>
@@ -313,6 +351,12 @@ export default function ViewPage() {
             </button>
           </div>
         </div>
+
+        {mobileInputNotice && (
+          <div style={styles.mobileNotice}>
+            모바일 환경에서는 업무일지 작성이 제한됩니다. PC에서 작성해 주세요.
+          </div>
+        )}
 
         <div style={styles.topBar}>
           <input
@@ -813,6 +857,19 @@ const styles: any = {
     background: "#fff",
     border:
       "1px solid #e2e8f0",
+  },
+
+  mobileNotice: {
+    marginBottom: "14px",
+    padding: "12px 14px",
+    borderRadius: "12px",
+    background: "#fff7ed",
+    border:
+      "1px solid #fed7aa",
+    color: "#9a3412",
+    fontSize: "13px",
+    fontWeight: 700,
+    lineHeight: 1.45,
   },
 
   dateInput: {
