@@ -1,5 +1,9 @@
 @import url("https://cdn.jsdelivr.net/npm/pretendard/dist/web/static/pretendard.css");
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --background: #f8fafc;
   --foreground: #111827;

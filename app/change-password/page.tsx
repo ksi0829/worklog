@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -143,22 +143,60 @@ export default function ChangePasswordPage() {
           router.replace("/");
         }
       }, 700);
-    } catch (e: any) {
+      } catch (e: unknown) {
       console.error(e);
       setMsg({
         type: "err",
-        text: String(e?.message ?? "비밀번호 변경 중 오류가 발생했습니다."),
+        text:
+          e instanceof Error
+            ? e.message
+            : "비밀번호 변경 중 오류가 발생했습니다.",
       });
     } finally {
       setLoading(false);
     }
   }
 
+  const currentName =
+    typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
+  const currentTeam =
+    typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
+  const currentRole =
+    typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+
   return (
     <main style={styles.page}>
       <form style={styles.card} onSubmit={handleSubmit}>
-        <h1 style={styles.title}>비밀번호 변경</h1>
-        <p style={styles.subTitle}>사용 중 비밀번호를 변경할 수 있습니다.</p>
+        <div style={styles.topBar}>
+          <div style={styles.logo}>ZETA</div>
+          <button
+            type="button"
+            style={styles.btnMini}
+            onClick={() => router.replace("/main")}
+            disabled={loading}
+          >
+            메인
+          </button>
+        </div>
+
+        <h1 style={styles.title}>계정관리</h1>
+
+        <div style={styles.profileGrid}>
+          <div style={styles.profileBox}>
+            <span style={styles.profileLabel}>이름</span>
+            <strong>{currentName || "-"}</strong>
+          </div>
+          <div style={styles.profileBox}>
+            <span style={styles.profileLabel}>부서</span>
+            <strong>{currentTeam || "-"}</strong>
+          </div>
+          <div style={styles.profileBox}>
+            <span style={styles.profileLabel}>권한</span>
+            <strong>{currentRole || "-"}</strong>
+          </div>
+        </div>
+
+        <h2 style={styles.sectionTitle}>비밀번호 변경</h2>
 
         <div style={styles.field}>
           <label style={styles.label}>새 비밀번호</label>
@@ -192,10 +230,10 @@ export default function ChangePasswordPage() {
           <button
             type="button"
             style={styles.btnGhost}
-            onClick={() => router.replace("/view")}
+            onClick={() => router.replace("/main")}
             disabled={loading}
           >
-            조회로
+            취소
           </button>
           <button type="submit" style={styles.btnPrimary} disabled={loading}>
             {loading ? "변경 중..." : "변경하기"}
@@ -226,17 +264,61 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "24px",
     boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
   },
+  topBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    marginBottom: "18px",
+  },
+  logo: {
+    color: "#0f172a",
+    fontSize: "24px",
+    fontWeight: 800,
+    lineHeight: 1,
+  },
+  btnMini: {
+    height: "32px",
+    padding: "0 11px",
+    borderRadius: "9px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
   title: {
     margin: 0,
     fontSize: "22px",
     fontWeight: 800,
     color: "#0f172a",
   },
-  subTitle: {
-    margin: "8px 0 20px",
-    fontSize: "14px",
+  profileGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+    margin: "16px 0 20px",
+  },
+  profileBox: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#f8fafc",
+    padding: "10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    minWidth: 0,
+  },
+  profileLabel: {
     color: "#64748b",
-    fontWeight: 500,
+    fontSize: "11px",
+    fontWeight: 800,
+  },
+  sectionTitle: {
+    margin: "0 0 14px",
+    fontSize: "16px",
+    color: "#111827",
   },
   field: {
     display: "grid",

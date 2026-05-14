@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
+
 import "./globals.css";
-import SessionGuard from "./_components/SessionGuard";
 
 export const metadata: Metadata = {
-  title: "업무일지",
-  description: "업무일지 웹앱",
+  title: {
+    default: "ZETA 업무통합시스템",
+
+    template:
+      "ZETA 업무통합시스템 | %s",
+  },
+
+  description:
+    "ZETA 업무 통합 관리 시스템",
 };
 
 export default function RootLayout({
@@ -14,10 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>
-        <SessionGuard />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

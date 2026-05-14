@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
@@ -225,24 +225,28 @@ function Section(props: {
                 style={{ ...input, width: 90 }}
                 autoComplete="off"
               />
+
               <input
                 value={r.company}
                 onChange={(e) => onUpdate(r.rid, { company: e.target.value })}
                 style={{ ...input, width: 150 }}
                 autoComplete="off"
               />
+
               <input
                 value={r.equipment}
                 onChange={(e) => onUpdate(r.rid, { equipment: e.target.value })}
                 style={{ ...input, width: 120 }}
                 autoComplete="off"
               />
+
               <input
                 value={r.task}
                 onChange={(e) => onUpdate(r.rid, { task: e.target.value })}
                 style={{ ...input, width: "100%" }}
                 autoComplete="off"
               />
+
               <input
                 value={r.note}
                 onChange={(e) => onUpdate(r.rid, { note: e.target.value })}
@@ -282,9 +286,12 @@ export default function InputPageClient() {
   const [viewport, setViewport] = useState<Viewport>("desktop");
   const [date, setDate] = useState(toKSTDateString());
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
-    null
-  );
+
+  const [msg, setMsg] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
+
   const [loading, setLoading] = useState(false);
 
   const [prevRows, setPrevRows] = useState<Row[]>([
@@ -292,6 +299,7 @@ export default function InputPageClient() {
     makeBlankRow(),
     makeBlankRow(),
   ]);
+
   const [todayRows, setTodayRows] = useState<Row[]>([
     makeBlankRow(),
     makeBlankRow(),
@@ -300,13 +308,19 @@ export default function InputPageClient() {
 
   useEffect(() => {
     const apply = () => setViewport(getViewport());
+
     apply();
+
     window.addEventListener("resize", apply);
-    return () => window.removeEventListener("resize", apply);
+
+    return () =>
+      window.removeEventListener("resize", apply);
   }, []);
 
   const ensureProfile = useCallback(async () => {
-    const { data: ures, error: uerr } = await supabase.auth.getUser();
+    const { data: ures, error: uerr } =
+      await supabase.auth.getUser();
+
     if (uerr || !ures.user) {
       location.href = "/login";
       return null;
@@ -314,21 +328,30 @@ export default function InputPageClient() {
 
     const userId = ures.user.id;
 
-    const { data: p, error: perr } = await supabase
-      .from("profiles")
-      .select("id,name,team,role")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data: p, error: perr } =
+      await supabase
+        .from("profiles")
+        .select("id,name,team,role")
+        .eq("id", userId)
+        .maybeSingle();
 
     if (perr) {
-      console.error("profile load error:", perr);
-      setMsg({ type: "err", text: `profiles load failed\n${perr.message}` });
+      setMsg({
+        type: "err",
+        text: `profiles load failed\n${perr.message}`,
+      });
+
       return null;
     }
 
     const prof: Profile = p
       ? (p as Profile)
-      : { id: userId, name: null, team: null, role: null };
+      : {
+          id: userId,
+          name: null,
+          team: null,
+          role: null,
+        };
 
     setProfile(prof);
 
@@ -342,24 +365,28 @@ export default function InputPageClient() {
 
   const getOrCreateWorklogId = useCallback(
     async (userId: string, workDate: string) => {
-      const { data: w, error: werr } = await supabase
+      const { data: w } = await supabase
         .from("worklogs")
         .select("id")
         .eq("user_id", userId)
         .eq("work_date", workDate)
         .maybeSingle();
 
-      if (werr) throw new Error(`worklogs select failed\n${werr.message}`);
       if (w?.id) return w.id as string;
 
-      const { data: ins, error: ierr } = await supabase
-        .from("worklogs")
-        .insert({ user_id: userId, work_date: workDate })
-        .select("id")
-        .single();
+      const { data: ins, error: ierr } =
+        await supabase
+          .from("worklogs")
+          .insert({
+            user_id: userId,
+            work_date: workDate,
+          })
+          .select("id")
+          .single();
 
-      if (ierr) throw new Error(`worklogs insert failed\n${ierr.message}`);
-      if (!ins?.id) throw new Error("worklog id not returned");
+      if (ierr)
+        throw new Error(ierr.message);
+
       return ins.id as string;
     },
     [supabase]
@@ -367,7 +394,10 @@ export default function InputPageClient() {
 
   const padTo3 = (arr: Row[]) => {
     const out = [...arr];
-    while (out.length < 3) out.push(makeBlankRow());
+
+    while (out.length < 3)
+      out.push(makeBlankRow());
+
     return out.slice(0, 10);
   };
 
@@ -376,81 +406,93 @@ export default function InputPageClient() {
     setMsg(null);
 
     const prof = await ensureProfile();
+
     if (!prof) {
       setLoading(false);
       return;
     }
 
     try {
-      const { data: w, error: werr } = await supabase
+      const { data: w } = await supabase
         .from("worklogs")
         .select("id")
         .eq("user_id", prof.id)
         .eq("work_date", date)
         .maybeSingle();
 
-      if (werr) {
-        setMsg({ type: "err", text: `worklogs load failed\n${werr.message}` });
-        setLoading(false);
-        return;
-      }
-
       let items: ItemRowDB[] = [];
-      if (w?.id) {
-        const { data: it, error: ierr } = await supabase
-          .from("worklog_items")
-          .select("*")
-          .eq("worklog_id", w.id)
-          .order("start_time", { ascending: true })
-          .order("created_at", { ascending: true });
 
-        if (ierr) {
-          setMsg({ type: "err", text: `load items failed\n${ierr.message}` });
-          setLoading(false);
-          return;
-        }
+      if (w?.id) {
+        const { data: it } =
+          await supabase
+            .from("worklog_items")
+            .select("*")
+            .eq("worklog_id", w.id)
+            .order("start_time", {
+              ascending: true,
+            });
+
         items = (it ?? []) as ItemRowDB[];
       }
 
-      const prevDB = items.filter((x) => x.type === "prev");
-      const todayDB = items.filter((x) => x.type === "today");
+      const prevDB = items.filter(
+        (x) => x.type === "prev"
+      );
 
-      let prevRowsNext: Row[] = [];
-      if (prevDB.length > 0) {
-        prevRowsNext = prevDB.map(mapDBToRow);
-      } else {
-        const y = addDays(date, -1);
-        const { data: yw, error: ywerr } = await supabase
-          .from("worklogs")
-          .select("id")
-          .eq("user_id", prof.id)
-          .eq("work_date", y)
-          .maybeSingle();
+      const todayDB = items.filter(
+        (x) => x.type === "today"
+      );
 
-        if (!ywerr && yw?.id) {
-          const { data: yit, error: yiterr } = await supabase
-            .from("worklog_items")
-            .select("*")
-            .eq("worklog_id", yw.id)
-            .eq("type", "today")
-            .order("start_time", { ascending: true })
-            .order("created_at", { ascending: true });
+      let prevRowsNext =
+        prevDB.length > 0
+          ? prevDB.map(mapDBToRow)
+          : [];
 
-          if (!yiterr) {
-            prevRowsNext = ((yit ?? []) as ItemRowDB[]).map(mapDBToRow);
-          }
+      if (prevRowsNext.length === 0) {
+        const previousDate = addDays(date, -1);
+
+        const { data: previousWorklog } =
+          await supabase
+            .from("worklogs")
+            .select("id")
+            .eq("user_id", prof.id)
+            .eq("work_date", previousDate)
+            .maybeSingle();
+
+        if (previousWorklog?.id) {
+          const { data: previousItems } =
+            await supabase
+              .from("worklog_items")
+              .select("*")
+              .eq(
+                "worklog_id",
+                previousWorklog.id
+              )
+              .eq("type", "today")
+              .order("start_time", {
+                ascending: true,
+              });
+
+          prevRowsNext =
+            previousItems &&
+            previousItems.length > 0
+              ? (previousItems as ItemRowDB[]).map(mapDBToRow)
+              : [];
         }
       }
 
       const todayRowsNext =
-        todayDB.length > 0 ? todayDB.map(mapDBToRow) : [];
+        todayDB.length > 0
+          ? todayDB.map(mapDBToRow)
+          : [];
 
       setPrevRows(padTo3(prevRowsNext));
       setTodayRows(padTo3(todayRowsNext));
-      setMsg(null);
-    } catch (e: any) {
-      console.error(e);
-      setMsg({ type: "err", text: String(e?.message ?? e) });
+    } catch (e: unknown) {
+      setMsg({
+        type: "err",
+        text: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setLoading(false);
     }
@@ -461,45 +503,91 @@ export default function InputPageClient() {
   }, [load]);
 
   const updateRow = useCallback(
-    (section: "prev" | "today", rid: string, patch: Partial<Row>) => {
-      const setter = section === "prev" ? setPrevRows : setTodayRows;
+    (
+      section: "prev" | "today",
+      rid: string,
+      patch: Partial<Row>
+    ) => {
+      const setter =
+        section === "prev"
+          ? setPrevRows
+          : setTodayRows;
+
       setter((prev) => {
-        const idx = prev.findIndex((r) => r.rid === rid);
+        const idx = prev.findIndex(
+          (r) => r.rid === rid
+        );
+
         if (idx < 0) return prev;
-        const out = prev.map((r) => ({ ...r }));
-        out[idx] = { ...out[idx], ...patch };
+
+        const out = prev.map((r) => ({
+          ...r,
+        }));
+
+        out[idx] = {
+          ...out[idx],
+          ...patch,
+        };
+
         return out;
       });
     },
     []
   );
 
-  const addRow = (section: "prev" | "today") => {
-    const setter = section === "prev" ? setPrevRows : setTodayRows;
+  const addRow = (
+    section: "prev" | "today"
+  ) => {
+    const setter =
+      section === "prev"
+        ? setPrevRows
+        : setTodayRows;
+
     setter((prev) => {
-      if (prev.length >= 10) return prev;
+      if (prev.length >= 10)
+        return prev;
+
       return [...prev, makeBlankRow()];
     });
   };
 
-  const delRow = (section: "prev" | "today", rid: string) => {
-    const setter = section === "prev" ? setPrevRows : setTodayRows;
+  const delRow = (
+    section: "prev" | "today",
+    rid: string
+  ) => {
+    const setter =
+      section === "prev"
+        ? setPrevRows
+        : setTodayRows;
+
     setter((prev) => {
-      const out = prev.filter((r) => r.rid !== rid);
-      while (out.length < 3) out.push(makeBlankRow());
+      const out = prev.filter(
+        (r) => r.rid !== rid
+      );
+
+      while (out.length < 3)
+        out.push(makeBlankRow());
+
       return out;
     });
   };
 
-  const normalizeRowsForSave = (rows: Row[], type: "prev" | "today") => {
-    const usable = rows.filter((r) => !isRowEmpty(r));
+  const normalizeRowsForSave = (
+    rows: Row[],
+    type: "prev" | "today"
+  ) => {
+    const usable = rows.filter(
+      (r) => !isRowEmpty(r)
+    );
+
     return usable.map((r) => ({
       type,
       start_time: toDBTime(r.start),
       end_time: toDBTime(r.end),
       location: r.location || null,
       company: r.company || null,
-      equipment: r.equipment || null,
+      equipment:
+        r.equipment || null,
       task: r.task || null,
       note: r.note || null,
     }));
@@ -512,67 +600,108 @@ export default function InputPageClient() {
     setMsg(null);
 
     try {
-      const worklogId = await getOrCreateWorklogId(profile.id, date);
+      const worklogId =
+        await getOrCreateWorklogId(
+          profile.id,
+          date
+        );
 
       const toInsert = [
-        ...normalizeRowsForSave(prevRows, "prev"),
-        ...normalizeRowsForSave(todayRows, "today"),
-      ].map((x) => ({ ...x, worklog_id: worklogId }));
+        ...normalizeRowsForSave(
+          prevRows,
+          "prev"
+        ),
+        ...normalizeRowsForSave(
+          todayRows,
+          "today"
+        ),
+      ].map((x) => ({
+        ...x,
+        worklog_id: worklogId,
+      }));
 
-      const { error: derr } = await supabase
+      await supabase
         .from("worklog_items")
         .delete()
-        .eq("worklog_id", worklogId);
-
-      if (derr) throw new Error(`delete items failed\n${derr.message}`);
+        .eq(
+          "worklog_id",
+          worklogId
+        );
 
       if (toInsert.length > 0) {
-        const { error: ierr } = await supabase
+        await supabase
           .from("worklog_items")
           .insert(toInsert);
-        if (ierr) throw new Error(`insert failed\n${ierr.message}`);
       }
 
-      setMsg({ type: "ok", text: "저장 완료" });
-    } catch (e: any) {
-      console.error(e);
-      setMsg({ type: "err", text: String(e?.message ?? e) });
+      setMsg({
+        type: "ok",
+        text: "저장 완료",
+      });
+    } catch (e: unknown) {
+      setMsg({
+        type: "err",
+        text: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setLoading(false);
     }
-  }, [profile?.id, getOrCreateWorklogId, date, prevRows, todayRows, supabase]);
+  }, [
+    profile?.id,
+    getOrCreateWorklogId,
+    date,
+    prevRows,
+    todayRows,
+    supabase,
+  ]);
 
   const headerRight = useMemo(() => {
     const name = profile?.name ?? "";
     const team = profile?.team ?? "";
     const role = profile?.role ?? "";
-    return [name, team, role].filter(Boolean).join(" · ");
+
+    return [name, team, role]
+      .filter(Boolean)
+      .join(" · ");
   }, [profile]);
 
   return (
     <div
       style={{
-        maxWidth: viewport === "tablet" ? 1080 : 1200,
+        maxWidth:
+          viewport === "tablet"
+            ? 1080
+            : 1200,
         margin: "0 auto",
-        padding: viewport === "desktop" ? "26px 18px 64px" : "20px 14px 56px",
+        padding:
+          viewport === "desktop"
+            ? "26px 18px 64px"
+            : "20px 14px 56px",
         fontFamily:
-          "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+          "Pretendard, sans-serif",
       }}
     >
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: viewport === "mobile" ? "stretch" : "flex-start",
-          flexDirection: viewport === "mobile" ? "column" : "row",
+          justifyContent:
+            "space-between",
+          alignItems:
+            viewport === "mobile"
+              ? "stretch"
+              : "flex-start",
+          flexDirection:
+            viewport === "mobile"
+              ? "column"
+              : "row",
           gap: 12,
         }}
       >
         <div>
-          <div style={pageTitle}>업무일지</div>
-          <div style={pageSubTitle}>
-            전일/금일 분리 입력 (전일은 “어제 금일업무” 자동 채움)
+          <div style={pageTitle}>
+            업무일지
           </div>
+
         </div>
 
         <div
@@ -580,19 +709,48 @@ export default function InputPageClient() {
             display: "flex",
             gap: 8,
             flexWrap: "wrap",
+            justifyContent:
+              viewport === "mobile"
+                ? "flex-start"
+                : "flex-end",
           }}
         >
-          <a href="/view" style={btnGhost}>
+          <div
+            style={{
+              width: "100%",
+              textAlign:
+                viewport === "mobile"
+                  ? "left"
+                  : "right",
+              fontSize: 12,
+              color: "#64748b",
+              fontWeight: 700,
+            }}
+          >
+            {profile?.name || "-"} / {profile?.team || "-"} / {profile?.role || "-"}
+          </div>
+
+          <a
+            href="/main"
+            style={btnGhost}
+          >
+            메인
+          </a>
+
+          <a
+            href="/view"
+            style={btnGhost}
+          >
             조회
           </a>
-          <a href="/change-password" style={btnGhost}>
-            비밀번호 변경
-          </a>
+
           <button
             style={btnGhost}
             onClick={async () => {
               await supabase.auth.signOut();
-              location.href = "/login";
+
+              location.href =
+                "/login";
             }}
             type="button"
           >
@@ -605,21 +763,40 @@ export default function InputPageClient() {
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent:
+              "space-between",
             gap: 12,
-            alignItems: viewport === "mobile" ? "stretch" : "center",
+            alignItems:
+              viewport === "mobile"
+                ? "stretch"
+                : "center",
             flexWrap: "wrap",
-            flexDirection: viewport === "mobile" ? "column" : "row",
+            flexDirection:
+              viewport === "mobile"
+                ? "column"
+                : "row",
           }}
         >
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={label}>날짜</div>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+            }}
+          >
+            <div style={label}>
+              날짜
+            </div>
+
             <input
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) =>
+                setDate(
+                  e.target.value
+                )
+              }
               style={input}
-              autoComplete="off"
             />
           </div>
 
@@ -631,7 +808,10 @@ export default function InputPageClient() {
               flexWrap: "wrap",
             }}
           >
-            <div style={profileText}>{headerRight}</div>
+            <div style={profileText}>
+              {headerRight}
+            </div>
+
             <button
               style={btnGhostSmall}
               onClick={load}
@@ -640,6 +820,7 @@ export default function InputPageClient() {
             >
               새로고침
             </button>
+
             <button
               style={btnPrimary}
               onClick={save}
@@ -652,8 +833,22 @@ export default function InputPageClient() {
         </div>
 
         {msg && (
-          <div style={msg.type === "err" ? errBox : okBox}>
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.text}</pre>
+          <div
+            style={
+              msg.type === "err"
+                ? errBox
+                : okBox
+            }
+          >
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace:
+                  "pre-wrap",
+              }}
+            >
+              {msg.text}
+            </pre>
           </div>
         )}
       </div>
@@ -661,211 +856,234 @@ export default function InputPageClient() {
       <Section
         title="전일 업무"
         rows={prevRows}
-        onAdd={() => addRow("prev")}
-        onDel={(rid) => delRow("prev", rid)}
-        onUpdate={(rid, patch) => updateRow("prev", rid, patch)}
+        onAdd={() =>
+          addRow("prev")
+        }
+        onDel={(rid) =>
+          delRow("prev", rid)
+        }
+        onUpdate={(rid, patch) =>
+          updateRow(
+            "prev",
+            rid,
+            patch
+          )
+        }
       />
 
       <Section
         title="금일 업무"
         rows={todayRows}
-        onAdd={() => addRow("today")}
-        onDel={(rid) => delRow("today", rid)}
-        onUpdate={(rid, patch) => updateRow("today", rid, patch)}
+        onAdd={() =>
+          addRow("today")
+        }
+        onDel={(rid) =>
+          delRow("today", rid)
+        }
+        onUpdate={(rid, patch) =>
+          updateRow(
+            "today",
+            rid,
+            patch
+          )
+        }
       />
     </div>
   );
 }
 
-const pageTitle: React.CSSProperties = {
-  fontSize: 31,
-  fontWeight: 800,
-  letterSpacing: "-0.02em",
-  lineHeight: 1.1,
-  color: "#111827",
-};
+const pageTitle: React.CSSProperties =
+  {
+    fontSize: 31,
+    fontWeight: 800,
+    letterSpacing: "-0.02em",
+    lineHeight: 1.1,
+    color: "#111827",
+  };
 
-const pageSubTitle: React.CSSProperties = {
-  marginTop: 6,
-  color: "#6b7280",
-  fontSize: 14,
-  fontWeight: 500,
-  lineHeight: 1.5,
-};
 
-const sectionTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 800,
-  letterSpacing: "-0.01em",
-  color: "#111827",
-};
+const sectionTitle: React.CSSProperties =
+  {
+    fontSize: 18,
+    fontWeight: 800,
+    color: "#111827",
+  };
 
-const profileText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 13,
-  fontWeight: 600,
-};
+const profileText: React.CSSProperties =
+  {
+    color: "#6b7280",
+    fontSize: 13,
+    fontWeight: 600,
+  };
 
-const panel: React.CSSProperties = {
-  marginTop: 18,
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 16,
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-};
+const panel: React.CSSProperties =
+  {
+    marginTop: 18,
+    background: "#fff",
+    border:
+      "1px solid #e5e7eb",
+    borderRadius: 16,
+    padding: 16,
+  };
 
-const card: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 16,
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-};
+const card: React.CSSProperties =
+  {
+    background: "#fff",
+    border:
+      "1px solid #e5e7eb",
+    borderRadius: 16,
+    padding: 16,
+  };
 
-const label: React.CSSProperties = {
-  fontSize: 12,
-  color: "#6b7280",
-  minWidth: 34,
-  fontWeight: 700,
-};
+const label: React.CSSProperties =
+  {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: 700,
+  };
 
-const input: React.CSSProperties = {
-  height: 40,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  padding: "0 11px",
-  fontSize: 14,
-  fontWeight: 500,
-  color: "#111827",
-  outline: "none",
-  background: "#fff",
-};
+const input: React.CSSProperties =
+  {
+    height: 40,
+    borderRadius: 10,
+    border:
+      "1px solid #d1d5db",
+    padding: "0 11px",
+    fontSize: 14,
+  };
 
-const btnPrimary: React.CSSProperties = {
-  height: 40,
-  borderRadius: 12,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: "pointer",
-  padding: "0 14px",
-};
+const btnPrimary: React.CSSProperties =
+  {
+    height: 40,
+    borderRadius: 12,
+    border: "1px solid #111827",
+    background: "#111827",
+    color: "#fff",
+    fontWeight: 800,
+    padding: "0 14px",
+    cursor: "pointer",
+  };
 
-const btnGhost: React.CSSProperties = {
-  height: 38,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textDecoration: "none",
-  color: "#111827",
-};
+const btnGhost: React.CSSProperties =
+  {
+    height: 38,
+    padding: "0 12px",
+    borderRadius: 12,
+    border:
+      "1px solid #d1d5db",
+    background: "#fff",
+    fontWeight: 700,
+    fontSize: 14,
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    color: "#111827",
+  };
 
-const btnGhostSmall: React.CSSProperties = {
-  height: 34,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-};
+const btnGhostSmall: React.CSSProperties =
+  {
+    height: 34,
+    padding: "0 12px",
+    borderRadius: 999,
+    border:
+      "1px solid #d1d5db",
+    background: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+  };
 
-const btnDangerSmall: React.CSSProperties = {
-  height: 34,
-  width: 38,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111827",
-  fontWeight: 800,
-  fontSize: 16,
-  cursor: "pointer",
-};
+const btnDangerSmall: React.CSSProperties =
+  {
+    height: 34,
+    width: 38,
+    borderRadius: 10,
+    border:
+      "1px solid #d1d5db",
+    background: "#fff",
+    fontWeight: 800,
+    cursor: "pointer",
+  };
 
-const okBox: React.CSSProperties = {
-  marginTop: 12,
-  background: "#ecfdf5",
-  border: "1px solid #a7f3d0",
-  color: "#065f46",
-  borderRadius: 12,
-  padding: 12,
-  fontSize: 12,
-  fontWeight: 600,
-};
+const okBox: React.CSSProperties =
+  {
+    marginTop: 12,
+    background: "#ecfdf5",
+    border:
+      "1px solid #a7f3d0",
+    color: "#065f46",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 12,
+  };
 
-const errBox: React.CSSProperties = {
-  marginTop: 12,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#b91c1c",
-  borderRadius: 12,
-  padding: 12,
-  fontSize: 12,
-  fontWeight: 600,
-};
+const errBox: React.CSSProperties =
+  {
+    marginTop: 12,
+    background: "#fef2f2",
+    border:
+      "1px solid #fecaca",
+    color: "#b91c1c",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 12,
+  };
 
-const tableHeader: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "140px 140px 90px 150px 120px 1fr 170px 38px",
-  gap: 10,
-  padding: "10px 8px",
-  color: "#374151",
-  fontSize: 13,
-  fontWeight: 700,
-  background: "#f9fafb",
-  borderRadius: 12,
-  marginBottom: 10,
-};
+const tableHeader: React.CSSProperties =
+  {
+    display: "grid",
+    gridTemplateColumns:
+      "140px 140px 90px 150px 120px 1fr 170px 38px",
+    gap: 10,
+    padding: "10px 8px",
+    background: "#f9fafb",
+    borderRadius: 12,
+    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: 700,
+  };
 
-const tableRow: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "140px 140px 90px 150px 120px 1fr 170px 38px",
-  gap: 10,
-  alignItems: "center",
-};
+const tableRow: React.CSSProperties =
+  {
+    display: "grid",
+    gridTemplateColumns:
+      "140px 140px 90px 150px 120px 1fr 170px 38px",
+    gap: 10,
+    alignItems: "center",
+  };
 
-const timeBox: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  width: 140,
-};
+const timeBox: React.CSSProperties =
+  {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    width: 140,
+  };
 
-const timeSelect: React.CSSProperties = {
-  height: 40,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  padding: "0 8px",
-  fontSize: 14,
-  fontWeight: 500,
-  color: "#111827",
-  outline: "none",
-  background: "#fff",
-};
+const timeSelect: React.CSSProperties =
+  {
+    height: 40,
+    borderRadius: 10,
+    border:
+      "1px solid #d1d5db",
+    padding: "0 8px",
+    fontSize: 14,
+    background: "#fff",
+  };
 
-const colon: React.CSSProperties = {
-  fontWeight: 800,
-  fontSize: 16,
-  color: "#374151",
-  minWidth: 8,
-  textAlign: "center",
-};
+const colon: React.CSSProperties =
+  {
+    fontWeight: 800,
+    fontSize: 16,
+    color: "#374151",
+  };
 
-const helpText: React.CSSProperties = {
-  marginTop: 10,
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 500,
-  lineHeight: 1.5,
-};
+const helpText: React.CSSProperties =
+  {
+    marginTop: 10,
+    color: "#6b7280",
+    fontSize: 12,
+  };
+
+

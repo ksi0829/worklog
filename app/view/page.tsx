@@ -1,977 +1,1157 @@
-"use client";
+﻿"use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createBrowserClient } from "@supabase/ssr";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { useRouter } from "next/navigation";
+
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
+
+const supabase =
+  createSupabaseBrowser();
 
 type Profile = {
   id: string;
-  name: string | null;
-  team: string | null;
-  role: string | null;
+  name: string;
+  role: string;
+  team: string;
 };
 
-type ItemRow = {
+type Worklog = {
+  id: string;
+  user_id: string;
+  work_date: string;
+};
+
+type WorklogItem = {
   id: string;
   worklog_id: string;
-  type: "prev" | "today" | string;
+  type: string;
   start_time: string | null;
   end_time: string | null;
   location: string | null;
   company: string | null;
   equipment: string | null;
-  task: string | null;
+  main_work: string | null;
   note: string | null;
-  created_at: string;
 };
 
-type Viewport = "mobile" | "tablet" | "desktop";
-
-function toKSTDateString(d = new Date()) {
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10);
-}
-
-function hhmm(t: string | null) {
-  if (!t) return "";
-  return t.slice(0, 5);
-}
-
-function roleRank(role?: string | null) {
-  const r = (role ?? "").toLowerCase();
-  if (r === "lead") return 0;
-  if (r === "admin") return 1;
-  if (r === "user") return 2;
-  return 9;
-}
-
-function isExecutive(team?: string | null) {
-  const t = team ?? "";
-  return t.includes("대표이사") || t.includes("고문");
-}
-
-function isAdminOrLeadOrExecutive(profile?: Profile | null) {
-  if (!profile) return false;
-  const role = (profile.role ?? "").toLowerCase();
-  return role === "admin" || role === "lead" || isExecutive(profile.team);
-}
-
-function getViewport(): Viewport {
-  if (typeof window === "undefined") return "desktop";
-  if (window.innerWidth <= 768) return "mobile";
-  if (window.innerWidth <= 1080) return "tablet";
-  return "desktop";
-}
-
-function detectRealMobile() {
-  if (typeof window === "undefined") return false;
-
-  const ua = navigator.userAgent || "";
-  const mobileUA =
-    /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|webOS/i.test(ua);
-
-  const smallScreen = window.matchMedia("(max-width: 820px)").matches;
-  const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-  const hasTouch =
-    "ontouchstart" in window || navigator.maxTouchPoints > 0;
-
-  return mobileUA || (smallScreen && coarsePointer && hasTouch);
-}
+const TEAM_ORDER = [
+  "연구개발",
+  "기술 1",
+  "기술 2",
+  "기술 3",
+  "구매기획총무",
+  "재무_인사",
+  "국내영업",
+  "해외영업",
+];
 
 export default function ViewPage() {
-  const supabase = useMemo(
-    () =>
-      createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      ),
-    []
-  );
+  const router = useRouter();
 
-  const [viewport, setViewport] = useState<Viewport>("desktop");
-  const [isMobile, setIsMobile] = useState(false);
-  const [date, setDate] = useState(toKSTDateString());
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const today = new Date();
 
-  const [me, setMe] = useState<Profile | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [writtenUserIds, setWrittenUserIds] = useState<Set<string>>(new Set());
+  const localDate =
+    `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(
+      today.getDate()
+    ).padStart(2, "0")}`;
 
-  const [search, setSearch] = useState("");
-  const [activeTeam, setActiveTeam] = useState<string>("ALL");
-  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [selectedDate, setSelectedDate] =
+    useState(localDate);
 
-  const [openUser, setOpenUser] = useState<Profile | null>(null);
-  const [modalPrev, setModalPrev] = useState<ItemRow[]>([]);
-  const [modalToday, setModalToday] = useState<ItemRow[]>([]);
-  const [modalLoading, setModalLoading] = useState(false);
+  const [profiles, setProfiles] =
+    useState<Profile[]>([]);
+
+  const [worklogs, setWorklogs] =
+    useState<Worklog[]>([]);
+
+  const [selectedTeam, setSelectedTeam] =
+    useState("기술 1");
+
+  const [modalOpen, setModalOpen] =
+    useState(false);
+
+  const [selectedUser, setSelectedUser] =
+    useState<Profile | null>(null);
+
+  const [selectedItems, setSelectedItems] =
+    useState<WorklogItem[]>([]);
+
+  const [selectedWorklogId, setSelectedWorklogId] =
+    useState("");
+
+  const [currentUser, setCurrentUser] =
+    useState("");
+
+  const [currentTeam, setCurrentTeam] =
+    useState("");
 
   useEffect(() => {
-    const apply = () => {
-      setViewport(getViewport());
-      setIsMobile(detectRealMobile());
-    };
-
-    apply();
-    window.addEventListener("resize", apply);
-    window.addEventListener("orientationchange", apply);
-
-    return () => {
-      window.removeEventListener("resize", apply);
-      window.removeEventListener("orientationchange", apply);
-    };
-  }, []);
-
-  const showInputButton = useMemo(() => {
-    if (!me) return false;
-    if (isMobile) return false;
-    return !isExecutive(me.team);
-  }, [me, isMobile]);
-
-  const personGridCols = useMemo(() => {
-    if (viewport === "mobile") return "1fr";
-    if (viewport === "tablet") return "repeat(2, minmax(0, 1fr))";
-    return "repeat(3, minmax(0, 1fr))";
-  }, [viewport]);
-
-  const modalCols = useMemo(() => {
-    return viewport === "mobile" ? "1fr" : "1fr 1fr";
-  }, [viewport]);
-
-  const loadProfiles = useCallback(async () => {
-    setLoading(true);
-    setMsg(null);
-
-    const { data: ures, error: uerr } = await supabase.auth.getUser();
-    if (uerr || !ures.user) {
-      location.href = "/login";
-      return;
-    }
-
-    const { data: myProfile, error: myErr } = await supabase
-      .from("profiles")
-      .select("id,name,team,role")
-      .eq("id", ures.user.id)
-      .maybeSingle();
-
-    if (myErr || !myProfile) {
-      setMsg("내 프로필을 불러오지 못했습니다.");
-      setLoading(false);
-      return;
-    }
-
-    const meProfile = myProfile as Profile;
-    setMe(meProfile);
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id,name,team,role");
-
-    if (error) {
-      console.error("profiles load error:", error);
-      setProfiles([]);
-      setWrittenUserIds(new Set());
-      setMsg(`[profiles load failed]\n${error.message}`);
-      setLoading(false);
-      return;
-    }
-
-    let next = (data ?? []) as Profile[];
-
-    if (!isAdminOrLeadOrExecutive(meProfile)) {
-      next = next.filter((p) => (p.team ?? "") === (meProfile.team ?? ""));
-    }
-
-    next = next.filter((p) => !isExecutive(p.team));
-
-    next.sort((a, b) => {
-      const ta = a.team ?? "";
-      const tb = b.team ?? "";
-      if (ta !== tb) return ta.localeCompare(tb, "ko");
-
-      const ra = roleRank(a.role);
-      const rb = roleRank(b.role);
-      if (ra !== rb) return ra - rb;
-
-      return String(a.name ?? "").localeCompare(String(b.name ?? ""), "ko");
-    });
-
-    setProfiles(next);
-
-    const visibleUserIds = next.map((p) => p.id).filter(Boolean);
-
-    if (visibleUserIds.length === 0) {
-      setWrittenUserIds(new Set());
-      setLoading(false);
-      return;
-    }
-
-    const { data: worklogs, error: worklogErr } = await supabase
-      .from("worklogs")
-      .select("user_id")
-      .eq("work_date", date)
-      .in("user_id", visibleUserIds);
-
-    if (worklogErr) {
-      console.error("worklogs status load error:", worklogErr);
-      setWrittenUserIds(new Set());
-      setMsg(`[worklogs status load failed]\n${worklogErr.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const writtenSet = new Set<string>(
-      ((worklogs ?? []) as Array<{ user_id: string | null }>)
-        .map((x) => x.user_id)
-        .filter((v): v is string => Boolean(v))
+    setCurrentUser(
+      localStorage.getItem("name") ||
+        ""
     );
-
-    setWrittenUserIds(writtenSet);
-    setLoading(false);
-  }, [supabase, date]);
-
-  const applyDefaultExpandedByTeam = useCallback((team: string) => {
-    if (team === "ALL") {
-      setExpandedTeams(new Set());
-    } else {
-      setExpandedTeams(new Set([team]));
-    }
+    setCurrentTeam(
+      localStorage.getItem("team") ||
+        ""
+    );
+    fetchProfiles();
   }, []);
 
   useEffect(() => {
-    loadProfiles();
-    applyDefaultExpandedByTeam("ALL");
-  }, [loadProfiles, applyDefaultExpandedByTeam]);
+    fetchWorklogs();
+  }, [selectedDate]);
 
-  useEffect(() => {
-    applyDefaultExpandedByTeam(activeTeam);
-  }, [activeTeam, applyDefaultExpandedByTeam]);
+  async function fetchProfiles() {
+    const { data } =
+      await supabase
+        .from("profiles")
+        .select("*");
 
-  const teams = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of profiles) {
-      const t = (p.team ?? "").trim();
-      if (t) set.add(t);
-    }
-    return ["ALL", ...Array.from(set).sort((a, b) => a.localeCompare(b, "ko"))];
-  }, [profiles]);
+    if (!data) return;
 
-  const filteredProfiles = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return profiles.filter((p) => {
-      const teamOk = activeTeam === "ALL" ? true : (p.team ?? "") === activeTeam;
-      if (!teamOk) return false;
-      if (!q) return true;
-
-      const name = (p.name ?? "").toLowerCase();
-      const team = (p.team ?? "").toLowerCase();
-      const role = (p.role ?? "").toLowerCase();
-      return name.includes(q) || team.includes(q) || role.includes(q);
-    });
-  }, [profiles, activeTeam, search]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, Profile[]>();
-
-    for (const p of filteredProfiles) {
-      const team = (p.team ?? "미지정").trim() || "미지정";
-      if (!map.has(team)) map.set(team, []);
-      map.get(team)!.push(p);
-    }
-
-    return Array.from(map.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0], "ko")
-    );
-  }, [filteredProfiles]);
-
-  const toggleTeam = (team: string) => {
-    setExpandedTeams((prev) => {
-      const next = new Set(prev);
-      if (next.has(team)) next.delete(team);
-      else next.add(team);
-      return next;
-    });
-  };
-
-  const openModal = useCallback(
-    async (p: Profile) => {
-      setOpenUser(p);
-      setModalPrev([]);
-      setModalToday([]);
-      setModalLoading(true);
-
-      try {
-        const { data: w, error: werr } = await supabase
-          .from("worklogs")
-          .select("id")
-          .eq("user_id", p.id)
-          .eq("work_date", date)
-          .maybeSingle();
-
-        if (werr) {
-          console.error("worklogs select error:", werr);
-          setModalLoading(false);
-          return;
+    const sorted = [...data].sort(
+      (a, b) => {
+        if (
+          a.role === "lead" &&
+          b.role !== "lead"
+        ) {
+          return -1;
         }
 
-        if (!w?.id) {
-          setModalLoading(false);
-          return;
+        if (
+          a.role !== "lead" &&
+          b.role === "lead"
+        ) {
+          return 1;
         }
 
-        const { data: items, error: ierr } = await supabase
-          .from("worklog_items")
-          .select("*")
-          .eq("worklog_id", w.id)
-          .order("start_time", { ascending: true })
-          .order("created_at", { ascending: true });
-
-        if (ierr) {
-          console.error("items load error:", ierr);
-          setModalLoading(false);
-          return;
-        }
-
-        const all = (items ?? []) as ItemRow[];
-        setModalPrev(all.filter((x) => x.type === "prev"));
-        setModalToday(all.filter((x) => x.type === "today"));
-      } finally {
-        setModalLoading(false);
+        return a.name.localeCompare(
+          b.name,
+          "ko"
+        );
       }
-    },
-    [supabase, date]
-  );
+    );
 
-  const closeModal = () => setOpenUser(null);
+    setProfiles(sorted);
+  }
 
-  const currentSummary = useMemo(() => {
-    const teamCount = new Set(
-      profiles.map((p) => (p.team ?? "").trim()).filter(Boolean)
-    ).size;
+  async function fetchWorklogs() {
+    const { data } =
+      await supabase
+        .from("worklogs")
+        .select("*")
+        .eq(
+          "work_date",
+          selectedDate
+        );
 
-    const writtenCount = profiles.filter((p) => writtenUserIds.has(p.id)).length;
-    const missingCount = Math.max(profiles.length - writtenCount, 0);
+    if (!data) return;
 
-    return `현재 로드: 팀 ${teamCount} / 인원 ${profiles.length} / 작성 ${writtenCount} / 미작성 ${missingCount}`;
-  }, [profiles, writtenUserIds]);
+    setWorklogs(data);
+  }
+
+  function isWritten(
+    userId: string
+  ) {
+    return worklogs.some(
+      (v) => v.user_id === userId
+    );
+  }
+
+  async function openModal(
+    profile: Profile
+  ) {
+    setSelectedUser(profile);
+
+    const worklog =
+      worklogs.find(
+        (v) =>
+          v.user_id === profile.id
+      );
+
+    if (!worklog) {
+      setSelectedItems([]);
+
+      setSelectedWorklogId("");
+
+      setModalOpen(true);
+
+      return;
+    }
+
+    setSelectedWorklogId(
+      worklog.id
+    );
+
+    const { data } =
+      await supabase
+        .from("worklog_items")
+        .select("*")
+        .eq(
+          "worklog_id",
+          worklog.id
+        )
+        .order("start_time", {
+          ascending: true,
+        });
+
+    setSelectedItems(data || []);
+
+    setModalOpen(true);
+  }
+
+  async function deleteWorklog() {
+    if (!selectedWorklogId)
+      return;
+
+    const ok = confirm(
+      "업무일지를 삭제하시겠습니까?"
+    );
+
+    if (!ok) return;
+
+    await supabase
+      .from("worklog_items")
+      .delete()
+      .eq(
+        "worklog_id",
+        selectedWorklogId
+      );
+
+    await supabase
+      .from("worklogs")
+      .delete()
+      .eq(
+        "id",
+        selectedWorklogId
+      );
+
+    setModalOpen(false);
+
+    fetchWorklogs();
+  }
+
+  const groupedProfiles =
+    useMemo(() => {
+      const grouped: Record<
+        string,
+        Profile[]
+      > = {};
+
+      TEAM_ORDER.forEach((team) => {
+        grouped[team] = profiles.filter(
+          (v) => v.team === team
+        );
+      });
+
+      return grouped;
+    }, [profiles]);
+
+  const prevItems =
+    selectedItems.filter(
+      (v) => v.type === "prev"
+    );
+
+  const todayItems =
+    selectedItems.filter(
+      (v) => v.type === "today"
+    );
 
   return (
-    <div
-      style={{
-        maxWidth: 1060,
-        margin: "0 auto",
-        padding: viewport === "desktop" ? "26px 18px 64px" : "20px 14px 56px",
-        fontFamily:
-          "Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: viewport === "mobile" ? "stretch" : "flex-start",
-          flexDirection: viewport === "mobile" ? "column" : "row",
-          gap: 12,
-        }}
-      >
-        <div>
-          <div style={pageTitle}>업무일지 조회</div>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {showInputButton && (
-            <a href="/" style={btnGhost}>
-              입력
-            </a>
-          )}
-          <a href="/change-password" style={btnGhost}>
-            비밀번호 변경
-          </a>
-          <button
-            style={btnGhost}
-            onClick={async () => {
-              await supabase.auth.signOut();
-              location.href = "/login";
-            }}
-            type="button"
-          >
-            로그아웃
-          </button>
-        </div>
-      </div>
-
-      <div style={panel}>
-        {viewport === "mobile" ? (
-          <>
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1 }}>
-                <div style={label}>날짜</div>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  style={{ ...input, flex: 1, minWidth: 0 }}
-                  autoComplete="off"
-                />
-              </div>
-
-              <button
-                style={btnPrimaryCompact}
-                onClick={loadProfiles}
-                disabled={loading}
-                type="button"
-              >
-                새로고침
-              </button>
+    <>
+      <div style={styles.page}>
+        <div style={styles.header}>
+          <div>
+            <div style={styles.title}>
+              업무일지
             </div>
 
-            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center" }}>
-              <div style={label}>검색</div>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ ...input, width: "100%" }}
-                autoComplete="off"
-              />
-            </div>
-          </>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "190px 1fr 120px",
-              gap: 12,
-              alignItems: "center",
-            }}
-          >
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div style={label}>날짜</div>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                style={input}
-                autoComplete="off"
-              />
-            </div>
+          </div>
 
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div style={label}>검색</div>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ ...input, width: "100%" }}
-                autoComplete="off"
-              />
+          <div style={styles.right}>
+            <div style={styles.userInfo}>
+              {currentTeam} /{" "}
+              {currentUser}
             </div>
 
             <button
-              style={btnPrimary}
-              onClick={loadProfiles}
-              disabled={loading}
-              type="button"
+              style={styles.topButton}
+              onClick={() =>
+                router.push("/")
+              }
             >
-              새로고침
+              입력
             </button>
-          </div>
-        )}
 
-        <div style={summaryText}>{currentSummary}</div>
+            <button
+              style={styles.topButton}
+              onClick={() =>
+                router.push("/main")
+              }
+            >
+              메인
+            </button>
 
-        <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {teams.map((t) => {
-            const active = activeTeam === t;
-            return (
-              <button
-                key={t}
-                onClick={() => setActiveTeam(t)}
-                style={{
-                  ...tabBtn,
-                  ...(active ? tabBtnActive : {}),
-                }}
-                type="button"
-              >
-                {t === "ALL" ? "전체" : t}
-              </button>
-            );
-          })}
-        </div>
+            <button
+              style={styles.logoutButton}
+              onClick={async () => {
+                await supabase.auth.signOut();
 
-        {msg && (
-          <div style={errBox}>
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg}</pre>
-          </div>
-        )}
-      </div>
+                localStorage.clear();
 
-      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {grouped.length === 0 && (
-          <div style={emptyPageText}>표시할 사람이 없습니다.</div>
-        )}
-
-        {grouped.map(([team, members]) => {
-          const isOpen = expandedTeams.has(team);
-          const writtenCount = members.filter((m) => writtenUserIds.has(m.id)).length;
-          const missingCount = Math.max(members.length - writtenCount, 0);
-
-          return (
-            <div key={team} style={teamCard}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={teamTitle}>{team}</div>
-                  <div style={countText}>{members.length}명</div>
-                  <div style={teamSummaryText}>
-                    작성 {writtenCount} · 미작성 {missingCount}
-                  </div>
-                </div>
-
-                <button
-                  style={btnGhostSmall}
-                  onClick={() => toggleTeam(team)}
-                  type="button"
-                >
-                  {isOpen ? "접기" : "펼치기"}
-                </button>
-              </div>
-
-              {isOpen && (
-                <div style={{ marginTop: 12 }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: personGridCols,
-                      gap: 10,
-                    }}
-                  >
-                    {members.map((p) => {
-                      const isWritten = writtenUserIds.has(p.id);
-
-                      return (
-                        <button
-                          key={p.id}
-                          style={personCard}
-                          onClick={() => openModal(p)}
-                          title="클릭해서 상세 보기"
-                          type="button"
-                        >
-                          <div style={{ minWidth: 0 }}>
-                            <div style={personName}>{p.name ?? "(이름없음)"}</div>
-                            <div style={personRole}>
-                              {(p.role ?? "user").toLowerCase()}
-                            </div>
-                          </div>
-
-                          <div style={isWritten ? writtenBadge : missingBadge}>
-                            {isWritten ? "작성" : "미작성"}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {openUser && (
-        <div style={modalOverlay} onMouseDown={closeModal}>
-          <div style={modal} onMouseDown={(e) => e.stopPropagation()}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: viewport === "mobile" ? "flex-start" : "center",
-                flexDirection: viewport === "mobile" ? "column" : "row",
-                gap: 10,
+                router.push("/login");
               }}
             >
-              <div>
-                <div style={modalUserTitle}>
-                  {openUser.name ?? "(이름없음)"} · {(openUser.team ?? "").trim()}
-                </div>
-                <div style={modalSubTitle}>{date} (전일/금일)</div>
-              </div>
-              <button style={btnGhostSmall} onClick={closeModal} type="button">
-                닫기
-              </button>
+              로그아웃
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.topBar}>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) =>
+              setSelectedDate(
+                e.target.value
+              )
+            }
+            style={styles.dateInput}
+          />
+        </div>
+
+        <div style={styles.layout}>
+          <div style={styles.sidebar}>
+            {TEAM_ORDER.map((team) => {
+              const users =
+                groupedProfiles[
+                  team
+                ] || [];
+
+              return (
+                <button
+                  key={team}
+                  style={styles.teamButton(
+                    selectedTeam ===
+                      team
+                  )}
+                  onClick={() =>
+                    setSelectedTeam(
+                      team
+                    )
+                  }
+                >
+                  <span
+                    style={
+                      styles.teamName
+                    }
+                  >
+                    {team}
+                  </span>
+
+                  <span
+                    style={
+                      styles.teamCount
+                    }
+                  >
+                    {users.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={styles.content}>
+            <div style={styles.teamTitle}>
+              {selectedTeam}
             </div>
 
-            <div style={{ marginTop: 14 }}>
-              {modalLoading ? (
-                <div style={emptyPageText}>불러오는 중…</div>
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: modalCols, gap: 12 }}>
-                  <div style={modalBox}>
-                    <div style={modalTitle}>전일 업무</div>
-                    {modalPrev.length === 0 ? (
-                      <div style={emptyText}>기록 없음</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {modalPrev.map((it) => (
-                          <div key={it.id} style={itemRow}>
-                            <div style={timeText}>
-                              {hhmm(it.start_time)}~{hhmm(it.end_time)}
-                            </div>
-                            <div style={taskText}>{it.task ?? ""}</div>
-                            <div style={subText}>
-                              {[it.location, it.company, it.equipment]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </div>
-                            {it.note ? <div style={subText}>{it.note}</div> : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            <div style={styles.cardGrid}>
+              {(
+                groupedProfiles[
+                  selectedTeam
+                ] || []
+              ).map((profile) => (
+                <div
+                  key={profile.id}
+                  style={styles.userCard}
+                  onClick={() =>
+                    openModal(profile)
+                  }
+                >
+                  <div
+                    style={
+                      styles.cardTop
+                    }
+                  >
+                    <div
+                      style={
+                        styles.userName
+                      }
+                    >
+                      {profile.name}
+
+                      {profile.role ===
+                        "lead" && (
+                        <span
+                          style={
+                            styles.leaderBadge
+                          }
+                        >
+                          팀장
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={styles.status(
+                        isWritten(
+                          profile.id
+                        )
+                      )}
+                    >
+                      {isWritten(
+                        profile.id
+                      )
+                        ? "작성완료"
+                        : "미작성"}
+                    </div>
                   </div>
 
-                  <div style={modalBox}>
-                    <div style={modalTitle}>금일 업무</div>
-                    {modalToday.length === 0 ? (
-                      <div style={emptyText}>기록 없음</div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {modalToday.map((it) => (
-                          <div key={it.id} style={itemRow}>
-                            <div style={timeText}>
-                              {hhmm(it.start_time)}~{hhmm(it.end_time)}
-                            </div>
-                            <div style={taskText}>{it.task ?? ""}</div>
-                            <div style={subText}>
-                              {[it.location, it.company, it.equipment]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </div>
-                            {it.note ? <div style={subText}>{it.note}</div> : null}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  <div
+                    style={
+                      styles.teamLabel
+                    }
+                  >
+                    {profile.team}
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {modalOpen && (
+        <div
+          style={styles.overlay}
+          onClick={() =>
+            setModalOpen(false)
+          }
+        >
+          <div
+            style={styles.modal}
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+            <div style={styles.modalHeader}>
+              {selectedUser?.name ===
+                currentUser &&
+                selectedWorklogId && (
+                  <div
+                    style={
+                      styles.modalButtons
+                    }
+                  >
+                    <button
+                      style={
+                        styles.editButton
+                      }
+                      onClick={() =>
+                        router.push(
+                          `/?date=${selectedDate}&edit=${selectedWorklogId}`
+                        )
+                      }
+                    >
+                      수정
+                    </button>
+
+                    <button
+                      style={
+                        styles.deleteButton
+                      }
+                      onClick={
+                        deleteWorklog
+                      }
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )}
+            </div>
+
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th
+                      style={
+                        styles.thType
+                      }
+                    >
+                      구분
+                    </th>
+
+                    <th
+                      style={
+                        styles.thTime
+                      }
+                    >
+                      시간
+                    </th>
+
+                    <th
+                      style={
+                        styles.thLocation
+                      }
+                    >
+                      장소
+                    </th>
+
+                    <th
+                      style={
+                        styles.thCompany
+                      }
+                    >
+                      업체명
+                    </th>
+
+                    <th
+                      style={
+                        styles.thEquipment
+                      }
+                    >
+                      장비명
+                    </th>
+
+                    <th
+                      style={
+                        styles.thMain
+                      }
+                    >
+                      주요업무
+                    </th>
+
+                    <th
+                      style={
+                        styles.thNote
+                      }
+                    >
+                      비고
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {prevItems.map(
+                    (
+                      item,
+                      index
+                    ) => (
+                      <tr
+                        key={item.id}
+                      >
+                        {index ===
+                          0 && (
+                          <td
+                            rowSpan={
+                              prevItems.length
+                            }
+                            style={
+                              styles.typeCell
+                            }
+                          >
+                            전일
+                            <br />
+                            업무
+                          </td>
+                        )}
+
+                        <td
+                          style={
+                            styles.timeTd
+                          }
+                        >
+                          {item.start_time?.slice(
+                            0,
+                            5
+                          )}{" "}
+                          ~{" "}
+                          {item.end_time?.slice(
+                            0,
+                            5
+                          )}
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.location
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.company
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.equipment
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.taskTd
+                          }
+                        >
+                          {
+                            item.main_work
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {item.note}
+                        </td>
+                      </tr>
+                    )
+                  )}
+
+                  {todayItems.map(
+                    (
+                      item,
+                      index
+                    ) => (
+                      <tr
+                        key={item.id}
+                      >
+                        {index ===
+                          0 && (
+                          <td
+                            rowSpan={
+                              todayItems.length
+                            }
+                            style={
+                              styles.typeCell
+                            }
+                          >
+                            금일
+                            <br />
+                            업무
+                          </td>
+                        )}
+
+                        <td
+                          style={
+                            styles.timeTd
+                          }
+                        >
+                          {item.start_time?.slice(
+                            0,
+                            5
+                          )}{" "}
+                          ~{" "}
+                          {item.end_time?.slice(
+                            0,
+                            5
+                          )}
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.location
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.company
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {
+                            item.equipment
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.taskTd
+                          }
+                        >
+                          {
+                            item.main_work
+                          }
+                        </td>
+
+                        <td
+                          style={
+                            styles.td
+                          }
+                        >
+                          {item.note}
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-const pageTitle: React.CSSProperties = {
-  fontSize: 31,
-  fontWeight: 800,
-  letterSpacing: "-0.02em",
-  lineHeight: 1.1,
-  color: "#111827",
-};
+const styles: any = {
+  page: {
+    minHeight: "100vh",
+    background: "#f5f6f8",
+    padding: "12px",
+    fontFamily:
+      "Pretendard, sans-serif",
+  },
 
-const teamTitle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 800,
-  letterSpacing: "-0.01em",
-  color: "#111827",
-};
+  header: {
+    display: "flex",
+    justifyContent:
+      "space-between",
+    alignItems: "flex-start",
+    marginBottom: "14px",
+  },
 
-const teamSummaryText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 700,
-};
+  title: {
+    fontSize: "28px",
+    fontWeight: 800,
+  },
 
-const personName: React.CSSProperties = {
-  fontWeight: 700,
-  fontSize: 14,
-  color: "#111827",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
+  subTitle: {
+    marginTop: "4px",
+    fontSize: "12px",
+    color: "#64748b",
+  },
 
-const personRole: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 600,
-};
+  right: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
 
-const countText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 600,
-};
+  userInfo: {
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#64748b",
+    marginRight: "6px",
+  },
 
-const summaryText: React.CSSProperties = {
-  marginTop: 10,
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 600,
-};
+  topButton: {
+    height: "38px",
+    padding: "0 14px",
+    borderRadius: "10px",
+    border: "1px solid #d1d5db",
+    background: "#fff",
+    fontSize: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
 
-const emptyPageText: React.CSSProperties = {
-  color: "#6b7280",
-  padding: 12,
-  fontSize: 14,
-  fontWeight: 500,
-};
+  logoutButton: {
+    height: "38px",
+    padding: "0 14px",
+    borderRadius: "10px",
+    border: "none",
+    background: "#0f172a",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
 
-const modalUserTitle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 800,
-  letterSpacing: "-0.01em",
-  color: "#111827",
-};
+  topBar: {
+    marginBottom: "14px",
+    padding: "8px 10px",
+    borderRadius: "12px",
+    background: "#fff",
+    border:
+      "1px solid #e2e8f0",
+  },
 
-const modalSubTitle: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 12,
-  fontWeight: 600,
-  marginTop: 3,
-};
+  dateInput: {
+    height: "40px",
+    borderRadius: "10px",
+    border:
+      "1px solid #cbd5e1",
+    padding: "0 12px",
+    fontSize: "14px",
+    fontWeight: 700,
+  },
 
-const taskText: React.CSSProperties = {
-  fontWeight: 700,
-  fontSize: 15,
-  color: "#111827",
-};
+  layout: {
+    display: "flex",
+    gap: "12px",
+  },
 
-const panel: React.CSSProperties = {
-  marginTop: 18,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 16,
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-};
+  sidebar: {
+    width: "176px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
 
-const teamCard: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 14,
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-};
+  teamButton: (
+    active: boolean
+  ) => ({
+    width: "100%",
+    height: "50px",
+    borderRadius: "14px",
+    border: active
+      ? "2px solid #111827"
+      : "1px solid #dbe2ea",
+    background: "#fff",
+    padding: "10px 14px",
+    cursor: "pointer",
+    display: "flex",
+    justifyContent:
+      "space-between",
+    alignItems: "center",
+  }),
 
-const label: React.CSSProperties = {
-  fontSize: 12,
-  color: "#6b7280",
-  minWidth: 34,
-  fontWeight: 700,
-};
+  teamName: {
+    fontSize: "14px",
+    fontWeight: 800,
+  },
 
-const input: React.CSSProperties = {
-  height: 40,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  padding: "0 11px",
-  fontSize: 14,
-  fontWeight: 500,
-  color: "#111827",
-  outline: "none",
-  background: "#fff",
-};
+  teamCount: {
+    fontSize: "13px",
+    color: "#64748b",
+    fontWeight: 700,
+  },
 
-const btnPrimary: React.CSSProperties = {
-  height: 40,
-  borderRadius: 12,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: "pointer",
-};
+  content: {
+    flex: 1,
+    minHeight: "600px",
+    borderRadius: "16px",
+    background: "#fff",
+    border:
+      "1px solid #e2e8f0",
+    padding: "18px",
+  },
 
-const btnPrimaryCompact: React.CSSProperties = {
-  height: 40,
-  minWidth: 96,
-  borderRadius: 12,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: "pointer",
-  padding: "0 14px",
-  whiteSpace: "nowrap",
-};
+  teamTitle: {
+    fontSize: "28px",
+    fontWeight: 800,
+    marginBottom: "18px",
+  },
 
-const btnGhost: React.CSSProperties = {
-  height: 38,
-  padding: "0 12px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  textDecoration: "none",
-  color: "#111827",
-};
+  cardGrid: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "12px",
+  },
 
-const btnGhostSmall: React.CSSProperties = {
-  height: 34,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-};
+  userCard: {
+    width: "210px",
+    borderRadius: "16px",
+    border:
+      "1px solid #e2e8f0",
+    background: "#fff",
+    padding: "14px",
+    cursor: "pointer",
+  },
 
-const tabBtn: React.CSSProperties = {
-  height: 36,
-  padding: "0 15px",
-  borderRadius: 999,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: "pointer",
-  color: "#111827",
-};
+  cardTop: {
+    display: "flex",
+    justifyContent:
+      "space-between",
+    alignItems: "flex-start",
+    marginBottom: "14px",
+  },
 
-const tabBtnActive: React.CSSProperties = {
-  background: "#111827",
-  color: "#fff",
-  border: "1px solid #111827",
-};
+  userName: {
+    fontSize: "15px",
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
 
-const personCard: React.CSSProperties = {
-  textAlign: "left",
-  padding: 13,
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-};
+  leaderBadge: {
+    fontSize: "10px",
+    padding: "4px 6px",
+    borderRadius: "999px",
+    background: "#dbeafe",
+    color: "#2563eb",
+    fontWeight: 700,
+  },
 
-const writtenBadge: React.CSSProperties = {
-  flexShrink: 0,
-  minWidth: 56,
-  height: 30,
-  borderRadius: 999,
-  padding: "0 10px",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#166534",
-  background: "#f0fdf4",
-  border: "1px solid #bbf7d0",
-};
+  status: (
+    done: boolean
+  ) => ({
+    fontSize: "11px",
+    fontWeight: 700,
+    padding: "5px 8px",
+    borderRadius: "999px",
+    background: done
+      ? "#dcfce7"
+      : "#fee2e2",
+    color: done
+      ? "#16a34a"
+      : "#dc2626",
+  }),
 
-const missingBadge: React.CSSProperties = {
-  flexShrink: 0,
-  minWidth: 56,
-  height: 30,
-  borderRadius: 999,
-  padding: "0 10px",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#b91c1c",
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-};
+  teamLabel: {
+    fontSize: "12px",
+    color: "#94a3b8",
+  },
 
-const errBox: React.CSSProperties = {
-  marginTop: 12,
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  color: "#b91c1c",
-  borderRadius: 12,
-  padding: 12,
-  fontSize: 12,
-  fontWeight: 600,
-};
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background:
+      "rgba(15,23,42,0.45)",
+    display: "flex",
+    justifyContent:
+      "center",
+    alignItems: "center",
+    zIndex: 999,
+    padding: "24px",
+  },
 
-const modalOverlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.35)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-  zIndex: 50,
-};
+  modal: {
+    width: "1280px",
+    maxHeight: "92vh",
+    overflow: "auto",
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: "28px",
+    boxShadow:
+      "0 20px 60px rgba(0,0,0,0.12)",
+  },
 
-const modal: React.CSSProperties = {
-  width: "min(980px, 100%)",
-  maxHeight: "85vh",
-  overflow: "auto",
-  background: "#fff",
-  borderRadius: 18,
-  border: "1px solid #e5e7eb",
-  padding: 16,
-  boxShadow: "0 12px 30px rgba(0,0,0,0.12)",
-};
+  modalHeader: {
+    display: "flex",
+    justifyContent:
+      "flex-end",
+    marginBottom: "18px",
+  },
 
-const modalBox: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: 12,
-  background: "#fff",
-};
+  modalButtons: {
+    display: "flex",
+    gap: "10px",
+  },
 
-const modalTitle: React.CSSProperties = {
-  fontWeight: 800,
-  fontSize: 17,
-  marginBottom: 10,
-  color: "#111827",
-};
+  editButton: {
+    height: "42px",
+    padding: "0 18px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#0f172a",
+    color: "#fff",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontSize: "14px",
+  },
 
-const emptyText: React.CSSProperties = {
-  color: "#6b7280",
-  fontSize: 13,
-  fontWeight: 500,
-  padding: "6px 0",
-};
+  deleteButton: {
+    height: "42px",
+    padding: "0 18px",
+    borderRadius: "12px",
+    border: "none",
+    background: "#fee2e2",
+    color: "#dc2626",
+    fontWeight: 700,
+    cursor: "pointer",
+    fontSize: "14px",
+  },
 
-const itemRow: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-  padding: 10,
-};
+  tableWrap: {
+    border:
+      "1px solid #e5e7eb",
+    borderRadius: "18px",
+    overflow: "hidden",
+  },
 
-const timeText: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: "#6b7280",
-  marginBottom: 4,
-};
+  table: {
+    width: "100%",
+    borderCollapse:
+      "separate",
+    borderSpacing: 0,
+    background: "#fff",
+  },
 
-const subText: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: "#6b7280",
-  marginTop: 4,
+  thType: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "90px",
+  },
+
+  thTime: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "180px",
+  },
+
+  thLocation: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "120px",
+  },
+
+  thCompany: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "180px",
+  },
+
+  thEquipment: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "180px",
+  },
+
+  thMain: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+  },
+
+  thNote: {
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    textAlign: "center",
+    width: "160px",
+  },
+
+  td: {
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #edf2f7",
+    borderRight:
+      "1px solid #edf2f7",
+    fontSize: "13px",
+    color: "#334155",
+    textAlign: "center",
+    background: "#fff",
+  },
+
+  timeTd: {
+    padding: "14px 12px",
+    borderBottom:
+      "1px solid #edf2f7",
+    borderRight:
+      "1px solid #edf2f7",
+    fontSize: "13px",
+    color: "#0f172a",
+    textAlign: "center",
+    fontWeight: 700,
+    background: "#fff",
+    whiteSpace: "nowrap",
+  },
+
+  taskTd: {
+    padding: "14px 14px",
+    borderBottom:
+      "1px solid #edf2f7",
+    borderRight:
+      "1px solid #edf2f7",
+    fontSize: "13px",
+    color: "#111827",
+    fontWeight: 600,
+    textAlign: "left",
+    background: "#fff",
+    lineHeight: 1.5,
+  },
+
+  typeCell: {
+    width: "90px",
+    background: "#f1f5f9",
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 800,
+    textAlign: "center",
+    lineHeight: 1.6,
+    borderRight:
+      "1px solid #e5e7eb",
+    borderBottom:
+      "1px solid #e5e7eb",
+  },
 };
