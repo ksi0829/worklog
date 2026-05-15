@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createBrowserClient } from "@supabase/ssr";
 
 type Profile = {
@@ -682,83 +681,6 @@ export default function InputPageClient() {
           "Pretendard, sans-serif",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent:
-            "space-between",
-          alignItems:
-            viewport === "mobile"
-              ? "stretch"
-              : "flex-start",
-          flexDirection:
-            viewport === "mobile"
-              ? "column"
-              : "row",
-          gap: 12,
-        }}
-      >
-        <BrandLogo
-          subtitle="업무일지"
-          subtitleTag="h1"
-          size={viewport === "mobile" ? "compact" : "default"}
-        />
-
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            flexWrap: "wrap",
-            justifyContent:
-              viewport === "mobile"
-                ? "flex-start"
-                : "flex-end",
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              textAlign:
-                viewport === "mobile"
-                  ? "left"
-                  : "right",
-              fontSize: 12,
-              color: "#64748b",
-              fontWeight: 700,
-            }}
-          >
-            {profile?.name || "-"} / {profile?.team || "-"} / {profile?.role || "-"}
-          </div>
-
-          <a
-            href="/main"
-            style={btnGhost}
-          >
-            메인
-          </a>
-
-          <a
-            href="/view"
-            style={btnGhost}
-          >
-            조회
-          </a>
-
-          <button
-            style={btnGhost}
-            onClick={async () => {
-              await supabase.auth.signOut();
-
-              location.href =
-                "/login";
-            }}
-            type="button"
-          >
-            로그아웃
-          </button>
-        </div>
-      </div>
-
       <div style={panel}>
         <div
           style={{

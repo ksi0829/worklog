@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AppFrame } from "@/app/_components/AppFrame";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,6 +13,11 @@ export const metadata: Metadata = {
 
   description:
     "ZETA 업무 통합 관리 시스템",
+
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -21,7 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <AppFrame>{children}</AppFrame>
+      </body>
     </html>
   );
 }

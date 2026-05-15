@@ -62,3 +62,64 @@ select,
 textarea {
   font: inherit;
 }
+
+.app-shell-content > main {
+  min-height: auto !important;
+  background: transparent !important;
+}
+
+.app-shell-content > main > section {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.app-shell-content > main > section > header {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  body {
+    background: #f3f5f7;
+  }
+
+  body > div {
+    grid-template-columns: 1fr !important;
+  }
+
+  body aside {
+    position: static !important;
+    height: auto !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #dfe3e8 !important;
+    padding: 16px !important;
+  }
+
+  body nav {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  body header {
+    position: static !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    padding: 16px !important;
+  }
+
+  .app-shell-content {
+    padding: 16px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  body nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  body header button {
+    width: auto !important;
+    min-width: 74px !important;
+    padding: 0 10px !important;
+  }
+}

@@ -8,7 +8,7 @@ import {
 
 import { useRouter } from "next/navigation";
 
-import { BrandLogo } from "@/app/_components/BrandLogo";
+import { canViewAllWorklogs } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase =
@@ -195,6 +195,9 @@ export default function ViewPage() {
   const [currentTeam, setCurrentTeam] =
     useState("");
 
+  const [currentRole, setCurrentRole] =
+    useState("");
+
   const [isMobileViewport, setIsMobileViewport] =
     useState(false);
 
@@ -208,6 +211,9 @@ export default function ViewPage() {
     const storedTeam =
       localStorage.getItem("team") ||
       "";
+    const storedRole =
+      localStorage.getItem("role") ||
+      "";
 
     setCurrentUser(
       storedName
@@ -217,6 +223,7 @@ export default function ViewPage() {
         ?.team ||
         storedTeam
     );
+    setCurrentRole(storedRole);
     fetchProfiles();
   }, []);
 
@@ -394,7 +401,14 @@ export default function ViewPage() {
         Profile[]
       > = {};
 
-      TEAM_ORDER.forEach((team) => {
+      const visibleTeams =
+        canViewAllWorklogs(currentUser, currentRole)
+          ? TEAM_ORDER
+          : TEAM_ORDER.filter(
+              (team) => team === currentTeam
+            );
+
+      visibleTeams.forEach((team) => {
         grouped[team] =
           profiles
             .filter(
@@ -404,7 +418,29 @@ export default function ViewPage() {
       });
 
       return grouped;
-    }, [profiles]);
+    }, [
+      currentRole,
+      currentTeam,
+      currentUser,
+      profiles,
+    ]);
+
+  const visibleTeamOrder = useMemo(
+    () =>
+      canViewAllWorklogs(currentUser, currentRole)
+        ? TEAM_ORDER
+        : TEAM_ORDER.filter((team) => team === currentTeam),
+    [currentRole, currentTeam, currentUser]
+  );
+
+  useEffect(() => {
+    if (
+      visibleTeamOrder.length > 0 &&
+      !visibleTeamOrder.includes(selectedTeam)
+    ) {
+      setSelectedTeam(visibleTeamOrder[0]);
+    }
+  }, [selectedTeam, visibleTeamOrder]);
 
   const prevItems =
     selectedItems.filter(
@@ -419,56 +455,6 @@ export default function ViewPage() {
   return (
     <>
       <div style={styles.page}>
-        <div style={styles.header}>
-          <BrandLogo
-            subtitle="업무일지"
-            subtitleTag="h1"
-            size="compact"
-          />
-
-          <div style={styles.right}>
-            <div style={styles.userInfo}>
-              {currentTeam} /{" "}
-              {currentUser}
-            </div>
-
-            <button
-              style={styles.topButton}
-              onClick={handleInputClick}
-            >
-              입력
-            </button>
-
-            <button
-              style={styles.topButton}
-              onClick={() =>
-                router.push("/main")
-              }
-            >
-              메인
-            </button>
-
-            <button
-              style={styles.logoutButton}
-              onClick={async () => {
-                await supabase.auth.signOut();
-
-                localStorage.clear();
-
-                router.push("/login");
-              }}
-            >
-              로그아웃
-            </button>
-          </div>
-        </div>
-
-        {mobileInputNotice && (
-          <div style={styles.mobileNotice}>
-            모바일 환경에서는 업무일지 작성이 제한됩니다. PC에서 작성해 주세요.
-          </div>
-        )}
-
         <div style={styles.topBar}>
           <input
             type="date"
@@ -484,7 +470,7 @@ export default function ViewPage() {
 
         <div style={styles.layout}>
           <div style={styles.sidebar}>
-            {TEAM_ORDER.map((team) => {
+            {visibleTeamOrder.map((team) => {
               const users =
                 groupedProfiles[
                   team

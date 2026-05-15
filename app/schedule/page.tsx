@@ -6,9 +6,6 @@ import {
   useState,
 } from "react";
 
-import { useRouter } from "next/navigation";
-
-import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type ScheduleItem = {
@@ -62,8 +59,6 @@ const TYPE_STYLE: any = {
 };
 
 export default function SchedulePage() {
-  const router = useRouter();
-
   const today = new Date();
 
   const [loading, setLoading] =
@@ -111,13 +106,6 @@ export default function SchedulePage() {
     typeof window !== "undefined"
       ? localStorage.getItem(
           "name"
-        ) || ""
-      : "";
-
-  const currentTeam =
-    typeof window !== "undefined"
-      ? localStorage.getItem(
-          "team"
         ) || ""
       : "";
 
@@ -414,26 +402,12 @@ export default function SchedulePage() {
         <div
           style={{
             ...styles.header,
+            justifyContent: "center",
             ...(isMobileViewport
               ? styles.mobileHeader
               : {}),
           }}
         >
-          <div
-            style={{
-              ...styles.left,
-              ...(isMobileViewport
-                ? styles.mobileLeft
-                : {}),
-            }}
-          >
-            <BrandLogo
-              subtitle="일정관리"
-              subtitleTag="h1"
-              size={isMobileViewport ? "compact" : "default"}
-            />
-          </div>
-
           <div
             style={{
               ...styles.center,
@@ -479,69 +453,6 @@ export default function SchedulePage() {
               }
             >
               ›
-            </button>
-          </div>
-
-          <div
-            style={{
-              ...styles.right,
-              ...(isMobileViewport
-                ? styles.mobileRight
-                : {}),
-            }}
-          >
-            <div
-              style={{
-                ...styles.userInfo,
-                ...(isMobileViewport
-                  ? styles.mobileUserInfo
-                  : {}),
-              }}
-            >
-              {currentTeam} /{" "}
-              {currentUser}
-            </div>
-
-            <button
-              style={{
-                ...styles.topButton,
-                ...(isMobileViewport
-                  ? styles.mobileTopButton
-                  : {}),
-              }}
-              onClick={() =>
-                router.push("/main")
-              }
-            >
-              메인
-            </button>
-
-            <button
-              style={{
-                ...styles.logoutButton,
-                ...(isMobileViewport
-                  ? styles.mobileTopButton
-                  : {}),
-              }}
-              onClick={async () => {
-                await supabase.auth.signOut();
-
-                localStorage.removeItem(
-                  "role"
-                );
-
-                localStorage.removeItem(
-                  "team"
-                );
-
-                localStorage.removeItem(
-                  "name"
-                );
-
-                router.push("/login");
-              }}
-            >
-              로그아웃
             </button>
           </div>
         </div>

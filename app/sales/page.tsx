@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/app/_components/BrandLogo";
+import { canAccessSales } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/sales/styles";
 
@@ -186,6 +187,7 @@ export default function SalesPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+  const salesAllowed = canAccessSales(currentName, currentTeam);
 
   const loadSalesData = useCallback(async () => {
     setLoading(true);
@@ -261,8 +263,13 @@ export default function SalesPage() {
   }, [division]);
 
   useEffect(() => {
+    if (!salesAllowed) {
+      setLoading(false);
+      return;
+    }
+
     void Promise.resolve().then(() => loadSalesData());
-  }, [loadSalesData]);
+  }, [loadSalesData, salesAllowed]);
 
   function updateOpportunity<K extends keyof OpportunityForm>(
     key: K,
@@ -429,6 +436,18 @@ export default function SalesPage() {
       current.filter((item) => item.opportunityId !== selectedOpportunity.id)
     );
     setSelectedId(null);
+  }
+
+  if (!salesAllowed) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.container}>
+          <div style={styles.errorBox}>
+            영업관리 메뉴는 대표이사, 고문, 국내영업, 해외영업 인원만 접근할 수 있습니다.
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (

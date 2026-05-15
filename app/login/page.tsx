@@ -160,7 +160,7 @@ export default function LoginPage() {
             maxWidth: "340px",
             transform:
               "translate(-50%, -50%)",
-            opacity: 0.055,
+            opacity: 0.11,
             pointerEvents: "none",
             userSelect: "none",
             zIndex: 0,
