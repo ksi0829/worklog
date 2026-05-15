@@ -2,15 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
+const COMPANY_EMAIL_DOMAIN =
+  "@zetacorporation.com";
+
+function toLoginEmail(id: string) {
+  const trimmed = id.trim();
+
+  if (trimmed.includes("@")) {
+    return trimmed;
+  }
+
+  return `${trimmed}${COMPANY_EMAIL_DOMAIN}`;
+}
+
+function toDisplayId(id: string) {
+  const trimmed = id.trim();
+
+  if (trimmed.endsWith(COMPANY_EMAIL_DOMAIN)) {
+    return trimmed.slice(
+      0,
+      -COMPANY_EMAIL_DOMAIN.length
+    );
+  }
+
+  return trimmed;
+}
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] =
+    useState("");
   const [password, setPassword] = useState("");
 
   const [rememberId, setRememberId] =
@@ -24,7 +49,7 @@ export default function LoginPage() {
       localStorage.getItem("savedEmail");
 
     if (saved) {
-      setEmail(saved);
+      setLoginId(toDisplayId(saved));
       setRememberId(true);
     }
   }, []);
@@ -39,7 +64,7 @@ export default function LoginPage() {
     try {
       const { data, error } =
         await supabase.auth.signInWithPassword({
-          email,
+          email: toLoginEmail(loginId),
           password,
         });
 
@@ -80,7 +105,7 @@ export default function LoginPage() {
       if (rememberId) {
         localStorage.setItem(
           "savedEmail",
-          email
+          toDisplayId(loginId)
         );
       } else {
         localStorage.removeItem(
@@ -117,26 +142,53 @@ export default function LoginPage() {
           border: "1px solid #e5e7eb",
           borderRadius: "18px",
           padding: "28px",
+          position: "relative",
+          overflow: "hidden",
           boxShadow:
             "0 4px 12px rgba(0,0,0,0.04)",
         }}
       >
-        <BrandLogo
-          subtitle="업무 통합 시스템 로그인"
-          size="large"
-          containerStyle={{
-            marginBottom: "24px",
+        <img
+          src="/brand/zeta-logo.png"
+          alt=""
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            width: "82%",
+            maxWidth: "340px",
+            transform:
+              "translate(-50%, -50%)",
+            opacity: 0.055,
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 0,
           }}
         />
 
         <form
           onSubmit={handleLogin}
           style={{
+            position: "relative",
+            zIndex: 1,
             display: "flex",
             flexDirection: "column",
             gap: "16px",
           }}
         >
+          <div
+            style={{
+              color: "#0f172a",
+              fontSize: "24px",
+              fontWeight: 900,
+              lineHeight: 1.25,
+              marginBottom: "4px",
+            }}
+          >
+            업무 통합 시스템 로그인
+          </div>
+
           <div>
             <div
               style={{
@@ -150,12 +202,14 @@ export default function LoginPage() {
             </div>
 
             <input
-              type="email"
-              value={email}
+              type="text"
+              value={loginId}
               onChange={(e) =>
-                setEmail(e.target.value)
+                setLoginId(e.target.value)
               }
-              placeholder="이메일 입력"
+              placeholder="아이디 입력"
+              autoCapitalize="none"
+              autoCorrect="off"
               required
               style={{
                 width: "100%",
