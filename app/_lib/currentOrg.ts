@@ -101,5 +101,9 @@ export function canViewAllWorklogs(
   name: string,
   role: string
 ) {
-  return role === "admin" || EXECUTIVE_NAMES.includes(name);
+  return (
+    role === "admin" ||
+    EXECUTIVE_NAMES.includes(name) ||
+    ORG_MEMBER_MAP.get(name)?.leader === true
+  );
 }

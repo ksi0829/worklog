@@ -90,6 +90,32 @@ const teams: Team[] = [
   },
 ];
 
+const USER_EMAIL_BY_NAME: Record<string, string> = {
+  김선일: "ksi@zetacorporation.com",
+  권영일: "yikwon@zetacorporation.com",
+  권현진: "jin@zetacorporation.com",
+  김성종: "sjkim@zetacorporation.com",
+  김학: "hkim@zetacorporation.com",
+  김혜정: "hjkim@zetacorporation.com",
+  박상현: "shpark@zetacorporation.com",
+  서중석: "jsseo@zetacorporation.com",
+  신영호: "Lucian@zetacorporation.com",
+  신훈식: "shs@zetacorporation.com",
+  윤지환: "jhyun@zetacorporation.com",
+  이승준: "sjlee@zetacorporation.com",
+  이양로: "patrick@zetacorporation.com",
+  장동철: "dcjang@zetacorporation.com",
+  정대용: "dyjoung@zetacorporation.com",
+  최인혜: "ihchoi@zetacorporation.com",
+  최하영: "hwchoi@zetacorporation.com",
+  한재영: "jyhan@zetacorporation.com",
+  한차현: "hanch@zetacorporation.com",
+};
+
+function getRegisteredEmail(name: string) {
+  return USER_EMAIL_BY_NAME[name] || "등록 메일 없음";
+}
+
 export default function OrganizationPage() {
   const router = useRouter();
 
@@ -150,7 +176,6 @@ export default function OrganizationPage() {
                     {team.members.map((member) => (
                       <MemberRow
                         key={`${team.name}-${member.name}`}
-                        team={team.name}
                         member={member}
                       />
                     ))}
@@ -175,7 +200,8 @@ function PersonNode({
   tone: "dark" | "soft";
 }) {
   const [open, setOpen] = useState(false);
-  const tooltip = `${name} / ${title}`;
+  const email = getRegisteredEmail(name);
+  const tooltip = `${name} / ${email}`;
 
   return (
     <div
@@ -192,17 +218,16 @@ function PersonNode({
 
       <span style={{ ...styles.tooltip, display: open ? "grid" : "none" }}>
         <strong>{name}</strong>
-        <span>{title}</span>
+        <span>{email}</span>
       </span>
     </div>
   );
 }
 
-function MemberRow({ team, member }: { team: string; member: Member }) {
+function MemberRow({ member }: { member: Member }) {
   const [open, setOpen] = useState(false);
-  const tooltip = `${member.name} / ${team} / ${member.rank}${
-    member.leader ? " / 팀장" : ""
-  }`;
+  const email = getRegisteredEmail(member.name);
+  const tooltip = `${member.name} / ${email}`;
 
   return (
     <div
@@ -222,11 +247,7 @@ function MemberRow({ team, member }: { team: string; member: Member }) {
 
       <span style={{ ...styles.tooltip, display: open ? "grid" : "none" }}>
         <strong>{member.name}</strong>
-        <span>{team}</span>
-        <span>
-          {member.rank}
-          {member.leader ? " / 팀장" : ""}
-        </span>
+        <span>{email}</span>
       </span>
     </div>
   );
@@ -473,7 +494,7 @@ const styles: Record<string, CSSProperties> = {
     left: "50%",
     bottom: "calc(100% + 8px)",
     zIndex: 20,
-    minWidth: "140px",
+    minWidth: "210px",
     transform: "translateX(-50%)",
     display: "none",
     gap: "5px",
@@ -486,5 +507,6 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     textAlign: "left",
     pointerEvents: "none",
+    wordBreak: "break-all",
   },
 };

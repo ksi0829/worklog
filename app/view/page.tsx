@@ -1,14 +1,20 @@
 ﻿"use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
+  type CSSProperties,
 } from "react";
 
 import { useRouter } from "next/navigation";
 
-import { canViewAllWorklogs } from "@/app/_lib/currentOrg";
+import {
+  ORG_MEMBER_MAP,
+  TEAM_ORDER,
+  canViewAllWorklogs,
+} from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase =
@@ -39,101 +45,6 @@ type WorklogItem = {
   main_work: string | null;
   note: string | null;
 };
-
-type CurrentOrgTeam = {
-  team: string;
-  leader: string;
-  members: string[];
-};
-
-type OrgMemberInfo = {
-  team: string;
-  leader: boolean;
-};
-
-const CURRENT_ORG: CurrentOrgTeam[] = [
-  {
-    team: "연구개발",
-    leader: "서중석",
-    members: ["윤지환"],
-  },
-  {
-    team: "기술 1팀",
-    leader: "한차현",
-    members: [
-      "한재영",
-      "권영일",
-      "김학",
-      "박상현",
-    ],
-  },
-  {
-    team: "기술 2팀",
-    leader: "이승준",
-    members: ["김종혁"],
-  },
-  {
-    team: "기술 3팀",
-    leader: "장동철",
-    members: ["양희원", "김성종"],
-  },
-  {
-    team: "구매기획총무",
-    leader: "권현진",
-    members: ["신훈식", "최하영"],
-  },
-  {
-    team: "재무_인사",
-    leader: "김혜정",
-    members: ["최인혜"],
-  },
-  {
-    team: "국내영업",
-    leader: "정대용",
-    members: ["김선일"],
-  },
-  {
-    team: "해외영업",
-    leader: "이양로",
-    members: ["반준영"],
-  },
-];
-
-const TEAM_ORDER = CURRENT_ORG.map(
-  (team) => team.team
-);
-
-const ORG_MEMBER_MAP = new Map<
-  string,
-  OrgMemberInfo
->(
-  CURRENT_ORG.flatMap((team) => {
-    const entries: [
-      string,
-      OrgMemberInfo
-    ][] = [
-      [
-        team.leader,
-        {
-          team: team.team,
-          leader: true,
-        },
-      ],
-    ];
-
-    team.members.forEach((name) => {
-      entries.push([
-        name,
-        {
-          team: team.team,
-          leader: false,
-        },
-      ]);
-    });
-
-    return entries;
-  })
-);
 
 function sortProfilesByOrg(
   a: Profile,
@@ -204,68 +115,7 @@ export default function ViewPage() {
   const [mobileInputNotice, setMobileInputNotice] =
     useState(false);
 
-  useEffect(() => {
-    const storedName =
-      localStorage.getItem("name") ||
-      "";
-    const storedTeam =
-      localStorage.getItem("team") ||
-      "";
-    const storedRole =
-      localStorage.getItem("role") ||
-      "";
-
-    setCurrentUser(
-      storedName
-    );
-    setCurrentTeam(
-      ORG_MEMBER_MAP.get(storedName)
-        ?.team ||
-        storedTeam
-    );
-    setCurrentRole(storedRole);
-    fetchProfiles();
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(
-      "(max-width: 767px)"
-    );
-
-    const syncViewport = () => {
-      setIsMobileViewport(
-        mediaQuery.matches
-      );
-    };
-
-    syncViewport();
-    mediaQuery.addEventListener(
-      "change",
-      syncViewport
-    );
-
-    return () => {
-      mediaQuery.removeEventListener(
-        "change",
-        syncViewport
-      );
-    };
-  }, []);
-
-  useEffect(() => {
-    fetchWorklogs();
-  }, [selectedDate]);
-
-  function handleInputClick() {
-    if (isMobileViewport) {
-      setMobileInputNotice(true);
-      return;
-    }
-
-    router.push("/");
-  }
-
-  async function fetchProfiles() {
+  const fetchProfiles = useCallback(async () => {
     const { data } =
       await supabase
         .from("profiles")
@@ -296,9 +146,9 @@ export default function ViewPage() {
         .sort(sortProfilesByOrg);
 
     setProfiles(currentProfiles);
-  }
+  }, []);
 
-  async function fetchWorklogs() {
+  const fetchWorklogs = useCallback(async () => {
     const { data } =
       await supabase
         .from("worklogs")
@@ -311,6 +161,69 @@ export default function ViewPage() {
     if (!data) return;
 
     setWorklogs(data);
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const storedName =
+      localStorage.getItem("name") ||
+      "";
+    const storedTeam =
+      localStorage.getItem("team") ||
+      "";
+    const storedRole =
+      localStorage.getItem("role") ||
+      "";
+
+    void Promise.resolve().then(() => {
+      setCurrentUser(
+        storedName
+      );
+      setCurrentTeam(
+        ORG_MEMBER_MAP.get(storedName)
+          ?.team ||
+          storedTeam
+      );
+      setCurrentRole(storedRole);
+      void fetchProfiles();
+    });
+  }, [fetchProfiles]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(
+      "(max-width: 767px)"
+    );
+
+    const syncViewport = () => {
+      setIsMobileViewport(
+        mediaQuery.matches
+      );
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener(
+      "change",
+      syncViewport
+    );
+
+    return () => {
+      mediaQuery.removeEventListener(
+        "change",
+        syncViewport
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => fetchWorklogs());
+  }, [fetchWorklogs]);
+
+  function handleInputClick() {
+    if (isMobileViewport) {
+      setMobileInputNotice(true);
+      return;
+    }
+
+    router.push("/");
   }
 
   function isWritten(
@@ -438,7 +351,9 @@ export default function ViewPage() {
       visibleTeamOrder.length > 0 &&
       !visibleTeamOrder.includes(selectedTeam)
     ) {
-      setSelectedTeam(visibleTeamOrder[0]);
+      void Promise.resolve().then(() => {
+        setSelectedTeam(visibleTeamOrder[0]);
+      });
     }
   }, [selectedTeam, visibleTeamOrder]);
 
@@ -884,7 +799,7 @@ export default function ViewPage() {
   );
 }
 
-const styles: any = {
+const styles = {
   page: {
     minHeight: "100vh",
     background: "#f5f6f8",
@@ -1309,4 +1224,7 @@ const styles: any = {
     borderBottom:
       "1px solid #e5e7eb",
   },
-};
+} satisfies Record<
+  string,
+  CSSProperties | ((value: boolean) => CSSProperties)
+>;
