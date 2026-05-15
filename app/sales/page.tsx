@@ -187,7 +187,7 @@ export default function SalesPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
-  const salesAllowed = canAccessSales(currentName, currentTeam);
+  const canViewAmount = canAccessSales(currentName, currentTeam);
 
   const loadSalesData = useCallback(async () => {
     setLoading(true);
@@ -263,13 +263,8 @@ export default function SalesPage() {
   }, [division]);
 
   useEffect(() => {
-    if (!salesAllowed) {
-      setLoading(false);
-      return;
-    }
-
     void Promise.resolve().then(() => loadSalesData());
-  }, [loadSalesData, salesAllowed]);
+  }, [loadSalesData]);
 
   function updateOpportunity<K extends keyof OpportunityForm>(
     key: K,
@@ -304,7 +299,7 @@ export default function SalesPage() {
       return;
     }
 
-    if (opportunityForm.amount && Number.isNaN(amount)) {
+    if (canViewAmount && opportunityForm.amount && Number.isNaN(amount)) {
       alert("예상 금액은 숫자로 입력해주세요.");
       return;
     }
@@ -319,7 +314,7 @@ export default function SalesPage() {
         company,
         contact,
         item,
-        amount: amount || 0,
+        amount: canViewAmount ? amount || 0 : 0,
         stage: opportunityForm.stage,
         next_action: nextAction,
         due_date: opportunityForm.dueDate || null,
@@ -438,18 +433,6 @@ export default function SalesPage() {
     setSelectedId(null);
   }
 
-  if (!salesAllowed) {
-    return (
-      <main style={styles.page}>
-        <section style={styles.container}>
-          <div style={styles.errorBox}>
-            영업관리 메뉴는 대표이사, 고문, 국내영업, 해외영업 인원만 접근할 수 있습니다.
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main style={styles.page}>
       <section style={styles.container}>
@@ -491,15 +474,14 @@ export default function SalesPage() {
         <section style={styles.summaryGrid}>
           <SummaryCard label="구분" value={divisionLabel[division]} />
           <SummaryCard label="진행 건" value={`${activeCount}건`} />
-          <SummaryCard label="예상 금액" value={formatWon(totalAmount)} />
+          {canViewAmount && (
+            <SummaryCard label="예상 금액" value={formatWon(totalAmount)} />
+          )}
         </section>
 
         <section style={styles.layout}>
           <div style={styles.panel}>
-            <h2 style={styles.panelTitle}>영업기회 등록</h2>
-            <p style={styles.panelHint}>
-              {divisionLabel[division]} 전용 목록에 새 영업 건을 등록합니다.
-            </p>
+            <h2 style={styles.panelTitle}>영업 건 등록</h2>
 
             <div style={styles.formGrid}>
               <Field label="고객사">
@@ -555,18 +537,19 @@ export default function SalesPage() {
             </Field>
 
             <div style={styles.formGrid}>
-              <Field label="예상 금액">
-                <input
-                  value={opportunityForm.amount}
-                  onChange={(event) =>
-                    updateOpportunity("amount", event.target.value)
-                  }
-                  placeholder="숫자만 입력"
-                  inputMode="numeric"
-                  style={styles.input}
-                />
-              </Field>
-
+              {canViewAmount && (
+                <Field label="예상 금액">
+                  <input
+                    value={opportunityForm.amount}
+                    onChange={(event) =>
+                      updateOpportunity("amount", event.target.value)
+                    }
+                    placeholder="숫자만 입력"
+                    inputMode="numeric"
+                    style={styles.input}
+                  />
+                </Field>
+              )}
               <Field label="단계">
                 <select
                   value={opportunityForm.stage}
@@ -609,7 +592,7 @@ export default function SalesPage() {
             </div>
 
             <button style={styles.primaryButton} onClick={addOpportunity}>
-              영업기회 등록
+              영업 건 등록
             </button>
           </div>
 
@@ -665,10 +648,12 @@ export default function SalesPage() {
                   <span style={styles.detailLabel}>담당자</span>
                   <strong>{selectedOpportunity.contact || "-"}</strong>
                 </div>
-                <div style={styles.detailBox}>
-                  <span style={styles.detailLabel}>예상 금액</span>
-                  <strong>{formatWon(selectedOpportunity.amount)}</strong>
-                </div>
+                {canViewAmount && (
+                  <div style={styles.detailBox}>
+                    <span style={styles.detailLabel}>예상 금액</span>
+                    <strong>{formatWon(selectedOpportunity.amount)}</strong>
+                  </div>
+                )}
                 <div style={styles.detailBox}>
                   <span style={styles.detailLabel}>다음 액션</span>
                   <strong>{selectedOpportunity.nextAction}</strong>

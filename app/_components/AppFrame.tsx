@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import {
-  canAccessSales,
   getCurrentOrgTeam,
 } from "@/app/_lib/currentOrg";
 
@@ -18,14 +17,13 @@ type AppFrameProps = {
 type MenuItem = {
   title: string;
   path: string;
-  salesOnly?: boolean;
 };
 
 const MENU_ITEMS: MenuItem[] = [
   { title: "결재문서", path: "/approval" },
   { title: "업무일지", path: "/view" },
   { title: "A/S 관리", path: "/as" },
-  { title: "영업관리", path: "/sales", salesOnly: true },
+  { title: "영업관리", path: "/sales" },
   { title: "일정관리", path: "/schedule" },
   { title: "고객사", path: "/customer" },
 ];
@@ -63,15 +61,7 @@ export function AppFrame({ children }: AppFrameProps) {
     setRole(localStorage.getItem("role") || "");
   }, [pathname]);
 
-  const salesAllowed = canAccessSales(name, team);
-
-  const menuItems = useMemo(
-    () =>
-      MENU_ITEMS.filter(
-        (item) => !item.salesOnly || salesAllowed
-      ),
-    [salesAllowed]
-  );
+  const menuItems = useMemo(() => MENU_ITEMS, []);
 
   if (pathname === "/login") {
     return children;

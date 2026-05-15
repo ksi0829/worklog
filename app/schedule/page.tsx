@@ -402,6 +402,7 @@ export default function SchedulePage() {
         <div
           style={{
             ...styles.header,
+            display: "flex",
             justifyContent: "center",
             ...(isMobileViewport
               ? styles.mobileHeader
@@ -1035,6 +1036,7 @@ const styles: any = {
     display: "grid",
     gridTemplateColumns:
       "repeat(7,1fr)",
+    gap: "6px",
     marginBottom: "6px",
     textAlign: "center",
     fontSize: "12px",
@@ -1066,6 +1068,7 @@ const styles: any = {
 
   emptyDay: {
     background: "transparent",
+    minHeight: "1px",
   },
 
   day: {

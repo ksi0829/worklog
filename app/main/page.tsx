@@ -17,12 +17,36 @@ type NoticeRow = {
   ends_on: string | null;
 };
 
+type ScheduleRow = {
+  id: number;
+  date: string;
+  time: string | null;
+  type: string | null;
+  company: string | null;
+  title: string | null;
+  writer: string | null;
+};
+
+function todayKey() {
+  const now = new Date();
+
+  return `${now.getFullYear()}-${String(
+    now.getMonth() + 1
+  ).padStart(2, "0")}-${String(now.getDate()).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 export default function MainPage() {
   const router = useRouter();
   const [role, setRole] = useState("");
   const [noticeTitle, setNoticeTitle] = useState("공지");
   const [noticeText, setNoticeText] =
     useState(defaultNotice);
+  const [upcomingSchedules, setUpcomingSchedules] = useState<
+    ScheduleRow[]
+  >([]);
 
   async function loadLatestNotice(currentTeam: string) {
     const { data, error } = await supabase
@@ -55,12 +79,27 @@ export default function MainPage() {
     setNoticeText(notice.body || defaultNotice);
   }
 
+  async function loadUpcomingSchedules() {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select("id,date,time,type,company,title,writer")
+      .gte("date", todayKey())
+      .order("date", { ascending: true })
+      .order("time", { ascending: true })
+      .limit(8);
+
+    if (!error && data) {
+      setUpcomingSchedules(data as ScheduleRow[]);
+    }
+  }
+
   useEffect(() => {
     const storedTeam = localStorage.getItem("team") || "";
     const storedRole = localStorage.getItem("role") || "";
 
     setRole(storedRole);
     void loadLatestNotice(storedTeam);
+    void loadUpcomingSchedules();
   }, []);
 
   return (
@@ -81,7 +120,47 @@ export default function MainPage() {
       </div>
 
       <section style={styles.panel}>
-        <h2 style={styles.panelTitle}>업무 메뉴</h2>
+        <div style={styles.panelHeader}>
+          <h2 style={styles.panelTitle}>다가오는 일정</h2>
+          <button
+            type="button"
+            style={styles.panelButton}
+            onClick={() => router.push("/schedule")}
+          >
+            일정관리
+          </button>
+        </div>
+
+        {upcomingSchedules.length === 0 ? (
+          <div style={styles.empty}>등록된 예정 일정이 없습니다.</div>
+        ) : (
+          <div style={styles.scheduleList}>
+            {upcomingSchedules.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                style={styles.scheduleItem}
+                onClick={() => router.push("/schedule")}
+              >
+                <div style={styles.scheduleDate}>
+                  <strong>{item.date.slice(5).replace("-", ".")}</strong>
+                  <span>{item.time?.slice(0, 5) || "-"}</span>
+                </div>
+
+                <div style={styles.scheduleBody}>
+                  <div style={styles.scheduleTitle}>
+                    {item.title || item.company || "일정"}
+                  </div>
+                  <div style={styles.scheduleMeta}>
+                    {[item.type, item.company, item.writer]
+                      .filter(Boolean)
+                      .join(" / ")}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </section>
   );
@@ -136,9 +215,88 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "10px",
     padding: "22px",
   },
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    marginBottom: "14px",
+  },
   panelTitle: {
     margin: 0,
     fontSize: "18px",
     color: "#111820",
+  },
+  panelButton: {
+    height: "32px",
+    padding: "0 12px",
+    borderRadius: "8px",
+    border: "1px solid #cfd6df",
+    background: "#fff",
+    color: "#111827",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  empty: {
+    border: "1px dashed #d6dce5",
+    borderRadius: "10px",
+    padding: "28px 16px",
+    color: "#667085",
+    fontSize: "13px",
+    textAlign: "center",
+  },
+  scheduleList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: "10px",
+  },
+  scheduleItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    width: "100%",
+    minHeight: "68px",
+    border: "1px solid #e3e7ed",
+    borderRadius: "10px",
+    background: "#ffffff",
+    padding: "12px",
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  scheduleDate: {
+    width: "56px",
+    minWidth: "56px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "3px",
+    borderRadius: "8px",
+    background: "#f3f5f7",
+    color: "#111820",
+    fontSize: "12px",
+  },
+  scheduleBody: {
+    minWidth: 0,
+    flex: 1,
+  },
+  scheduleTitle: {
+    color: "#111820",
+    fontSize: "14px",
+    fontWeight: 850,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  scheduleMeta: {
+    marginTop: "5px",
+    color: "#667085",
+    fontSize: "12px",
+    fontWeight: 650,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
 };
