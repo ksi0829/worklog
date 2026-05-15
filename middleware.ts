@@ -36,6 +36,7 @@ export async function middleware(req: NextRequest) {
   // 공개 페이지
   const isPublicPage =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/brand") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico");
 
@@ -96,6 +97,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|brand|favicon.ico).*)",
   ],
 };
