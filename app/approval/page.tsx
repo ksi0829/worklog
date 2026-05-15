@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  ORG_MEMBER_MAP,
+  TEAM_ORDER,
+  getCurrentOrgTeam,
+} from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type FieldType = "text" | "date" | "select" | "textarea";
@@ -92,6 +97,7 @@ type ApproverSlot = {
 
 const supabase = createSupabaseBrowser();
 const today = new Date().toISOString().slice(0, 10);
+const DEFAULT_APPROVER_COUNT = 4;
 
 const commonItemColumns: TableColumn[] = [
   { key: "name", label: "품명" },
@@ -293,6 +299,27 @@ const templates: TemplateDef[] = [
 
 const templateMap = Object.fromEntries(templates.map((template) => [template.key, template]));
 
+function createDefaultApproverSlots(count = DEFAULT_APPROVER_COUNT): ApproverSlot[] {
+  return Array.from({ length: count }, (_, index) => ({
+    roleLabel: `결재 ${index + 1}`,
+    approverId: "",
+  }));
+}
+
+function getDisplayTeam(profile: ProfileRow) {
+  return getCurrentOrgTeam(profile.name || "", profile.team || "");
+}
+
+function getProfileSortValue(profile: ProfileRow) {
+  const name = profile.name || "";
+  const team = getDisplayTeam(profile);
+  const teamIndex = TEAM_ORDER.includes(team) ? TEAM_ORDER.indexOf(team) : 999;
+  const orgInfo = ORG_MEMBER_MAP.get(name);
+  const leaderWeight = orgInfo?.leader ? 0 : 1;
+
+  return `${String(teamIndex).padStart(3, "0")}-${leaderWeight}-${name}`;
+}
+
 function createTableRows(table: TableDef) {
   return Array.from({ length: table.initialRows }, () =>
     Object.fromEntries(table.columns.map((column) => [column.key, ""]))
@@ -313,6 +340,29 @@ function createEmptyFormData(template: TemplateDef) {
 
   template.tables.forEach((table) => {
     next[table.key] = createTableRows(table);
+  });
+
+  return next;
+}
+
+function applyCurrentUserFields(
+  data: Record<string, unknown>,
+  name: string,
+  team: string,
+  overwrite = false
+) {
+  const next = { ...data };
+
+  [
+    ["applicant", name],
+    ["requester", name],
+    ["owner", name],
+    ["team", team],
+  ].forEach(([key, value]) => {
+    if (!value) return;
+    if (overwrite || !next[key]) {
+      next[key] = value;
+    }
   });
 
   return next;
@@ -360,7 +410,7 @@ export default function ApprovalPage() {
     createEmptyFormData(selectedTemplate)
   );
   const [approverSlots, setApproverSlots] = useState<ApproverSlot[]>(() =>
-    selectedTemplate.approvalRoles.map((roleLabel) => ({ roleLabel, approverId: "" }))
+    createDefaultApproverSlots()
   );
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [documents, setDocuments] = useState<ApprovalDocumentRow[]>([]);
@@ -405,6 +455,11 @@ export default function ApprovalPage() {
     return documents;
   }, [activeFilter, currentUserId, documents, pendingForMe]);
 
+  const sortedProfiles = useMemo(
+    () => [...profiles].sort((a, b) => getProfileSortValue(a).localeCompare(getProfileSortValue(b), "ko")),
+    [profiles]
+  );
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setSetupError("");
@@ -415,10 +470,12 @@ export default function ApprovalPage() {
 
     const storedName = typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
     const storedTeam = typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
+    const currentOrgTeam = getCurrentOrgTeam(storedName, storedTeam);
 
     setCurrentUserId(user?.id || "");
     setCurrentName(storedName);
-    setCurrentTeam(storedTeam);
+    setCurrentTeam(currentOrgTeam);
+    setFormData((prev) => applyCurrentUserFields(prev, storedName, currentOrgTeam));
 
     const { data: profileRows } = await supabase
       .from("profiles")
@@ -473,8 +530,8 @@ export default function ApprovalPage() {
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
     setSelectedTemplateKey(templateKey);
-    setFormData(createEmptyFormData(nextTemplate));
-    setApproverSlots(nextTemplate.approvalRoles.map((roleLabel) => ({ roleLabel, approverId: "" })));
+    setFormData(applyCurrentUserFields(createEmptyFormData(nextTemplate), currentName, currentTeam, true));
+    setApproverSlots(createDefaultApproverSlots());
     setMessage("");
   }
 
@@ -514,6 +571,21 @@ export default function ApprovalPage() {
   function selectApprover(index: number, approverId: string) {
     setApproverSlots((prev) =>
       prev.map((slot, slotIndex) => (slotIndex === index ? { ...slot, approverId } : slot))
+    );
+  }
+
+  function addApproverSlot() {
+    setApproverSlots((prev) => [
+      ...prev,
+      { roleLabel: `결재 ${prev.length + 1}`, approverId: "" },
+    ]);
+  }
+
+  function removeApproverSlot(index: number) {
+    setApproverSlots((prev) =>
+      prev
+        .filter((_, slotIndex) => slotIndex !== index)
+        .map((slot, slotIndex) => ({ ...slot, roleLabel: `결재 ${slotIndex + 1}` }))
     );
   }
 
@@ -721,37 +793,6 @@ export default function ApprovalPage() {
       {message && <div style={styles.messageBox}>{message}</div>}
 
       <div style={styles.layout}>
-        <aside style={styles.templatePanel}>
-          <div style={styles.panelTitleRow}>
-            <h2 style={styles.panelTitle}>양식 선택</h2>
-            <button type="button" style={styles.ghostButton} onClick={loadData}>
-              새로고침
-            </button>
-          </div>
-
-          <div style={styles.templateList}>
-            {templates.map((template) => {
-              const active = template.key === selectedTemplate.key;
-
-              return (
-                <button
-                  key={template.key}
-                  type="button"
-                  style={{
-                    ...styles.templateButton,
-                    ...(active ? styles.templateButtonActive : {}),
-                  }}
-                  onClick={() => changeTemplate(template.key)}
-                >
-                  <span style={styles.templateCategory}>{template.category}</span>
-                  <strong>{template.title}</strong>
-                  <small>{template.description}</small>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
         <section style={styles.formPanel}>
           <div style={styles.panelTitleRow}>
             <div>
@@ -768,47 +809,124 @@ export default function ApprovalPage() {
             </button>
           </div>
 
-          <div style={styles.formGrid}>
-            {selectedTemplate.fields.map((field) => (
-              <label
-                key={field.key}
-                style={{
-                  ...styles.field,
-                  gridColumn: field.span === 2 ? "1 / -1" : undefined,
-                }}
-              >
-                <span>{field.label}</span>
-                {field.type === "textarea" ? (
-                  <textarea
-                    style={styles.textarea}
-                    value={String(formData[field.key] || "")}
-                    placeholder={field.placeholder}
-                    onChange={(event) => updateField(field.key, event.target.value)}
-                  />
-                ) : field.type === "select" ? (
-                  <select
-                    style={styles.input}
-                    value={String(formData[field.key] || "")}
-                    onChange={(event) => updateField(field.key, event.target.value)}
+          <section style={styles.templateStripBox}>
+            <div style={styles.panelTitleRow}>
+              <h3 style={styles.sectionTitle}>양식 선택</h3>
+              <button type="button" style={styles.ghostButton} onClick={loadData}>
+                새로고침
+              </button>
+            </div>
+            <div style={styles.templateList}>
+              {templates.map((template) => {
+                const active = template.key === selectedTemplate.key;
+
+                return (
+                  <button
+                    key={template.key}
+                    type="button"
+                    style={{
+                      ...styles.templateButton,
+                      ...(active ? styles.templateButtonActive : {}),
+                    }}
+                    onClick={() => changeTemplate(template.key)}
                   >
-                    <option value="">선택</option>
-                    {(field.options || []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    style={styles.input}
-                    type={field.type}
-                    value={String(formData[field.key] || "")}
-                    placeholder={field.placeholder}
-                    onChange={(event) => updateField(field.key, event.target.value)}
-                  />
-                )}
-              </label>
-            ))}
+                    <span style={styles.templateCategory}>{template.category}</span>
+                    <strong>{template.title}</strong>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section style={styles.approvalLineBoxTop}>
+            <div style={styles.panelTitleRow}>
+              <h3 style={styles.sectionTitle}>결재라인 지정</h3>
+              <button type="button" style={styles.ghostButton} onClick={addApproverSlot}>
+                결재라인 추가
+              </button>
+            </div>
+            <div style={styles.approvalLineGrid}>
+              {approverSlots.map((slot, index) => (
+                <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
+                  <span>{slot.roleLabel}</span>
+                  <div style={styles.approverControl}>
+                    <select
+                      style={styles.input}
+                      value={slot.approverId}
+                      onChange={(event) => selectApprover(index, event.target.value)}
+                    >
+                      <option value="">결재자 선택</option>
+                      {sortedProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
+                        </option>
+                      ))}
+                    </select>
+                    {approverSlots.length > 1 && (
+                      <button
+                        type="button"
+                        style={styles.removeLineButton}
+                        onClick={() => removeApproverSlot(index)}
+                        aria-label={`${slot.roleLabel} 삭제`}
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <div style={styles.formGrid}>
+            {selectedTemplate.fields.map((field) => {
+              const readOnlyField = ["applicant", "requester", "owner", "team"].includes(field.key);
+
+              return (
+                <label
+                  key={field.key}
+                  style={{
+                    ...styles.field,
+                    gridColumn: field.span === 2 ? "1 / -1" : undefined,
+                  }}
+                >
+                  <span>{field.label}</span>
+                  {field.type === "textarea" ? (
+                    <textarea
+                      style={styles.textarea}
+                      value={String(formData[field.key] || "")}
+                      placeholder={field.placeholder}
+                      onChange={(event) => updateField(field.key, event.target.value)}
+                    />
+                  ) : field.type === "select" ? (
+                    <select
+                      style={styles.input}
+                      value={String(formData[field.key] || "")}
+                      onChange={(event) => updateField(field.key, event.target.value)}
+                    >
+                      <option value="">선택</option>
+                      {(field.options || []).map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      style={{
+                        ...styles.input,
+                        ...(readOnlyField ? styles.readOnlyInput : {}),
+                      }}
+                      type={field.type}
+                      value={String(formData[field.key] || "")}
+                      placeholder={field.placeholder}
+                      readOnly={readOnlyField}
+                      onChange={(event) => updateField(field.key, event.target.value)}
+                    />
+                  )}
+                </label>
+              );
+            })}
           </div>
 
           {selectedTemplate.tables.map((table) => (
@@ -865,28 +983,6 @@ export default function ApprovalPage() {
             </section>
           ))}
 
-          <section style={styles.approvalLineBox}>
-            <h3 style={styles.sectionTitle}>결재라인</h3>
-            <div style={styles.approvalLineGrid}>
-              {approverSlots.map((slot, index) => (
-                <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
-                  <span>{slot.roleLabel}</span>
-                  <select
-                    style={styles.input}
-                    value={slot.approverId}
-                    onChange={(event) => selectApprover(index, event.target.value)}
-                  >
-                    <option value="">결재자 선택</option>
-                    {profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name || "-"} / {profile.team || "-"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
-          </section>
         </section>
 
         <aside style={styles.documentPanel}>
@@ -1064,15 +1160,9 @@ const styles: Record<string, CSSProperties> = {
   },
   layout: {
     display: "grid",
-    gridTemplateColumns: "230px minmax(420px, 1fr) 360px",
+    gridTemplateColumns: "minmax(560px, 1fr) 360px",
     gap: "14px",
     alignItems: "start",
-  },
-  templatePanel: {
-    border: "1px solid #dfe3e8",
-    borderRadius: "10px",
-    background: "#ffffff",
-    padding: "14px",
   },
   formPanel: {
     border: "1px solid #dfe3e8",
@@ -1105,29 +1195,38 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     fontWeight: 650,
   },
+  templateStripBox: {
+    borderTop: "1px solid #edf0f3",
+    borderBottom: "1px solid #edf0f3",
+    padding: "14px 0",
+    marginBottom: "16px",
+  },
   templateList: {
     display: "flex",
-    flexDirection: "column",
+    flexWrap: "wrap",
     gap: "8px",
   },
   templateButton: {
-    width: "100%",
+    minWidth: "128px",
+    minHeight: "54px",
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "5px",
+    justifyContent: "center",
+    gap: "4px",
     border: "1px solid #e5e7eb",
     borderRadius: "9px",
     background: "#ffffff",
     color: "#111827",
-    padding: "12px",
+    padding: "9px 12px",
     textAlign: "left",
     cursor: "pointer",
+    fontSize: "13px",
   },
   templateButtonActive: {
     borderColor: "#111820",
     background: "#f8fafc",
-    boxShadow: "inset 3px 0 0 #111820",
+    boxShadow: "inset 0 -3px 0 #111820",
   },
   templateCategory: {
     color: "#2fa368",
@@ -1272,9 +1371,16 @@ const styles: Record<string, CSSProperties> = {
     borderTop: "1px solid #edf0f3",
     paddingTop: "16px",
   },
+  approvalLineBoxTop: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#f8fafc",
+    padding: "14px",
+    marginBottom: "16px",
+  },
   approvalLineGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "10px",
     marginTop: "12px",
   },
@@ -1285,6 +1391,26 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     fontSize: "12px",
     fontWeight: 850,
+  },
+  approverControl: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    gap: "6px",
+  },
+  removeLineButton: {
+    width: "48px",
+    height: "40px",
+    border: "1px solid #fee2e2",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#dc2626",
+    fontSize: "11px",
+    fontWeight: 850,
+    cursor: "pointer",
+  },
+  readOnlyInput: {
+    background: "#f8fafc",
+    color: "#475467",
   },
   countText: {
     color: "#667085",
