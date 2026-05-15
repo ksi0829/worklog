@@ -97,7 +97,7 @@ type ApproverSlot = {
 
 const supabase = createSupabaseBrowser();
 const today = new Date().toISOString().slice(0, 10);
-const DEFAULT_APPROVER_COUNT = 4;
+const DEFAULT_APPROVER_COUNT = 3;
 
 const commonItemColumns: TableColumn[] = [
   { key: "name", label: "품명" },
@@ -524,7 +524,7 @@ export default function ApprovalPage() {
   }, []);
 
   useEffect(() => {
-    loadData();
+    void Promise.resolve().then(() => loadData());
   }, [loadData]);
 
   function changeTemplate(templateKey: string) {
@@ -848,7 +848,6 @@ export default function ApprovalPage() {
             <div style={styles.approvalLineGrid}>
               {approverSlots.map((slot, index) => (
                 <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
-                  <span>{slot.roleLabel}</span>
                   <div style={styles.approverControl}>
                     <select
                       style={styles.input}
@@ -1126,7 +1125,7 @@ const styles: Record<string, CSSProperties> = {
     display: "block",
     color: "#667085",
     fontSize: "12px",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   summaryValue: {
     display: "block",
@@ -1146,7 +1145,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "14px 16px",
     marginBottom: "16px",
     fontSize: "13px",
-    fontWeight: 750,
+    fontWeight: 700,
   },
   messageBox: {
     border: "1px solid #bfdbfe",
@@ -1156,7 +1155,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "12px 14px",
     marginBottom: "16px",
     fontSize: "13px",
-    fontWeight: 800,
+    fontWeight: 700,
   },
   layout: {
     display: "grid",
@@ -1187,13 +1186,13 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
     color: "#111820",
     fontSize: "17px",
-    fontWeight: 850,
+    fontWeight: 800,
   },
   panelSubText: {
     margin: "5px 0 0",
     color: "#667085",
     fontSize: "12px",
-    fontWeight: 650,
+    fontWeight: 500,
   },
   templateStripBox: {
     borderTop: "1px solid #edf0f3",
@@ -1231,7 +1230,7 @@ const styles: Record<string, CSSProperties> = {
   templateCategory: {
     color: "#2fa368",
     fontSize: "11px",
-    fontWeight: 850,
+    fontWeight: 700,
   },
   formGrid: {
     display: "grid",
@@ -1244,7 +1243,7 @@ const styles: Record<string, CSSProperties> = {
     gap: "7px",
     color: "#111827",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 700,
   },
   input: {
     width: "100%",
@@ -1255,7 +1254,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "0 11px",
     fontSize: "13px",
-    fontWeight: 650,
+    fontWeight: 500,
     boxSizing: "border-box",
   },
   textarea: {
@@ -1268,7 +1267,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "11px",
     fontSize: "13px",
-    fontWeight: 650,
+    fontWeight: 500,
     lineHeight: 1.5,
     boxSizing: "border-box",
   },
@@ -1281,7 +1280,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#ffffff",
     padding: "0 14px",
     fontSize: "13px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
   },
   dangerButton: {
@@ -1293,7 +1292,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#dc2626",
     padding: "0 14px",
     fontSize: "13px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
   },
   ghostButton: {
@@ -1304,7 +1303,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "0 11px",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
@@ -1317,7 +1316,7 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
     color: "#111820",
     fontSize: "15px",
-    fontWeight: 850,
+    fontWeight: 800,
   },
   tableWrap: {
     overflowX: "auto",
@@ -1334,7 +1333,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#667085",
     padding: "9px",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 700,
     textAlign: "left",
   },
   td: {
@@ -1352,7 +1351,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "0 8px",
     fontSize: "13px",
-    fontWeight: 650,
+    fontWeight: 500,
     boxSizing: "border-box",
   },
   smallDangerButton: {
@@ -1363,7 +1362,7 @@ const styles: Record<string, CSSProperties> = {
     color: "#dc2626",
     padding: "0 8px",
     fontSize: "11px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
   },
   approvalLineBox: {
@@ -1390,7 +1389,7 @@ const styles: Record<string, CSSProperties> = {
     gap: "7px",
     color: "#111827",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 700,
   },
   approverControl: {
     display: "grid",
@@ -1405,7 +1404,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     color: "#dc2626",
     fontSize: "11px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
   },
   readOnlyInput: {
@@ -1415,7 +1414,7 @@ const styles: Record<string, CSSProperties> = {
   countText: {
     color: "#667085",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 700,
   },
   filterTabs: {
     display: "grid",
@@ -1430,7 +1429,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     color: "#667085",
     fontSize: "12px",
-    fontWeight: 850,
+    fontWeight: 800,
     cursor: "pointer",
   },
   filterButtonActive: {
@@ -1473,7 +1472,7 @@ const styles: Record<string, CSSProperties> = {
   documentMeta: {
     color: "#667085",
     fontSize: "12px",
-    fontWeight: 700,
+    fontWeight: 500,
   },
   statusBadge: {
     display: "inline-flex",
@@ -1485,7 +1484,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "0 8px",
     fontSize: "11px",
     fontStyle: "normal",
-    fontWeight: 850,
+    fontWeight: 700,
     whiteSpace: "nowrap",
   },
   emptyBox: {
@@ -1495,7 +1494,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "18px",
     textAlign: "center",
     fontSize: "13px",
-    fontWeight: 750,
+    fontWeight: 600,
   },
   detailBox: {
     marginTop: "16px",
