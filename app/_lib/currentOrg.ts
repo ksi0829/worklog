@@ -107,3 +107,16 @@ export function canViewAllWorklogs(
     ORG_MEMBER_MAP.get(name)?.leader === true
   );
 }
+
+export function canManageProductionOrders(
+  name: string,
+  role: string
+) {
+  return (
+    role === "admin" ||
+    role === "lead" ||
+    role === "executive" ||
+    EXECUTIVE_NAMES.includes(name) ||
+    ORG_MEMBER_MAP.get(name)?.leader === true
+  );
+}

@@ -1,8 +1,12 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  canManageProductionOrders,
+  getCurrentOrgTeam,
+} from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
@@ -43,29 +47,91 @@ type StageKey =
 type StageDef = {
   key: StageKey;
   label: string;
+  column: keyof ProductionOrderRow;
+  manual: boolean;
 };
 
-type ProductionOrder = {
-  id: string;
+type ProductionOrderRow = {
+  id: number;
+  category: OrderCategory;
+  order_date: string;
+  country: string | null;
+  customer: string;
+  model: string;
+  owner_name: string;
+  note: string | null;
+  manufacturing_request_approved_on: string | null;
+  purchase_request_approved_on: string | null;
+  inbound_completed_on: string | null;
+  assembly_completed_on: string | null;
+  control_completed_on: string | null;
+  test_completed_on: string | null;
+  qa_approved_on: string | null;
+  shipment_scheduled_on: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type OrderForm = {
   category: OrderCategory;
   orderDate: string;
   country: string;
   customer: string;
   model: string;
-  owner: string;
-  note?: string;
-  stages: Record<StageKey, string>;
+  ownerName: string;
+  shipmentDate: string;
+  note: string;
 };
 
 const stageDefs: StageDef[] = [
-  { key: "manufacturingRequest", label: "제조요구" },
-  { key: "purchaseRequest", label: "구매의뢰" },
-  { key: "inbound", label: "최종입고" },
-  { key: "assembly", label: "조립완료" },
-  { key: "control", label: "전기/제어" },
-  { key: "test", label: "생산테스트" },
-  { key: "qa", label: "Q/A완료" },
-  { key: "shipment", label: "출고예정" },
+  {
+    key: "manufacturingRequest",
+    label: "제조요구",
+    column: "manufacturing_request_approved_on",
+    manual: false,
+  },
+  {
+    key: "purchaseRequest",
+    label: "구매의뢰",
+    column: "purchase_request_approved_on",
+    manual: false,
+  },
+  {
+    key: "inbound",
+    label: "최종입고",
+    column: "inbound_completed_on",
+    manual: true,
+  },
+  {
+    key: "assembly",
+    label: "조립완료",
+    column: "assembly_completed_on",
+    manual: true,
+  },
+  {
+    key: "control",
+    label: "전기/제어",
+    column: "control_completed_on",
+    manual: true,
+  },
+  {
+    key: "test",
+    label: "생산테스트",
+    column: "test_completed_on",
+    manual: true,
+  },
+  {
+    key: "qa",
+    label: "Q/A완료",
+    column: "qa_approved_on",
+    manual: false,
+  },
+  {
+    key: "shipment",
+    label: "출고예정",
+    column: "shipment_scheduled_on",
+    manual: true,
+  },
 ];
 
 const sectionDefs: {
@@ -78,76 +144,16 @@ const sectionDefs: {
   { key: "parts", title: "부품", tone: "amber" },
 ];
 
-const productionOrders: ProductionOrder[] = [
-  {
-    id: "bio-note-gci-800",
-    category: "domestic",
-    orderDate: "5-13",
-    country: "대한민국",
-    customer: "바이오노트",
-    model: "GCI-800",
-    owner: "김선일",
-    stages: {
-      manufacturingRequest: "5-13",
-      purchaseRequest: "6-20",
-      inbound: "6-5",
-      assembly: "6-20",
-      control: "6-25",
-      test: "6-30",
-      qa: "7-5",
-      shipment: "7-15",
-    },
-  },
-];
-
-function todayKey() {
-  const now = new Date();
-
-  return `${now.getFullYear()}-${String(
-    now.getMonth() + 1
-  ).padStart(2, "0")}-${String(now.getDate()).padStart(
-    2,
-    "0"
-  )}`;
-}
-
-function parseMonthDay(value: string) {
-  const [month, day] = value.split("-").map(Number);
-  if (!month || !day) return null;
-
-  const now = new Date();
-  return new Date(now.getFullYear(), month - 1, day);
-}
-
-function getStageStatus(value: string): StageStatus {
-  const targetDate = parseMonthDay(value);
-
-  if (!value || !targetDate) return "waiting";
-  if (targetDate <= new Date()) return "done";
-  return "planned";
-}
-
-function getStageText(status: StageStatus) {
-  if (status === "done") return "완료";
-  if (status === "planned") return "예정";
-  return "대기";
-}
-
-function getCurrentStage(order: ProductionOrder) {
-  const firstOpenStage = stageDefs.find(
-    (stage) => getStageStatus(order.stages[stage.key]) !== "done"
-  );
-
-  return firstOpenStage?.label || "완료";
-}
-
-function getOrderProgress(order: ProductionOrder) {
-  const doneCount = stageDefs.filter(
-    (stage) => getStageStatus(order.stages[stage.key]) === "done"
-  ).length;
-
-  return Math.round((doneCount / stageDefs.length) * 100);
-}
+const emptyForm: OrderForm = {
+  category: "domestic",
+  orderDate: todayKey(),
+  country: "",
+  customer: "",
+  model: "",
+  ownerName: "",
+  shipmentDate: "",
+  note: "",
+};
 
 const sectionMarkerTone: Record<
   "green" | "blue" | "amber",
@@ -176,17 +182,99 @@ const stageTone: Record<StageStatus, CSSProperties> = {
   },
 };
 
+function todayKey() {
+  const now = new Date();
+
+  return `${now.getFullYear()}-${String(
+    now.getMonth() + 1
+  ).padStart(2, "0")}-${String(now.getDate()).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function formatShortDate(value?: string | null) {
+  if (!value) return "";
+  const [, month, day] = value.slice(0, 10).split("-");
+  if (!month || !day) return value;
+  return `${Number(month)}/${Number(day)}`;
+}
+
+function parseDate(value?: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+}
+
+function getStageValue(order: ProductionOrderRow, stage: StageDef) {
+  return (order[stage.column] as string | null) || "";
+}
+
+function getStageStatus(value?: string | null): StageStatus {
+  const targetDate = parseDate(value);
+
+  if (!value || !targetDate) return "waiting";
+  if (targetDate <= new Date()) return "done";
+  return "planned";
+}
+
+function getStageText(status: StageStatus) {
+  if (status === "done") return "완료";
+  if (status === "planned") return "예정";
+  return "대기";
+}
+
+function getCurrentStage(order: ProductionOrderRow) {
+  const firstOpenStage = stageDefs.find(
+    (stage) => getStageStatus(getStageValue(order, stage)) !== "done"
+  );
+
+  return firstOpenStage?.label || "완료";
+}
+
+function getOrderProgress(order: ProductionOrderRow) {
+  const doneCount = stageDefs.filter(
+    (stage) => getStageStatus(getStageValue(order, stage)) === "done"
+  ).length;
+
+  return Math.round((doneCount / stageDefs.length) * 100);
+}
+
+function getSectionExtraColumn(section: OrderCategory) {
+  if (section === "overseas") return "국가";
+  if (section === "parts") return "구분";
+  return "";
+}
+
 export default function MainPage() {
   const router = useRouter();
   const [role, setRole] = useState("");
+  const [name, setName] = useState("");
   const [noticeTitle, setNoticeTitle] = useState("공지");
   const [noticeText, setNoticeText] =
     useState(defaultNotice);
   const [upcomingSchedules, setUpcomingSchedules] = useState<
     ScheduleRow[]
   >([]);
+  const [orders, setOrders] = useState<ProductionOrderRow[]>([]);
+  const [orderForm, setOrderForm] = useState<OrderForm>(emptyForm);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
-  async function loadLatestNotice(currentTeam: string) {
+  const canManageOrders = useMemo(
+    () => canManageProductionOrders(name, role),
+    [name, role]
+  );
+
+  const activeOrderCount = useMemo(
+    () => orders.filter((order) => getOrderProgress(order) < 100).length,
+    [orders]
+  );
+
+  const loadLatestNotice = useCallback(async (currentTeam: string) => {
     const { data, error } = await supabase
       .from("notices")
       .select("title,body,target_team,starts_on,ends_on")
@@ -215,9 +303,9 @@ export default function MainPage() {
 
     setNoticeTitle(notice.title || "공지");
     setNoticeText(notice.body || defaultNotice);
-  }
+  }, []);
 
-  async function loadUpcomingSchedules() {
+  const loadUpcomingSchedules = useCallback(async () => {
     const { data, error } = await supabase
       .from("schedules")
       .select("id,date,time,type,company,title,writer")
@@ -229,18 +317,128 @@ export default function MainPage() {
     if (!error && data) {
       setUpcomingSchedules(data as ScheduleRow[]);
     }
-  }
+  }, []);
+
+  const loadProductionOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    setOrdersError("");
+
+    const { data, error } = await supabase
+      .from("equipment_orders")
+      .select("*")
+      .order("order_date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setOrders([]);
+      setOrdersError(
+        "수주 현황 테이블이 아직 준비되지 않았습니다. project-docs/supabase-equipment-orders.sql을 Supabase에 적용해 주세요."
+      );
+      setOrdersLoading(false);
+      return;
+    }
+
+    setOrders((data || []) as ProductionOrderRow[]);
+    setOrdersLoading(false);
+  }, []);
 
   useEffect(() => {
+    const storedName = localStorage.getItem("name") || "";
     const storedTeam = localStorage.getItem("team") || "";
     const storedRole = localStorage.getItem("role") || "";
+    const currentTeam = getCurrentOrgTeam(storedName, storedTeam);
 
     void Promise.resolve().then(() => {
+      setName(storedName);
       setRole(storedRole);
-      void loadLatestNotice(storedTeam);
+      setOrderForm((current) => ({
+        ...current,
+        ownerName: storedName,
+      }));
+      void loadLatestNotice(currentTeam);
       void loadUpcomingSchedules();
+      void loadProductionOrders();
     });
-  }, []);
+  }, [loadLatestNotice, loadProductionOrders, loadUpcomingSchedules]);
+
+  function updateOrderForm<K extends keyof OrderForm>(
+    key: K,
+    value: OrderForm[K]
+  ) {
+    setOrderForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function createOrder() {
+    setMessage("");
+
+    if (!canManageOrders) {
+      setMessage("수주 건 등록 권한이 없습니다.");
+      return;
+    }
+
+    if (!orderForm.customer.trim() || !orderForm.model.trim()) {
+      setMessage("고객사와 모델/품목은 필수입니다.");
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase.from("equipment_orders").insert({
+      category: orderForm.category,
+      order_date: orderForm.orderDate || todayKey(),
+      country:
+        orderForm.category === "domestic"
+          ? null
+          : orderForm.country.trim() || null,
+      customer: orderForm.customer.trim(),
+      model: orderForm.model.trim(),
+      owner_name: orderForm.ownerName.trim() || name || "담당자",
+      shipment_scheduled_on: orderForm.shipmentDate || null,
+      note: orderForm.note.trim() || null,
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setSaving(false);
+      return;
+    }
+
+    setOrderForm({
+      ...emptyForm,
+      ownerName: name,
+      orderDate: todayKey(),
+    });
+    setMessage("수주 건이 등록되었습니다.");
+    setSaving(false);
+    await loadProductionOrders();
+  }
+
+  async function updateManualStage(
+    order: ProductionOrderRow,
+    stage: StageDef,
+    value: string
+  ) {
+    if (!canManageOrders || !stage.manual) return;
+
+    const { error } = await supabase
+      .from("equipment_orders")
+      .update({ [stage.column]: value || null })
+      .eq("id", order.id);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setOrders((current) =>
+      current.map((item) =>
+        item.id === order.id
+          ? { ...item, [stage.column]: value || null }
+          : item
+      )
+    );
+    setMessage("진행 날짜가 저장되었습니다.");
+  }
 
   return (
     <section style={styles.dashboard}>
@@ -264,13 +462,7 @@ export default function MainPage() {
           <div>
             <h2 style={styles.productionTitle}>장비 발주 및 제작 현황</h2>
             <div style={styles.productionMeta}>
-              전체 {productionOrders.length}건 · 진행중{" "}
-              {
-                productionOrders.filter(
-                  (order) => getOrderProgress(order) < 100
-                ).length
-              }
-              건
+              전체 {orders.length}건 · 진행중 {activeOrderCount}건
             </div>
           </div>
 
@@ -290,11 +482,136 @@ export default function MainPage() {
           </div>
         </div>
 
+        {ordersError && (
+          <div style={styles.setupBox}>
+            <strong>DB 준비 필요</strong>
+            <span>{ordersError}</span>
+          </div>
+        )}
+
+        {message && <div style={styles.messageBox}>{message}</div>}
+
+        {canManageOrders && (
+          <section style={styles.orderFormBox}>
+            <div style={styles.formHeader}>
+              <h3 style={styles.sectionTitle}>수주 건 등록</h3>
+              <button
+                type="button"
+                style={styles.primaryButton}
+                onClick={createOrder}
+                disabled={saving || Boolean(ordersError)}
+              >
+                {saving ? "저장중" : "등록"}
+              </button>
+            </div>
+
+            <div style={styles.orderFormGrid}>
+              <label style={styles.field}>
+                <span>구분</span>
+                <select
+                  style={styles.input}
+                  value={orderForm.category}
+                  onChange={(event) =>
+                    updateOrderForm("category", event.target.value as OrderCategory)
+                  }
+                >
+                  <option value="domestic">국내 장비</option>
+                  <option value="overseas">해외 장비</option>
+                  <option value="parts">부품</option>
+                </select>
+              </label>
+
+              <label style={styles.field}>
+                <span>수주일</span>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={orderForm.orderDate}
+                  onChange={(event) =>
+                    updateOrderForm("orderDate", event.target.value)
+                  }
+                />
+              </label>
+
+              {orderForm.category !== "domestic" && (
+                <label style={styles.field}>
+                  <span>{orderForm.category === "parts" ? "구분" : "국가"}</span>
+                  <input
+                    style={styles.input}
+                    value={orderForm.country}
+                    onChange={(event) =>
+                      updateOrderForm("country", event.target.value)
+                    }
+                    placeholder={orderForm.category === "parts" ? "국내/해외" : "국가"}
+                  />
+                </label>
+              )}
+
+              <label style={styles.field}>
+                <span>고객사</span>
+                <input
+                  style={styles.input}
+                  value={orderForm.customer}
+                  onChange={(event) =>
+                    updateOrderForm("customer", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={styles.field}>
+                <span>모델/품목</span>
+                <input
+                  style={styles.input}
+                  value={orderForm.model}
+                  onChange={(event) =>
+                    updateOrderForm("model", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={styles.field}>
+                <span>담당</span>
+                <input
+                  style={styles.input}
+                  value={orderForm.ownerName}
+                  onChange={(event) =>
+                    updateOrderForm("ownerName", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={styles.field}>
+                <span>출고예정</span>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={orderForm.shipmentDate}
+                  onChange={(event) =>
+                    updateOrderForm("shipmentDate", event.target.value)
+                  }
+                />
+              </label>
+
+              <label style={styles.field}>
+                <span>비고</span>
+                <input
+                  style={styles.input}
+                  value={orderForm.note}
+                  onChange={(event) =>
+                    updateOrderForm("note", event.target.value)
+                  }
+                />
+              </label>
+            </div>
+          </section>
+        )}
+
         <div style={styles.orderSections}>
           {sectionDefs.map((section) => {
-            const orders = productionOrders.filter(
+            const sectionOrders = orders.filter(
               (order) => order.category === section.key
             );
+            const extraColumn = getSectionExtraColumn(section.key);
 
             return (
               <section key={section.key} style={styles.orderSection}>
@@ -308,10 +625,12 @@ export default function MainPage() {
                     />
                     <h3 style={styles.sectionTitle}>{section.title}</h3>
                   </div>
-                  <span style={styles.sectionCount}>{orders.length}건</span>
+                  <span style={styles.sectionCount}>
+                    {ordersLoading ? "불러오는 중" : `${sectionOrders.length}건`}
+                  </span>
                 </div>
 
-                {orders.length === 0 ? (
+                {sectionOrders.length === 0 ? (
                   <div style={styles.compactEmpty}>등록된 건이 없습니다.</div>
                 ) : (
                   <div style={styles.orderTableWrap}>
@@ -319,7 +638,9 @@ export default function MainPage() {
                       <thead>
                         <tr>
                           <th style={styles.orderTh}>수주</th>
-                          <th style={styles.orderTh}>국가</th>
+                          {extraColumn && (
+                            <th style={styles.orderTh}>{extraColumn}</th>
+                          )}
                           <th style={styles.orderTh}>고객사</th>
                           <th style={styles.orderTh}>모델/품목</th>
                           <th style={styles.orderTh}>담당</th>
@@ -333,13 +654,17 @@ export default function MainPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map((order) => (
+                        {sectionOrders.map((order) => (
                           <tr key={order.id}>
-                            <td style={styles.orderTd}>{order.orderDate}</td>
-                            <td style={styles.orderTd}>{order.country}</td>
+                            <td style={styles.orderTd}>
+                              {formatShortDate(order.order_date)}
+                            </td>
+                            {extraColumn && (
+                              <td style={styles.orderTd}>{order.country || "-"}</td>
+                            )}
                             <td style={styles.strongTd}>{order.customer}</td>
                             <td style={styles.strongTd}>{order.model}</td>
-                            <td style={styles.orderTd}>{order.owner}</td>
+                            <td style={styles.orderTd}>{order.owner_name}</td>
                             <td style={styles.currentTd}>
                               <div style={styles.currentStage}>
                                 <span>{getCurrentStage(order)}</span>
@@ -355,20 +680,35 @@ export default function MainPage() {
                               </div>
                             </td>
                             {stageDefs.map((stage) => {
-                              const value = order.stages[stage.key];
+                              const value = getStageValue(order, stage);
                               const status = getStageStatus(value);
 
                               return (
                                 <td key={stage.key} style={styles.stageTd}>
-                                  <span
-                                    style={{
-                                      ...styles.stageChip,
-                                      ...stageTone[status],
-                                    }}
-                                  >
-                                    <span>{getStageText(status)}</span>
-                                    <strong>{value || "-"}</strong>
-                                  </span>
+                                  {stage.manual && canManageOrders ? (
+                                    <input
+                                      type="date"
+                                      value={value}
+                                      style={styles.stageDateInput}
+                                      onChange={(event) =>
+                                        updateManualStage(
+                                          order,
+                                          stage,
+                                          event.target.value
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <span
+                                      style={{
+                                        ...styles.stageChip,
+                                        ...stageTone[status],
+                                      }}
+                                    >
+                                      <span>{getStageText(status)}</span>
+                                      <strong>{formatShortDate(value) || "-"}</strong>
+                                    </span>
+                                  )}
                                 </td>
                               );
                             })}
@@ -519,6 +859,79 @@ const styles: Record<string, CSSProperties> = {
     height: "7px",
     borderRadius: "999px",
   },
+  setupBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+    border: "1px solid #facc15",
+    borderRadius: "9px",
+    background: "#fffbeb",
+    color: "#854d0e",
+    padding: "12px 14px",
+    marginBottom: "12px",
+    fontSize: "13px",
+  },
+  messageBox: {
+    border: "1px solid #bfdbfe",
+    borderRadius: "9px",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    padding: "10px 12px",
+    marginBottom: "12px",
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  orderFormBox: {
+    border: "1px solid #edf0f3",
+    borderRadius: "9px",
+    background: "#fbfcfd",
+    padding: "12px",
+    marginBottom: "12px",
+  },
+  formHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px",
+    marginBottom: "10px",
+  },
+  orderFormGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "10px",
+  },
+  field: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    color: "#344054",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
+  input: {
+    width: "100%",
+    height: "36px",
+    border: "1px solid #cfd6df",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 10px",
+    fontSize: "13px",
+    boxSizing: "border-box",
+  },
+  primaryButton: {
+    height: "34px",
+    minWidth: "74px",
+    border: "1px solid #111820",
+    borderRadius: "8px",
+    background: "#111820",
+    color: "#ffffff",
+    padding: "0 12px",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
   orderSections: {
     display: "grid",
     gap: "12px",
@@ -576,7 +989,7 @@ const styles: Record<string, CSSProperties> = {
   },
   orderTable: {
     width: "100%",
-    minWidth: "1320px",
+    minWidth: "1180px",
     borderCollapse: "separate",
     borderSpacing: 0,
   },
@@ -646,7 +1059,7 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
   stageChip: {
-    minWidth: "74px",
+    minWidth: "72px",
     minHeight: "34px",
     display: "inline-flex",
     flexDirection: "column",
@@ -658,6 +1071,16 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px 7px",
     fontSize: "11px",
     lineHeight: 1.05,
+  },
+  stageDateInput: {
+    width: "118px",
+    height: "34px",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 7px",
+    fontSize: "12px",
   },
   noteTd: {
     minWidth: "120px",

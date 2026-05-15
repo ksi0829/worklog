@@ -10,6 +10,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type FieldType = "text" | "date" | "select" | "textarea";
 type ApprovalStatus = "pending" | "approved" | "rejected";
+type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "qa";
 
 type FieldDef = {
   key: string;
@@ -76,6 +77,8 @@ type ApprovalDocumentRow = {
   form_data: Record<string, unknown>;
   submitted_at: string;
   completed_at: string | null;
+  equipment_order_id?: number | null;
+  equipment_stage_key?: EquipmentStageKey | null;
   created_at: string;
   updated_at: string;
   approval_lines?: ApprovalLineRow[];
@@ -95,9 +98,37 @@ type ApproverSlot = {
   approverId: string;
 };
 
+type EquipmentOrderRow = {
+  id: number;
+  category: "domestic" | "overseas" | "parts";
+  order_date: string;
+  country: string | null;
+  customer: string;
+  model: string;
+  owner_name: string;
+};
+
 const supabase = createSupabaseBrowser();
 const today = new Date().toISOString().slice(0, 10);
 const DEFAULT_APPROVER_COUNT = 3;
+
+const equipmentStageByTemplate: Partial<Record<string, EquipmentStageKey>> = {
+  manufacturing_request: "manufacturingRequest",
+  purchase_request: "purchaseRequest",
+  inspection_request: "qa",
+};
+
+const equipmentDocumentColumnByStage: Record<EquipmentStageKey, string> = {
+  manufacturingRequest: "manufacturing_document_id",
+  purchaseRequest: "purchase_document_id",
+  qa: "qa_document_id",
+};
+
+const equipmentDateColumnByStage: Record<EquipmentStageKey, string> = {
+  manufacturingRequest: "manufacturing_request_approved_on",
+  purchaseRequest: "purchase_request_approved_on",
+  qa: "qa_approved_on",
+};
 
 const commonItemColumns: TableColumn[] = [
   { key: "name", label: "품명" },
@@ -378,6 +409,13 @@ function formatDate(value?: string | null) {
   return value.slice(0, 10);
 }
 
+function formatShortDate(value?: string | null) {
+  if (!value) return "";
+  const [, month, day] = value.slice(0, 10).split("-");
+  if (!month || !day) return value;
+  return `${Number(month)}/${Number(day)}`;
+}
+
 function statusText(status: ApprovalStatus) {
   if (status === "approved") return "승인완료";
   if (status === "rejected") return "반려";
@@ -403,6 +441,17 @@ function getFirstPendingLine(document: ApprovalDocumentRow) {
   return lines.find((line) => line.status === "pending") || null;
 }
 
+function getEquipmentOrderLabel(order: EquipmentOrderRow) {
+  const categoryText =
+    order.category === "domestic"
+      ? "국내"
+      : order.category === "overseas"
+        ? order.country || "해외"
+        : order.country || "부품";
+
+  return `${formatShortDate(order.order_date)} · ${categoryText} · ${order.customer} · ${order.model}`;
+}
+
 export default function ApprovalPage() {
   const [selectedTemplateKey, setSelectedTemplateKey] = useState(templates[0].key);
   const selectedTemplate = templateMap[selectedTemplateKey] || templates[0];
@@ -413,6 +462,8 @@ export default function ApprovalPage() {
     createDefaultApproverSlots()
   );
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrderRow[]>([]);
+  const [selectedEquipmentOrderId, setSelectedEquipmentOrderId] = useState("");
   const [documents, setDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -460,6 +511,8 @@ export default function ApprovalPage() {
     [profiles]
   );
 
+  const selectedEquipmentStage = equipmentStageByTemplate[selectedTemplate.key] || null;
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setSetupError("");
@@ -483,6 +536,14 @@ export default function ApprovalPage() {
       .order("name", { ascending: true });
 
     setProfiles((profileRows || []) as ProfileRow[]);
+
+    const { data: equipmentRows } = await supabase
+      .from("equipment_orders")
+      .select("id,category,order_date,country,customer,model,owner_name")
+      .order("order_date", { ascending: false })
+      .limit(80);
+
+    setEquipmentOrders((equipmentRows || []) as EquipmentOrderRow[]);
 
     const { data: documentRows, error: documentError } = await supabase
       .from("approval_documents")
@@ -532,6 +593,7 @@ export default function ApprovalPage() {
     setSelectedTemplateKey(templateKey);
     setFormData(applyCurrentUserFields(createEmptyFormData(nextTemplate), currentName, currentTeam, true));
     setApproverSlots(createDefaultApproverSlots());
+    setSelectedEquipmentOrderId("");
     setMessage("");
   }
 
@@ -613,19 +675,30 @@ export default function ApprovalPage() {
     setSaving(true);
 
     const title = deriveDocumentTitle(selectedTemplate, formData);
+    const linkedEquipmentOrderId =
+      selectedEquipmentStage && selectedEquipmentOrderId
+        ? Number(selectedEquipmentOrderId)
+        : null;
+    const documentPayload: Record<string, unknown> = {
+      template_key: selectedTemplate.key,
+      template_title: selectedTemplate.title,
+      title,
+      status: "pending",
+      requester_id: currentUserId,
+      requester_name: currentName || "작성자",
+      requester_team: currentTeam || null,
+      current_step: 1,
+      form_data: formData,
+    };
+
+    if (linkedEquipmentOrderId && selectedEquipmentStage) {
+      documentPayload.equipment_order_id = linkedEquipmentOrderId;
+      documentPayload.equipment_stage_key = selectedEquipmentStage;
+    }
+
     const { data: insertedDocument, error: documentError } = await supabase
       .from("approval_documents")
-      .insert({
-        template_key: selectedTemplate.key,
-        template_title: selectedTemplate.title,
-        title,
-        status: "pending",
-        requester_id: currentUserId,
-        requester_name: currentName || "작성자",
-        requester_team: currentTeam || null,
-        current_step: 1,
-        form_data: formData,
-      })
+      .insert(documentPayload)
       .select()
       .single();
 
@@ -636,6 +709,16 @@ export default function ApprovalPage() {
     }
 
     const documentId = (insertedDocument as ApprovalDocumentRow).id;
+
+    if (linkedEquipmentOrderId && selectedEquipmentStage) {
+      await supabase
+        .from("equipment_orders")
+        .update({
+          [equipmentDocumentColumnByStage[selectedEquipmentStage]]: documentId,
+        })
+        .eq("id", linkedEquipmentOrderId);
+    }
+
     const linePayload = selectedApprovers.map((slot) => ({
       document_id: documentId,
       step_order: slot.stepOrder,
@@ -664,6 +747,7 @@ export default function ApprovalPage() {
 
     setMessage("결재문서가 등록되었습니다.");
     setFormData(createEmptyFormData(selectedTemplate));
+    setSelectedEquipmentOrderId("");
     setSaving(false);
     await loadData();
     setSelectedDocumentId(documentId);
@@ -691,10 +775,21 @@ export default function ApprovalPage() {
       .sort((a, b) => a.step_order - b.step_order);
 
     if (remainingLines.length === 0) {
+      const completedDate = new Date().toISOString();
       await supabase
         .from("approval_documents")
-        .update({ status: "approved", completed_at: new Date().toISOString() })
+        .update({ status: "approved", completed_at: completedDate })
         .eq("id", selectedDocument.id);
+
+      if (selectedDocument.equipment_order_id && selectedDocument.equipment_stage_key) {
+        await supabase
+          .from("equipment_orders")
+          .update({
+            [equipmentDateColumnByStage[selectedDocument.equipment_stage_key]]:
+              completedDate.slice(0, 10),
+          })
+          .eq("id", selectedDocument.equipment_order_id);
+      }
 
       await supabase.from("approval_notifications").insert({
         user_id: selectedDocument.requester_id,
@@ -837,6 +932,31 @@ export default function ApprovalPage() {
               })}
             </div>
           </section>
+
+          {selectedEquipmentStage && (
+            <section style={styles.orderReferenceBox}>
+              <div style={styles.panelTitleRow}>
+                <div>
+                  <h3 style={styles.sectionTitle}>수주 건 연결</h3>
+                  <p style={styles.panelSubText}>
+                    최종 승인 시 메인 현황판의 해당 단계 날짜가 자동 반영됩니다.
+                  </p>
+                </div>
+              </div>
+              <select
+                style={styles.input}
+                value={selectedEquipmentOrderId}
+                onChange={(event) => setSelectedEquipmentOrderId(event.target.value)}
+              >
+                <option value="">연결하지 않음</option>
+                {equipmentOrders.map((order) => (
+                  <option key={order.id} value={order.id}>
+                    {getEquipmentOrderLabel(order)}
+                  </option>
+                ))}
+              </select>
+            </section>
+          )}
 
           <section style={styles.approvalLineBoxTop}>
             <div style={styles.panelTitleRow}>
@@ -1374,6 +1494,13 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #e5e7eb",
     borderRadius: "10px",
     background: "#f8fafc",
+    padding: "14px",
+    marginBottom: "16px",
+  },
+  orderReferenceBox: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
     padding: "14px",
     marginBottom: "16px",
   },
