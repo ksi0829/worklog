@@ -539,8 +539,9 @@ export default function ViewPage() {
                     >
                       {profile.name}
 
-                      {profile.role ===
-                        "lead" && (
+                      {ORG_MEMBER_MAP.get(
+                        profile.name
+                      )?.leader && (
                         <span
                           style={
                             styles.leaderBadge
