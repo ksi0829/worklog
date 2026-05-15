@@ -132,6 +132,8 @@ drop policy if exists "equipment_orders_select_authenticated_all" on public.equi
 drop policy if exists "equipment_orders_insert_manager" on public.equipment_orders;
 drop policy if exists "equipment_orders_update_manager" on public.equipment_orders;
 drop policy if exists "equipment_orders_delete_manager" on public.equipment_orders;
+drop policy if exists "equipment_orders_insert_authenticated_all" on public.equipment_orders;
+drop policy if exists "equipment_orders_update_authenticated_all" on public.equipment_orders;
 
 grant select, insert, update, delete on public.equipment_orders to authenticated;
 
@@ -141,18 +143,18 @@ for select
 to authenticated
 using (true);
 
-create policy "equipment_orders_insert_manager"
+create policy "equipment_orders_insert_authenticated_all"
 on public.equipment_orders
 for insert
 to authenticated
-with check (public.is_equipment_order_manager());
+with check (auth.uid() is not null);
 
-create policy "equipment_orders_update_manager"
+create policy "equipment_orders_update_authenticated_all"
 on public.equipment_orders
 for update
 to authenticated
-using (public.is_equipment_order_manager())
-with check (public.is_equipment_order_manager());
+using (true)
+with check (true);
 
 create policy "equipment_orders_delete_manager"
 on public.equipment_orders

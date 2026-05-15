@@ -231,6 +231,14 @@ const templates: TemplateDef[] = [
     description: "제품 제조 요청과 생산 조건 정리",
     approvalRoles: ["담당", "팀장", "이사", "부사장", "사장"],
     fields: [
+      {
+        key: "orderCategory",
+        label: "현황 구분",
+        type: "select",
+        options: ["국내 장비", "해외 장비", "부품"],
+      },
+      { key: "orderDate", label: "수주일", type: "date" },
+      { key: "country", label: "국가/구분", type: "text" },
       { key: "productName", label: "제품명", type: "text" },
       { key: "qty", label: "수량", type: "text" },
       { key: "createdDate", label: "작성일", type: "date" },
@@ -452,6 +460,51 @@ function getEquipmentOrderLabel(order: EquipmentOrderRow) {
   return `${formatShortDate(order.order_date)} · ${categoryText} · ${order.customer} · ${order.model}`;
 }
 
+function toEquipmentCategory(value: unknown): "domestic" | "overseas" | "parts" {
+  if (value === "해외 장비") return "overseas";
+  if (value === "부품") return "parts";
+  return "domestic";
+}
+
+function getStringValue(data: Record<string, unknown>, key: string) {
+  const value = data[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildEquipmentOrderFromManufacturing(
+  data: Record<string, unknown>,
+  currentName: string
+) {
+  const category = toEquipmentCategory(data.orderCategory);
+
+  return {
+    category,
+    order_date:
+      getStringValue(data, "orderDate") ||
+      getStringValue(data, "createdDate") ||
+      today,
+    country:
+      category === "domestic"
+        ? null
+        : getStringValue(data, "country") || null,
+    customer:
+      getStringValue(data, "client") ||
+      getStringValue(data, "customer") ||
+      "고객사 미입력",
+    model:
+      getStringValue(data, "productName") ||
+      getStringValue(data, "equipment") ||
+      "모델 미입력",
+    owner_name:
+      getStringValue(data, "owner") ||
+      getStringValue(data, "requester") ||
+      getStringValue(data, "applicant") ||
+      currentName ||
+      "담당자",
+    shipment_scheduled_on: getStringValue(data, "deliveryDate") || null,
+  };
+}
+
 export default function ApprovalPage() {
   const [selectedTemplateKey, setSelectedTemplateKey] = useState(templates[0].key);
   const selectedTemplate = templateMap[selectedTemplateKey] || templates[0];
@@ -512,6 +565,8 @@ export default function ApprovalPage() {
   );
 
   const selectedEquipmentStage = equipmentStageByTemplate[selectedTemplate.key] || null;
+  const shouldCreateEquipmentOrder = selectedTemplate.key === "manufacturing_request";
+  const shouldSelectEquipmentOrder = Boolean(selectedEquipmentStage && !shouldCreateEquipmentOrder);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -676,9 +731,30 @@ export default function ApprovalPage() {
 
     const title = deriveDocumentTitle(selectedTemplate, formData);
     const linkedEquipmentOrderId =
-      selectedEquipmentStage && selectedEquipmentOrderId
+      shouldSelectEquipmentOrder && selectedEquipmentOrderId
         ? Number(selectedEquipmentOrderId)
         : null;
+    let createdEquipmentOrderId: number | null = null;
+
+    if (shouldCreateEquipmentOrder) {
+      const { data: createdOrder, error: orderError } = await supabase
+        .from("equipment_orders")
+        .insert(buildEquipmentOrderFromManufacturing(formData, currentName))
+        .select("id")
+        .single();
+
+      if (orderError || !createdOrder) {
+        setMessage(
+          "현황판 수주 건을 만들지 못했습니다. 수주 현황 테이블과 권한을 확인해 주세요."
+        );
+        setSaving(false);
+        return;
+      }
+
+      createdEquipmentOrderId = (createdOrder as { id: number }).id;
+    }
+
+    const finalEquipmentOrderId = createdEquipmentOrderId || linkedEquipmentOrderId;
     const documentPayload: Record<string, unknown> = {
       template_key: selectedTemplate.key,
       template_title: selectedTemplate.title,
@@ -691,8 +767,8 @@ export default function ApprovalPage() {
       form_data: formData,
     };
 
-    if (linkedEquipmentOrderId && selectedEquipmentStage) {
-      documentPayload.equipment_order_id = linkedEquipmentOrderId;
+    if (finalEquipmentOrderId && selectedEquipmentStage) {
+      documentPayload.equipment_order_id = finalEquipmentOrderId;
       documentPayload.equipment_stage_key = selectedEquipmentStage;
     }
 
@@ -710,13 +786,13 @@ export default function ApprovalPage() {
 
     const documentId = (insertedDocument as ApprovalDocumentRow).id;
 
-    if (linkedEquipmentOrderId && selectedEquipmentStage) {
+    if (finalEquipmentOrderId && selectedEquipmentStage) {
       await supabase
         .from("equipment_orders")
         .update({
           [equipmentDocumentColumnByStage[selectedEquipmentStage]]: documentId,
         })
-        .eq("id", linkedEquipmentOrderId);
+        .eq("id", finalEquipmentOrderId);
     }
 
     const linePayload = selectedApprovers.map((slot) => ({
@@ -933,7 +1009,18 @@ export default function ApprovalPage() {
             </div>
           </section>
 
-          {selectedEquipmentStage && (
+          {shouldCreateEquipmentOrder && (
+            <section style={styles.orderReferenceBox}>
+              <div>
+                <h3 style={styles.sectionTitle}>현황판 자동 등록</h3>
+                <p style={styles.panelSubText}>
+                  제조요구서를 상신하면 입력한 수주 정보로 메인 현황판에 새 건이 자동 생성됩니다.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {shouldSelectEquipmentOrder && (
             <section style={styles.orderReferenceBox}>
               <div style={styles.panelTitleRow}>
                 <div>
