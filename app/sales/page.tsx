@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/app/_components/BrandLogo";
 import { canAccessSales } from "@/app/_lib/currentOrg";
+import {
+  type ExcelSheet,
+  exportDateStamp,
+  exportExcelWorkbook,
+} from "@/app/_lib/excelExport";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/sales/styles";
 
@@ -127,6 +132,79 @@ const emptyActivityForm: ActivityForm = {
   memo: "",
   date: today,
 };
+
+function createSalesSummarySheet(
+  opportunities: Opportunity[],
+  canViewAmount: boolean
+): ExcelSheet {
+  const amountColumn = canViewAmount ? ["예상금액"] : [];
+
+  return {
+    name: "영업관리 히스토리",
+    widths: [95, 100, 160, 120, 220, 100, 120, 100, 220],
+    rows: [
+      ["영업관리 히스토리"],
+      [""],
+      [
+        "등록일",
+        "구분",
+        "고객사",
+        "담당자",
+        "품목/내용",
+        ...amountColumn,
+        "단계",
+        "예정일",
+        "다음 액션",
+      ],
+      ...opportunities.map((item) => [
+        item.createdAt,
+        divisionLabel[item.division],
+        item.company,
+        item.contact,
+        item.item,
+        ...(canViewAmount ? [item.amount] : []),
+        stageLabel[item.stage],
+        item.dueDate,
+        item.nextAction,
+      ]),
+    ],
+  };
+}
+
+function createSalesDetailSheet(
+  opportunity: Opportunity,
+  activities: Activity[],
+  canViewAmount: boolean
+): ExcelSheet {
+  const rows = [
+    ["영업관리 상세"],
+    [""],
+    ["항목", "내용"],
+    ["구분", divisionLabel[opportunity.division]],
+    ["고객사", opportunity.company],
+    ["담당자", opportunity.contact],
+    ["품목/내용", opportunity.item],
+    ...(canViewAmount ? [["예상금액", opportunity.amount]] : []),
+    ["단계", stageLabel[opportunity.stage]],
+    ["예정일", opportunity.dueDate],
+    ["다음 액션", opportunity.nextAction],
+    ["등록일", opportunity.createdAt],
+    [""],
+    ["일자", "구분", "활동 제목", "메모"],
+    ...activities.map((activity) => [
+      activity.date,
+      activity.type,
+      activity.title,
+      activity.memo,
+    ]),
+  ];
+
+  return {
+    name: `${opportunity.createdAt.slice(2).replaceAll("-", "")}_${opportunity.company}`,
+    widths: [110, 130, 220, 320],
+    rows,
+  };
+}
 
 export default function SalesPage() {
   const router = useRouter();
@@ -433,6 +511,24 @@ export default function SalesPage() {
     setSelectedId(null);
   }
 
+  function exportCurrentSales() {
+    if (currentOpportunities.length === 0) {
+      alert("다운로드할 영업 내역이 없습니다.");
+      return;
+    }
+
+    exportExcelWorkbook(`${divisionLabel[division]}_${exportDateStamp()}.xls`, [
+      createSalesSummarySheet(currentOpportunities, canViewAmount),
+      ...currentOpportunities.map((opportunity) =>
+        createSalesDetailSheet(
+          opportunity,
+          activities.filter((activity) => activity.opportunityId === opportunity.id),
+          canViewAmount
+        )
+      ),
+    ]);
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.container}>
@@ -597,7 +693,12 @@ export default function SalesPage() {
           </div>
 
           <div style={styles.panel}>
-            <h2 style={styles.panelTitle}>{divisionLabel[division]} 목록</h2>
+            <div style={styles.panelTopRow}>
+              <h2 style={styles.panelTitle}>{divisionLabel[division]} 목록</h2>
+              <button style={styles.exportButton} onClick={exportCurrentSales}>
+                엑셀
+              </button>
+            </div>
             <p style={styles.panelHint}>업체명과 담당자만 빠르게 확인하고, 클릭하면 상세가 열립니다.</p>
 
             <div style={styles.list}>

@@ -6,6 +6,11 @@ import {
   TEAM_ORDER,
   getCurrentOrgTeam,
 } from "@/app/_lib/currentOrg";
+import {
+  type ExcelSheet,
+  exportDateStamp,
+  exportExcelWorkbook,
+} from "@/app/_lib/excelExport";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type FieldType = "text" | "date" | "select" | "textarea";
@@ -447,6 +452,101 @@ function deriveDocumentTitle(template: TemplateDef, data: Record<string, unknown
 function getFirstPendingLine(document: ApprovalDocumentRow) {
   const lines = [...(document.approval_lines || [])].sort((a, b) => a.step_order - b.step_order);
   return lines.find((line) => line.status === "pending") || null;
+}
+
+function formatExcelValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+function getDocumentSheetName(document: ApprovalDocumentRow) {
+  const date = formatDate(document.submitted_at).replaceAll("-", "").slice(2);
+  return `${date}_${document.template_title}`.slice(0, 31);
+}
+
+function createApprovalListSheet(documents: ApprovalDocumentRow[]): ExcelSheet {
+  return {
+    name: "결재문서 목록",
+    widths: [95, 120, 240, 85, 100, 90, 100, 110, 120],
+    rows: [
+      ["결재문서 히스토리"],
+      [""],
+      [
+        "작성일",
+        "문서종류",
+        "제목",
+        "작성자",
+        "부서",
+        "상태",
+        "현재결재자",
+        "최종승인일",
+        "결재라인",
+      ],
+      ...documents.map((document) => {
+        const pendingLine = getFirstPendingLine(document);
+
+        return [
+          formatDate(document.submitted_at),
+          document.template_title,
+          document.title,
+          document.requester_name,
+          document.requester_team || "",
+          statusText(document.status),
+          pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "",
+          formatDate(document.completed_at),
+          (document.approval_lines || [])
+            .map((line) => `${line.role_label}:${line.approver_name}/${statusText(line.status)}`)
+            .join(" → "),
+        ];
+      }),
+    ],
+  };
+}
+
+function createApprovalDocumentSheet(document: ApprovalDocumentRow): ExcelSheet {
+  const template = templateMap[document.template_key] || null;
+  const rows = [
+    [document.template_title],
+    [""],
+    ["항목", "내용"],
+    ["제목", document.title],
+    ["상태", statusText(document.status)],
+    ["작성자", document.requester_name],
+    ["부서", document.requester_team || ""],
+    ["작성일", formatDate(document.submitted_at)],
+    ["최종승인일", formatDate(document.completed_at)],
+    [""],
+    ["결재순서", "결재자", "부서", "상태", "처리일"],
+    ...(document.approval_lines || []).map((line) => [
+      line.role_label,
+      line.approver_name,
+      line.approver_team || "",
+      statusText(line.status),
+      formatDate(line.acted_at),
+    ]),
+    [""],
+    ["문서 항목", "입력값"],
+    ...(template?.fields || []).map((field) => [
+      field.label,
+      formatExcelValue(document.form_data[field.key]),
+    ]),
+  ];
+
+  (template?.tables || []).forEach((table) => {
+    rows.push([""], [table.title], table.columns.map((column) => column.label));
+    getRows(document.form_data[table.key]).forEach((item) => {
+      rows.push(table.columns.map((column) => item[column.key] || ""));
+    });
+  });
+
+  return {
+    name: getDocumentSheetName(document),
+    widths: [120, 180, 140, 100, 100, 120],
+    rows,
+  };
 }
 
 function getEquipmentOrderLabel(order: EquipmentOrderRow) {
@@ -931,6 +1031,29 @@ export default function ApprovalPage() {
     await loadData();
   }
 
+  function exportApprovalList() {
+    if (filteredDocuments.length === 0) {
+      setMessage("다운로드할 문서가 없습니다.");
+      return;
+    }
+
+    exportExcelWorkbook(`결재문서_목록_${exportDateStamp()}.xls`, [
+      createApprovalListSheet(filteredDocuments),
+    ]);
+  }
+
+  function exportApprovalForms() {
+    if (filteredDocuments.length === 0) {
+      setMessage("다운로드할 문서가 없습니다.");
+      return;
+    }
+
+    exportExcelWorkbook(
+      `결재문서_양식_${exportDateStamp()}.xls`,
+      filteredDocuments.map(createApprovalDocumentSheet)
+    );
+  }
+
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
     selectedDocument?.status === "pending" && currentPendingLine?.approver_id === currentUserId;
@@ -1194,7 +1317,15 @@ export default function ApprovalPage() {
         <aside style={styles.documentPanel}>
           <div style={styles.panelTitleRow}>
             <h2 style={styles.panelTitle}>문서함</h2>
-            <span style={styles.countText}>{loading ? "불러오는 중" : `${filteredDocuments.length}건`}</span>
+            <div style={styles.panelTitleActions}>
+              <button type="button" style={styles.exportButton} onClick={exportApprovalList}>
+                목록
+              </button>
+              <button type="button" style={styles.exportButton} onClick={exportApprovalForms}>
+                양식
+              </button>
+              <span style={styles.countText}>{loading ? "불러오는 중" : `${filteredDocuments.length}건`}</span>
+            </div>
           </div>
 
           <div style={styles.filterTabs}>
@@ -1389,6 +1520,13 @@ const styles: Record<string, CSSProperties> = {
     gap: "12px",
     marginBottom: "14px",
   },
+  panelTitleActions: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "6px",
+    flexWrap: "wrap",
+  },
   panelTitle: {
     margin: 0,
     color: "#111820",
@@ -1510,6 +1648,18 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "0 11px",
     fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  exportButton: {
+    height: "28px",
+    border: "1px solid #cfd6df",
+    borderRadius: "7px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 9px",
+    fontSize: "11px",
     fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap",

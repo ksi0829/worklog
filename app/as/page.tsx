@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/app/_components/BrandLogo";
+import {
+  type ExcelSheet,
+  exportDateStamp,
+  exportExcelWorkbook,
+} from "@/app/_lib/excelExport";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/as/styles";
 
@@ -105,6 +110,71 @@ const statusLabel: Record<Status, string> = {
   IN_PROGRESS: "처리중",
   CLOSED: "완료",
 };
+
+function createAsSummarySheet(orders: WorkOrder[]): ExcelSheet {
+  return {
+    name: "A/S 히스토리",
+    widths: [100, 95, 150, 140, 220, 80, 80, 90, 90, 90],
+    rows: [
+      ["A/S 관리 히스토리"],
+      [""],
+      [
+        "접수일",
+        "작업번호",
+        "업체명",
+        "장비/모델",
+        "제목",
+        "우선순위",
+        "상태",
+        "처리건수",
+        "최종수정",
+        "완료여부",
+      ],
+      ...orders.map((order) => [
+        order.createdAt,
+        order.woNo,
+        order.customer,
+        order.model,
+        order.title,
+        priorityLabel[order.priority],
+        statusLabel[order.status],
+        order.logs.length,
+        order.updatedAt,
+        order.status === "CLOSED" ? "완료" : "진행",
+      ]),
+    ],
+  };
+}
+
+function createAsDetailSheet(order: WorkOrder): ExcelSheet {
+  return {
+    name: `${order.createdAt.slice(2).replaceAll("-", "")}_${order.woNo}`,
+    widths: [110, 180, 160, 260, 110],
+    rows: [
+      ["A/S 작업지시서"],
+      [""],
+      ["항목", "내용"],
+      ["작업번호", order.woNo],
+      ["업체명", order.customer],
+      ["장비/모델", order.model],
+      ["제목", order.title],
+      ["우선순위", priorityLabel[order.priority]],
+      ["상태", statusLabel[order.status]],
+      ["접수일", order.createdAt],
+      ["최종수정", order.updatedAt],
+      ["증상/요청사항", order.description],
+      [""],
+      ["차수", "일자", "조치내용", "부품", "메모"],
+      ...order.logs.map((log) => [
+        `${log.seq}차`,
+        log.createdAt,
+        log.action,
+        log.part,
+        log.memo,
+      ]),
+    ],
+  };
+}
 
 export default function AsPage() {
   const router = useRouter();
@@ -414,6 +484,18 @@ export default function AsPage() {
     }
   }
 
+  function exportVisibleOrders() {
+    if (visibleOrders.length === 0) {
+      alert("다운로드할 A/S 내역이 없습니다.");
+      return;
+    }
+
+    exportExcelWorkbook(`AS관리_${tab === "history" ? "히스토리" : "진행중"}_${exportDateStamp()}.xls`, [
+      createAsSummarySheet(visibleOrders),
+      ...visibleOrders.map(createAsDetailSheet),
+    ]);
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.container}>
@@ -528,6 +610,13 @@ export default function AsPage() {
           </div>
 
           <div style={styles.panel}>
+            <div style={styles.panelTopRow}>
+              <h2 style={styles.panelTitle}>A/S 목록</h2>
+              <button style={styles.exportButton} onClick={exportVisibleOrders}>
+                엑셀
+              </button>
+            </div>
+
             <div style={styles.tabs}>
               <button
                 style={tab === "active" ? styles.activeTab : styles.tab}
