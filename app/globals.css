@@ -87,7 +87,7 @@ textarea {
     grid-template-columns: 1fr !important;
   }
 
-  body aside {
+  .app-sidebar {
     position: static !important;
     height: auto !important;
     border-right: 0 !important;
@@ -95,12 +95,12 @@ textarea {
     padding: 16px !important;
   }
 
-  body nav {
+  .app-nav {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
-  body header {
+  .app-topbar {
     position: static !important;
     align-items: flex-start !important;
     flex-direction: column !important;
@@ -113,11 +113,11 @@ textarea {
 }
 
 @media (max-width: 520px) {
-  body nav {
+  .app-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  body header button {
+  .app-topbar button {
     width: auto !important;
     min-width: 74px !important;
     padding: 0 10px !important;

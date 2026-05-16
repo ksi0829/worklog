@@ -264,6 +264,7 @@ export default function MainPage() {
   const [orders, setOrders] = useState<ProductionOrderRow[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
 
   const canManageOrders = useMemo(
@@ -358,6 +359,15 @@ export default function MainPage() {
       void loadProductionOrders();
     });
   }, [loadLatestNotice, loadProductionOrders, loadUpcomingSchedules]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 760px)");
+    const updateMobile = () => setIsMobile(mediaQuery.matches);
+
+    updateMobile();
+    mediaQuery.addEventListener("change", updateMobile);
+    return () => mediaQuery.removeEventListener("change", updateMobile);
+  }, []);
 
   async function updateManualStage(
     order: ProductionOrderRow,
@@ -468,6 +478,80 @@ export default function MainPage() {
 
                 {sectionOrders.length === 0 ? (
                   <div style={styles.compactEmpty}>등록된 건이 없습니다.</div>
+                ) : isMobile ? (
+                  <div style={styles.orderCardList}>
+                    {sectionOrders.map((order) => (
+                      <article key={order.id} style={styles.orderMobileCard}>
+                        <div style={styles.orderMobileTop}>
+                          <div>
+                            <div style={styles.orderMobileMeta}>
+                              {formatShortDate(order.order_date)}
+                              {extraColumn ? ` · ${order.country || "-"}` : ""}
+                              {" · "}
+                              {order.owner_name}
+                            </div>
+                            <h4 style={styles.orderMobileTitle}>
+                              {order.customer} / {order.model}
+                            </h4>
+                          </div>
+                          <strong style={styles.orderMobileProgress}>
+                            {getOrderProgress(order)}%
+                          </strong>
+                        </div>
+
+                        <div style={styles.progressTrack}>
+                          <span
+                            style={{
+                              ...styles.progressFill,
+                              width: `${getOrderProgress(order)}%`,
+                            }}
+                          />
+                        </div>
+
+                        <div style={styles.stageGridMobile}>
+                          {stageDefs.map((stage) => {
+                            const value = getStageValue(order, stage);
+                            const status = getStageStatus(
+                              value,
+                              getStageDocumentId(order, stage)
+                            );
+
+                            return (
+                              <div key={stage.key} style={styles.stageMobileCell}>
+                                <span style={styles.stageMobileLabel}>{stage.label}</span>
+                                {stage.manual && canManageOrders ? (
+                                  <input
+                                    type="date"
+                                    value={value}
+                                    style={styles.stageDateInputMobile}
+                                    onChange={(event) =>
+                                      updateManualStage(
+                                        order,
+                                        stage,
+                                        event.target.value
+                                      )
+                                    }
+                                  />
+                                ) : (
+                                  <span
+                                    style={{
+                                      ...styles.stageChip,
+                                      ...styles.stageChipMobile,
+                                      ...stageTone[status],
+                                    }}
+                                  >
+                                    <span>{getStageText(status)}</span>
+                                    <strong>{formatShortDate(value) || "-"}</strong>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {order.note && <div style={styles.orderMobileNote}>{order.note}</div>}
+                      </article>
+                    ))}
+                  </div>
                 ) : (
                   <div style={styles.orderTableWrap}>
                     <table style={styles.orderTable}>
@@ -664,6 +748,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "14px",
+    flexWrap: "wrap",
     marginBottom: "14px",
   },
   productionTitle: {
@@ -774,6 +859,79 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #e5eaf0",
     borderRadius: "8px",
     background: "#ffffff",
+  },
+  orderCardList: {
+    display: "grid",
+    gap: "10px",
+  },
+  orderMobileCard: {
+    border: "1px solid #e5eaf0",
+    borderRadius: "9px",
+    background: "#ffffff",
+    padding: "12px",
+  },
+  orderMobileTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "10px",
+  },
+  orderMobileMeta: {
+    color: "#667085",
+    fontSize: "11px",
+    fontWeight: 750,
+    lineHeight: 1.4,
+  },
+  orderMobileTitle: {
+    margin: "4px 0 0",
+    color: "#111820",
+    fontSize: "14px",
+    lineHeight: 1.35,
+  },
+  orderMobileProgress: {
+    color: "#111820",
+    fontSize: "13px",
+    whiteSpace: "nowrap",
+  },
+  stageGridMobile: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+    marginTop: "10px",
+  },
+  stageMobileCell: {
+    minWidth: 0,
+    border: "1px solid #edf0f3",
+    borderRadius: "8px",
+    background: "#fbfcfd",
+    padding: "8px",
+  },
+  stageMobileLabel: {
+    display: "block",
+    marginBottom: "6px",
+    color: "#475467",
+    fontSize: "11px",
+    fontWeight: 800,
+  },
+  stageChipMobile: {
+    width: "100%",
+    minWidth: 0,
+  },
+  stageDateInputMobile: {
+    width: "100%",
+    height: "34px",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 7px",
+    fontSize: "12px",
+  },
+  orderMobileNote: {
+    marginTop: "10px",
+    color: "#667085",
+    fontSize: "12px",
+    lineHeight: 1.5,
   },
   orderTable: {
     width: "100%",

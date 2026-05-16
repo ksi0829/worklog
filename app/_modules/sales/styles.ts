@@ -9,7 +9,7 @@ export const styles: Record<string, CSSProperties> = {
   container: {
     maxWidth: "1120px",
     margin: "0 auto",
-    padding: "30px 22px 56px",
+    padding: "24px clamp(14px, 4vw, 22px) 48px",
   },
   header: {
     display: "flex",
@@ -113,7 +113,7 @@ export const styles: Record<string, CSSProperties> = {
   },
   layout: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))",
     gap: "14px",
     alignItems: "start",
   },
@@ -141,7 +141,7 @@ export const styles: Record<string, CSSProperties> = {
   },
   formGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
     gap: "10px",
   },
   field: {
@@ -299,7 +299,7 @@ export const styles: Record<string, CSSProperties> = {
   },
   detailGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
     gap: "10px",
     marginTop: "14px",
   },

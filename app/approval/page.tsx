@@ -626,6 +626,7 @@ export default function ApprovalPage() {
   const [activeFilter, setActiveFilter] = useState<"all" | "mine" | "pending" | "history">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [setupError, setSetupError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -742,6 +743,15 @@ export default function ApprovalPage() {
   useEffect(() => {
     void Promise.resolve().then(() => loadData());
   }, [loadData]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 760px)");
+    const updateMobile = () => setIsMobile(mediaQuery.matches);
+
+    updateMobile();
+    mediaQuery.addEventListener("change", updateMobile);
+    return () => mediaQuery.removeEventListener("change", updateMobile);
+  }, []);
 
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
@@ -1060,16 +1070,21 @@ export default function ApprovalPage() {
 
   return (
     <section style={styles.page}>
-      <div style={styles.summaryGrid}>
-        <div style={styles.summaryCard}>
+      <div
+        style={{
+          ...styles.summaryGrid,
+          ...(isMobile ? styles.summaryGridMobile : {}),
+        }}
+      >
+        <div style={{ ...styles.summaryCard, ...(isMobile ? styles.summaryCardMobile : {}) }}>
           <span style={styles.summaryLabel}>내 결재 대기</span>
           <strong style={styles.summaryValue}>{pendingForMe.length}건</strong>
         </div>
-        <div style={styles.summaryCard}>
+        <div style={{ ...styles.summaryCard, ...(isMobile ? styles.summaryCardMobile : {}) }}>
           <span style={styles.summaryLabel}>읽지 않은 알림</span>
           <strong style={styles.summaryValue}>{notifications.length}건</strong>
         </div>
-        <div style={styles.summaryCard}>
+        <div style={{ ...styles.summaryCard, ...(isMobile ? styles.summaryCardMobile : {}) }}>
           <span style={styles.summaryLabel}>완료 히스토리</span>
           <strong style={styles.summaryValue}>
             {documents.filter((document) => document.status === "approved").length}건
@@ -1086,9 +1101,24 @@ export default function ApprovalPage() {
 
       {message && <div style={styles.messageBox}>{message}</div>}
 
-      <div style={styles.layout}>
-        <section style={styles.formPanel}>
-          <div style={styles.panelTitleRow}>
+      <div
+        style={{
+          ...styles.layout,
+          ...(isMobile ? styles.layoutMobile : {}),
+        }}
+      >
+        <section
+          style={{
+            ...styles.formPanel,
+            ...(isMobile ? styles.panelMobile : {}),
+          }}
+        >
+          <div
+            style={{
+              ...styles.panelTitleRow,
+              ...(isMobile ? styles.panelTitleRowMobile : {}),
+            }}
+          >
             <div>
               <h2 style={styles.panelTitle}>{selectedTemplate.title}</h2>
               <p style={styles.panelSubText}>기존 양식의 입력 항목을 웹 입력 흐름으로 정리했습니다.</p>
@@ -1104,13 +1134,23 @@ export default function ApprovalPage() {
           </div>
 
           <section style={styles.templateStripBox}>
-            <div style={styles.panelTitleRow}>
+            <div
+              style={{
+                ...styles.panelTitleRow,
+                ...(isMobile ? styles.panelTitleRowMobile : {}),
+              }}
+            >
               <h3 style={styles.sectionTitle}>양식 선택</h3>
               <button type="button" style={styles.ghostButton} onClick={loadData}>
                 새로고침
               </button>
             </div>
-            <div style={styles.templateList}>
+            <div
+              style={{
+                ...styles.templateList,
+                ...(isMobile ? styles.templateListMobile : {}),
+              }}
+            >
               {templates.map((template) => {
                 const active = template.key === selectedTemplate.key;
 
@@ -1120,6 +1160,7 @@ export default function ApprovalPage() {
                     type="button"
                     style={{
                       ...styles.templateButton,
+                      ...(isMobile ? styles.templateButtonMobile : {}),
                       ...(active ? styles.templateButtonActive : {}),
                     }}
                     onClick={() => changeTemplate(template.key)}
@@ -1145,7 +1186,12 @@ export default function ApprovalPage() {
 
           {shouldSelectEquipmentOrder && (
             <section style={styles.orderReferenceBox}>
-              <div style={styles.panelTitleRow}>
+              <div
+                style={{
+                  ...styles.panelTitleRow,
+                  ...(isMobile ? styles.panelTitleRowMobile : {}),
+                }}
+              >
                 <div>
                   <h3 style={styles.sectionTitle}>수주 건 연결</h3>
                   <p style={styles.panelSubText}>
@@ -1169,7 +1215,12 @@ export default function ApprovalPage() {
           )}
 
           <section style={styles.approvalLineBoxTop}>
-            <div style={styles.panelTitleRow}>
+            <div
+              style={{
+                ...styles.panelTitleRow,
+                ...(isMobile ? styles.panelTitleRowMobile : {}),
+              }}
+            >
               <h3 style={styles.sectionTitle}>결재라인 지정</h3>
               <button type="button" style={styles.ghostButton} onClick={addApproverSlot}>
                 결재라인 추가
@@ -1207,7 +1258,12 @@ export default function ApprovalPage() {
             </div>
           </section>
 
-          <div style={styles.formGrid}>
+          <div
+            style={{
+              ...styles.formGrid,
+              ...(isMobile ? styles.formGridMobile : {}),
+            }}
+          >
             {selectedTemplate.fields.map((field) => {
               const readOnlyField = ["applicant", "requester", "owner", "team"].includes(field.key);
 
@@ -1314,8 +1370,18 @@ export default function ApprovalPage() {
 
         </section>
 
-        <aside style={styles.documentPanel}>
-          <div style={styles.panelTitleRow}>
+        <aside
+          style={{
+            ...styles.documentPanel,
+            ...(isMobile ? styles.panelMobile : {}),
+          }}
+        >
+          <div
+            style={{
+              ...styles.panelTitleRow,
+              ...(isMobile ? styles.panelTitleRowMobile : {}),
+            }}
+          >
             <h2 style={styles.panelTitle}>문서함</h2>
             <div style={styles.panelTitleActions}>
               <button type="button" style={styles.exportButton} onClick={exportApprovalList}>
@@ -1328,7 +1394,12 @@ export default function ApprovalPage() {
             </div>
           </div>
 
-          <div style={styles.filterTabs}>
+          <div
+            style={{
+              ...styles.filterTabs,
+              ...(isMobile ? styles.filterTabsMobile : {}),
+            }}
+          >
             {[
               ["all", "전체"],
               ["mine", "내 문서"],
@@ -1349,7 +1420,12 @@ export default function ApprovalPage() {
             ))}
           </div>
 
-          <div style={styles.documentList}>
+          <div
+            style={{
+              ...styles.documentList,
+              ...(isMobile ? styles.documentListMobile : {}),
+            }}
+          >
             {filteredDocuments.length === 0 ? (
               <div style={styles.emptyBox}>표시할 문서가 없습니다.</div>
             ) : (
@@ -1385,7 +1461,12 @@ export default function ApprovalPage() {
 
           {selectedDocument && (
             <section style={styles.detailBox}>
-              <div style={styles.detailHeader}>
+              <div
+                style={{
+                  ...styles.detailHeader,
+                  ...(isMobile ? styles.detailHeaderMobile : {}),
+                }}
+              >
                 <div>
                   <span style={styles.templateCategory}>{selectedDocument.template_title}</span>
                   <h3 style={styles.detailTitle}>{selectedDocument.title}</h3>
@@ -1393,7 +1474,12 @@ export default function ApprovalPage() {
                 <span style={styles.statusBadge}>{statusText(selectedDocument.status)}</span>
               </div>
 
-              <div style={styles.detailMetaGrid}>
+              <div
+                style={{
+                  ...styles.detailMetaGrid,
+                  ...(isMobile ? styles.detailMetaGridMobile : {}),
+                }}
+              >
                 <div>
                   <span>작성자</span>
                   <strong>{selectedDocument.requester_name}</strong>
@@ -1406,7 +1492,13 @@ export default function ApprovalPage() {
 
               <div style={styles.lineStatusList}>
                 {(selectedDocument.approval_lines || []).map((line) => (
-                  <div key={line.id} style={styles.lineStatusItem}>
+                  <div
+                    key={line.id}
+                    style={{
+                      ...styles.lineStatusItem,
+                      ...(isMobile ? styles.lineStatusItemMobile : {}),
+                    }}
+                  >
                     <span>{line.role_label}</span>
                     <strong>{line.approver_name}</strong>
                     <em>{statusText(line.status)}</em>
@@ -1452,12 +1544,21 @@ const styles: Record<string, CSSProperties> = {
     gap: "12px",
     marginBottom: "16px",
   },
+  summaryGridMobile: {
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+    marginBottom: "12px",
+  },
   summaryCard: {
     minHeight: "82px",
     border: "1px solid #dfe3e8",
     borderRadius: "10px",
     background: "#ffffff",
     padding: "16px",
+  },
+  summaryCardMobile: {
+    minHeight: "70px",
+    padding: "10px",
   },
   summaryLabel: {
     display: "block",
@@ -1501,6 +1602,10 @@ const styles: Record<string, CSSProperties> = {
     gap: "14px",
     alignItems: "start",
   },
+  layoutMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "12px",
+  },
   formPanel: {
     border: "1px solid #dfe3e8",
     borderRadius: "10px",
@@ -1513,12 +1618,21 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     padding: "14px",
   },
+  panelMobile: {
+    padding: "12px",
+    borderRadius: "9px",
+  },
   panelTitleRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     marginBottom: "14px",
+  },
+  panelTitleRowMobile: {
+    alignItems: "stretch",
+    flexDirection: "column",
+    gap: "10px",
   },
   panelTitleActions: {
     display: "flex",
@@ -1550,6 +1664,11 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: "wrap",
     gap: "8px",
   },
+  templateListMobile: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "7px",
+  },
   templateButton: {
     minWidth: "128px",
     minHeight: "54px",
@@ -1567,6 +1686,12 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
     fontSize: "13px",
   },
+  templateButtonMobile: {
+    minWidth: 0,
+    minHeight: "50px",
+    padding: "8px 10px",
+    fontSize: "12px",
+  },
   templateButtonActive: {
     borderColor: "#111820",
     background: "#f8fafc",
@@ -1581,6 +1706,10 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "12px",
+  },
+  formGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "10px",
   },
   field: {
     display: "flex",
@@ -1680,6 +1809,7 @@ const styles: Record<string, CSSProperties> = {
   },
   table: {
     width: "100%",
+    minWidth: "620px",
     borderCollapse: "separate",
     borderSpacing: 0,
   },
@@ -1786,6 +1916,9 @@ const styles: Record<string, CSSProperties> = {
     gap: "6px",
     marginBottom: "12px",
   },
+  filterTabsMobile: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  },
   filterButton: {
     height: "34px",
     border: "1px solid #e5e7eb",
@@ -1807,6 +1940,10 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
     maxHeight: "390px",
     overflowY: "auto",
+  },
+  documentListMobile: {
+    maxHeight: "none",
+    overflowY: "visible",
   },
   documentButton: {
     width: "100%",
@@ -1870,6 +2007,10 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: "12px",
   },
+  detailHeaderMobile: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+  },
   detailTitle: {
     margin: "5px 0 0",
     color: "#111820",
@@ -1881,6 +2022,9 @@ const styles: Record<string, CSSProperties> = {
     gridTemplateColumns: "repeat(2, 1fr)",
     gap: "8px",
     marginTop: "14px",
+  },
+  detailMetaGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
   },
   lineStatusList: {
     display: "flex",
@@ -1898,6 +2042,11 @@ const styles: Record<string, CSSProperties> = {
     padding: "9px",
     color: "#111827",
     fontSize: "12px",
+  },
+  lineStatusItemMobile: {
+    gridTemplateColumns: "54px minmax(0, 1fr) 58px",
+    gap: "6px",
+    padding: "8px",
   },
   actionRow: {
     display: "flex",

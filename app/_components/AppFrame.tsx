@@ -56,9 +56,11 @@ export function AppFrame({ children }: AppFrameProps) {
     const storedName = localStorage.getItem("name") || "";
     const storedTeam = localStorage.getItem("team") || "";
 
-    setName(storedName);
-    setTeam(getCurrentOrgTeam(storedName, storedTeam));
-    setRole(localStorage.getItem("role") || "");
+    void Promise.resolve().then(() => {
+      setName(storedName);
+      setTeam(getCurrentOrgTeam(storedName, storedTeam));
+      setRole(localStorage.getItem("role") || "");
+    });
   }, [pathname]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
@@ -88,7 +90,7 @@ export function AppFrame({ children }: AppFrameProps) {
 
   return (
     <div style={styles.frame}>
-      <aside style={styles.sidebar}>
+      <aside className="app-sidebar" style={styles.sidebar}>
         <button
           type="button"
           style={styles.logoButton}
@@ -109,7 +111,7 @@ export function AppFrame({ children }: AppFrameProps) {
           </div>
         </div>
 
-        <nav style={styles.nav}>
+        <nav className="app-nav" style={styles.nav}>
           {menuItems.map((item) => {
             const active =
               pathname === item.path ||
@@ -134,7 +136,7 @@ export function AppFrame({ children }: AppFrameProps) {
       </aside>
 
       <section style={styles.workspace}>
-        <header style={styles.topbar}>
+        <header className="app-topbar" style={styles.topbar}>
           <div>
             <h1 style={styles.title}>{title}</h1>
             {mobileInputNotice && (
