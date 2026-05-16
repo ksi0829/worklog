@@ -345,7 +345,7 @@ const templateMap = Object.fromEntries(templates.map((template) => [template.key
 
 function createDefaultApproverSlots(count = DEFAULT_APPROVER_COUNT): ApproverSlot[] {
   return Array.from({ length: count }, (_, index) => ({
-    roleLabel: `결재 ${index + 1}`,
+    roleLabel: `${index + 1}차 결재`,
     approverId: "",
   }));
 }
@@ -804,7 +804,7 @@ export default function ApprovalPage() {
   function addApproverSlot() {
     setApproverSlots((prev) => [
       ...prev,
-      { roleLabel: `결재 ${prev.length + 1}`, approverId: "" },
+      { roleLabel: `${prev.length + 1}차 결재`, approverId: "" },
     ]);
   }
 
@@ -812,7 +812,7 @@ export default function ApprovalPage() {
     setApproverSlots((prev) =>
       prev
         .filter((_, slotIndex) => slotIndex !== index)
-        .map((slot, slotIndex) => ({ ...slot, roleLabel: `결재 ${slotIndex + 1}` }))
+        .map((slot, slotIndex) => ({ ...slot, roleLabel: `${slotIndex + 1}차 결재` }))
     );
   }
 
@@ -1229,6 +1229,7 @@ export default function ApprovalPage() {
             <div style={styles.approvalLineGrid}>
               {approverSlots.map((slot, index) => (
                 <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
+                  <span style={styles.approverLabel}>{slot.roleLabel}</span>
                   <div style={styles.approverControl}>
                     <select
                       style={styles.input}
@@ -1695,7 +1696,6 @@ const styles: Record<string, CSSProperties> = {
   templateButtonActive: {
     borderColor: "#111820",
     background: "#f8fafc",
-    boxShadow: "inset 0 -3px 0 #111820",
   },
   templateCategory: {
     color: "#2fa368",
@@ -1880,10 +1880,16 @@ const styles: Record<string, CSSProperties> = {
   approverSlot: {
     display: "flex",
     flexDirection: "column",
-    gap: "7px",
+    gap: "6px",
     color: "#111827",
     fontSize: "12px",
     fontWeight: 700,
+  },
+  approverLabel: {
+    color: "#475467",
+    fontSize: "11px",
+    fontWeight: 800,
+    lineHeight: 1.2,
   },
   approverControl: {
     display: "grid",

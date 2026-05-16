@@ -173,16 +173,21 @@ export default function ViewPage() {
     const storedRole =
       localStorage.getItem("role") ||
       "";
+    const orgTeam =
+      ORG_MEMBER_MAP.get(storedName)
+        ?.team ||
+      storedTeam;
 
     void Promise.resolve().then(() => {
       setCurrentUser(
         storedName
       );
       setCurrentTeam(
-        ORG_MEMBER_MAP.get(storedName)
-          ?.team ||
-          storedTeam
+        orgTeam
       );
+      if (orgTeam) {
+        setSelectedTeam(orgTeam);
+      }
       setCurrentRole(storedRole);
       void fetchProfiles();
     });
