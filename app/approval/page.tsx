@@ -351,6 +351,18 @@ const templates: TemplateDef[] = [
 ];
 
 const templateMap = Object.fromEntries(templates.map((template) => [template.key, template]));
+const manufacturingTemplateKeys = [
+  "manufacturing_request",
+  "purchase_request",
+  "outsourcing_request",
+  "inspection_request",
+];
+const generalTemplateKeys = ["draft", "expense_request", "vacation_request", "holiday_work_request"];
+const templateRows = [manufacturingTemplateKeys, generalTemplateKeys].map((keys) =>
+  keys
+    .map((key) => templateMap[key])
+    .filter((template): template is TemplateDef => Boolean(template))
+);
 
 function createDefaultApproverSlots(count = DEFAULT_APPROVER_COUNT): ApproverSlot[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -1315,31 +1327,36 @@ export default function ApprovalPage() {
                 새로고침
               </button>
             </div>
-            <div
-              style={{
-                ...styles.templateList,
-                ...(isMobile ? styles.templateListMobile : {}),
-              }}
-            >
-              {templates.map((template) => {
-                const active = template.key === selectedTemplate.key;
+            <div style={styles.templateRows}>
+              {templateRows.map((row, rowIndex) => (
+                <div
+                  key={rowIndex}
+                  style={{
+                    ...styles.templateRow,
+                    ...(isMobile ? styles.templateRowMobile : {}),
+                  }}
+                >
+                  {row.map((template) => {
+                    const active = template.key === selectedTemplate.key;
 
-                return (
-                  <button
-                    key={template.key}
-                    type="button"
-                    style={{
-                      ...styles.templateButton,
-                      ...(isMobile ? styles.templateButtonMobile : {}),
-                      ...(active ? styles.templateButtonActive : {}),
-                    }}
-                    onClick={() => changeTemplate(template.key)}
-                  >
-                    <span style={styles.templateCategory}>{template.category}</span>
-                    <strong>{template.title}</strong>
-                  </button>
-                );
-              })}
+                    return (
+                      <button
+                        key={template.key}
+                        type="button"
+                        style={{
+                          ...styles.templateButton,
+                          ...(isMobile ? styles.templateButtonMobile : {}),
+                          ...(active ? styles.templateButtonActive : {}),
+                        }}
+                        onClick={() => changeTemplate(template.key)}
+                      >
+                        <span style={styles.templateCategory}>{template.category}</span>
+                        <strong>{template.title}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </section>
 
@@ -1894,12 +1911,17 @@ const styles: Record<string, CSSProperties> = {
     padding: "14px 0",
     marginBottom: "16px",
   },
-  templateList: {
+  templateRows: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  templateRow: {
     display: "flex",
     flexWrap: "wrap",
     gap: "8px",
   },
-  templateListMobile: {
+  templateRowMobile: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "7px",
