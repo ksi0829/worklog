@@ -956,6 +956,16 @@ export default function ApprovalPage() {
       return;
     }
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const requesterId = session?.user?.id || currentUserId;
+
+    if (!requesterId) {
+      setMessage("로그인 세션이 만료되었습니다. 다시 로그인해 주세요.");
+      return;
+    }
+
     const selectedApprovers = approverSlots
       .map((slot, index) => ({ ...slot, stepOrder: index + 1, profile: getProfile(slot.approverId) }))
       .filter((slot) => slot.profile);
@@ -1011,7 +1021,7 @@ export default function ApprovalPage() {
       template_title: selectedTemplate.title,
       title,
       status: "pending",
-      requester_id: currentUserId,
+      requester_id: requesterId,
       requester_name: currentName || "작성자",
       requester_team: currentTeam || null,
       current_step: 1,
