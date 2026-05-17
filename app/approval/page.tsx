@@ -69,6 +69,12 @@ type ApprovalLineRow = {
   memo: string | null;
 };
 
+type ApprovalReferenceInfo = {
+  id: string;
+  name: string;
+  team: string;
+};
+
 type ApprovalDocumentRow = {
   id: number;
   template_key: string;
@@ -111,6 +117,9 @@ type EquipmentOrderRow = {
   customer: string;
   model: string;
   owner_name: string;
+  serial_no?: string | null;
+  delivery_place?: string | null;
+  note?: string | null;
 };
 
 const supabase = createSupabaseBrowser();
@@ -412,6 +421,39 @@ function applyCurrentUserFields(
   return next;
 }
 
+function applyEquipmentOrderFields(
+  data: Record<string, unknown>,
+  order: EquipmentOrderRow
+) {
+  const next = { ...data };
+  const pairs: Array<[string, string | null | undefined]> = [
+    ["client", order.customer],
+    ["customer", order.customer],
+    ["equipment", order.model],
+    ["productName", order.model],
+    ["modelName", order.model],
+    ["serialNo", order.serial_no],
+    ["deliveryPlace", order.delivery_place],
+  ];
+
+  pairs.forEach(([key, value]) => {
+    if (value && key in next) {
+      next[key] = value;
+    }
+  });
+
+  return next;
+}
+
+function getErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object") return "";
+  const maybeError = error as { message?: string; details?: string; hint?: string; code?: string };
+
+  return [maybeError.message, maybeError.details, maybeError.hint, maybeError.code]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 function getRows(value: unknown): Record<string, string>[] {
   if (!Array.isArray(value)) return [];
   return value.filter((row): row is Record<string, string> => row && typeof row === "object");
@@ -460,6 +502,43 @@ function formatExcelValue(value: unknown) {
     return value;
   }
   return JSON.stringify(value);
+}
+
+function getReferenceInfos(data: Record<string, unknown>): ApprovalReferenceInfo[] {
+  const value = data._references;
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (item): item is ApprovalReferenceInfo =>
+      Boolean(item) &&
+      typeof item === "object" &&
+      typeof (item as ApprovalReferenceInfo).id === "string"
+  );
+}
+
+function getLinkedEquipmentInfo(document: ApprovalDocumentRow) {
+  const data = document.form_data || {};
+  const orderIdValue = document.equipment_order_id || data._equipmentOrderId;
+  const stageValue = document.equipment_stage_key || data._equipmentStageKey;
+  const orderId =
+    typeof orderIdValue === "number"
+      ? orderIdValue
+      : typeof orderIdValue === "string"
+        ? Number(orderIdValue)
+        : null;
+
+  if (
+    !orderId ||
+    typeof stageValue !== "string" ||
+    !(stageValue in equipmentDateColumnByStage)
+  ) {
+    return null;
+  }
+
+  return {
+    orderId,
+    stageKey: stageValue as EquipmentStageKey,
+  };
 }
 
 function getDocumentSheetName(document: ApprovalDocumentRow) {
@@ -528,6 +607,8 @@ function createApprovalDocumentSheet(document: ApprovalDocumentRow): ExcelSheet 
       formatDate(line.acted_at),
     ]),
     [""],
+    ["참조 인원", getReferenceInfos(document.form_data).map((item) => `${item.name}/${item.team}`).join(", ")],
+    [""],
     ["문서 항목", "입력값"],
     ...(template?.fields || []).map((field) => [
       field.label,
@@ -579,7 +660,7 @@ function buildEquipmentOrderFromManufacturing(
 
   return {
     category,
-    order_date:
+      order_date:
       getStringValue(data, "orderDate") ||
       getStringValue(data, "createdDate") ||
       today,
@@ -601,6 +682,9 @@ function buildEquipmentOrderFromManufacturing(
       getStringValue(data, "applicant") ||
       currentName ||
       "담당자",
+    serial_no: getStringValue(data, "serialNo") || null,
+    delivery_place: getStringValue(data, "deliveryPlace") || null,
+    note: getStringValue(data, "reference") || null,
     shipment_scheduled_on: getStringValue(data, "deliveryDate") || null,
   };
 }
@@ -614,6 +698,7 @@ export default function ApprovalPage() {
   const [approverSlots, setApproverSlots] = useState<ApproverSlot[]>(() =>
     createDefaultApproverSlots()
   );
+  const [referenceIds, setReferenceIds] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrderRow[]>([]);
   const [selectedEquipmentOrderId, setSelectedEquipmentOrderId] = useState("");
@@ -695,7 +780,7 @@ export default function ApprovalPage() {
 
     const { data: equipmentRows } = await supabase
       .from("equipment_orders")
-      .select("id,category,order_date,country,customer,model,owner_name")
+      .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note")
       .order("order_date", { ascending: false })
       .limit(80);
 
@@ -753,11 +838,24 @@ export default function ApprovalPage() {
     return () => mediaQuery.removeEventListener("change", updateMobile);
   }, []);
 
+  useEffect(() => {
+    if (!shouldSelectEquipmentOrder || !selectedEquipmentOrderId) return;
+
+    const selectedOrder = equipmentOrders.find(
+      (order) => String(order.id) === selectedEquipmentOrderId
+    );
+
+    if (!selectedOrder) return;
+
+    setFormData((prev) => applyEquipmentOrderFields(prev, selectedOrder));
+  }, [equipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
+
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
     setSelectedTemplateKey(templateKey);
     setFormData(applyCurrentUserFields(createEmptyFormData(nextTemplate), currentName, currentTeam, true));
     setApproverSlots(createDefaultApproverSlots());
+    setReferenceIds([]);
     setSelectedEquipmentOrderId("");
     setMessage("");
   }
@@ -820,6 +918,24 @@ export default function ApprovalPage() {
     return profiles.find((profile) => profile.id === id) || null;
   }
 
+  function addReference() {
+    setReferenceIds((prev) => [...prev, ""]);
+  }
+
+  function selectReference(index: number, profileId: string) {
+    setReferenceIds((prev) =>
+      prev.map((id, currentIndex) => (currentIndex === index ? profileId : id))
+    );
+  }
+
+  function removeReference(index: number) {
+    setReferenceIds((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  function handleEquipmentOrderChange(orderId: string) {
+    setSelectedEquipmentOrderId(orderId);
+  }
+
   async function submitDocument() {
     setMessage("");
 
@@ -831,6 +947,9 @@ export default function ApprovalPage() {
     const selectedApprovers = approverSlots
       .map((slot, index) => ({ ...slot, stepOrder: index + 1, profile: getProfile(slot.approverId) }))
       .filter((slot) => slot.profile);
+    const selectedReferences = Array.from(new Set(referenceIds))
+      .map((profileId) => getProfile(profileId))
+      .filter((profile): profile is ProfileRow => Boolean(profile));
 
     if (selectedApprovers.length === 0) {
       setMessage("결재라인에서 최소 1명 이상 선택해 주세요.");
@@ -865,6 +984,16 @@ export default function ApprovalPage() {
     }
 
     const finalEquipmentOrderId = createdEquipmentOrderId || linkedEquipmentOrderId;
+    const finalFormData = {
+      ...formData,
+      _equipmentOrderId: finalEquipmentOrderId,
+      _equipmentStageKey: selectedEquipmentStage,
+      _references: selectedReferences.map((profile) => ({
+        id: profile.id,
+        name: profile.name || "-",
+        team: getDisplayTeam(profile) || profile.team || "",
+      })),
+    };
     const documentPayload: Record<string, unknown> = {
       template_key: selectedTemplate.key,
       template_title: selectedTemplate.title,
@@ -874,7 +1003,7 @@ export default function ApprovalPage() {
       requester_name: currentName || "작성자",
       requester_team: currentTeam || null,
       current_step: 1,
-      form_data: formData,
+      form_data: finalFormData,
     };
 
     if (finalEquipmentOrderId && selectedEquipmentStage) {
@@ -882,14 +1011,32 @@ export default function ApprovalPage() {
       documentPayload.equipment_stage_key = selectedEquipmentStage;
     }
 
-    const { data: insertedDocument, error: documentError } = await supabase
+    let { data: insertedDocument, error: documentError } = await supabase
       .from("approval_documents")
       .insert(documentPayload)
       .select()
       .single();
 
+    if (documentError && finalEquipmentOrderId && selectedEquipmentStage) {
+      const fallbackPayload = { ...documentPayload };
+      delete fallbackPayload.equipment_order_id;
+      delete fallbackPayload.equipment_stage_key;
+
+      const retryResult = await supabase
+        .from("approval_documents")
+        .insert(fallbackPayload)
+        .select()
+        .single();
+
+      insertedDocument = retryResult.data;
+      documentError = retryResult.error;
+    }
+
     if (documentError || !insertedDocument) {
-      setMessage("문서를 저장하지 못했습니다. Supabase 테이블과 권한을 확인해 주세요.");
+      const detail = getErrorMessage(documentError);
+      setMessage(
+        `문서를 저장하지 못했습니다. ${detail || "Supabase 테이블과 권한을 확인해 주세요."}`
+      );
       setSaving(false);
       return;
     }
@@ -911,28 +1058,49 @@ export default function ApprovalPage() {
       role_label: slot.roleLabel,
       approver_id: slot.profile?.id || "",
       approver_name: slot.profile?.name || "결재자",
-      approver_team: slot.profile?.team || null,
+      approver_team: slot.profile ? getDisplayTeam(slot.profile) || slot.profile.team || null : null,
       status: "pending",
     }));
 
     const { error: lineError } = await supabase.from("approval_lines").insert(linePayload);
 
     if (lineError) {
-      setMessage("결재라인 저장에 실패했습니다. 문서를 삭제하거나 다시 확인해 주세요.");
+      setMessage(
+        `결재라인 저장에 실패했습니다. ${getErrorMessage(lineError) || "문서를 삭제하거나 다시 확인해 주세요."}`
+      );
       setSaving(false);
       return;
     }
 
+    if (selectedReferences.length > 0) {
+      await supabase.from("approval_references").insert(
+        selectedReferences.map((profile) => ({
+          document_id: documentId,
+          user_id: profile.id,
+          reference_name: profile.name || "참조자",
+          reference_team: getDisplayTeam(profile) || profile.team || null,
+        }))
+      );
+    }
+
     await supabase.from("approval_notifications").insert(
-      selectedApprovers.map((slot) => ({
-        user_id: slot.profile?.id || "",
-        document_id: documentId,
-        message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 결재라인에 지정했습니다.`,
-      }))
+      [
+        ...selectedApprovers.map((slot) => ({
+          user_id: slot.profile?.id || "",
+          document_id: documentId,
+          message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 결재라인에 지정했습니다.`,
+        })),
+        ...selectedReferences.map((profile) => ({
+          user_id: profile.id,
+          document_id: documentId,
+          message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 참조자로 지정했습니다.`,
+        })),
+      ]
     );
 
     setMessage("결재문서가 등록되었습니다.");
-    setFormData(createEmptyFormData(selectedTemplate));
+    setFormData(applyCurrentUserFields(createEmptyFormData(selectedTemplate), currentName, currentTeam, true));
+    setReferenceIds([]);
     setSelectedEquipmentOrderId("");
     setSaving(false);
     await loadData();
@@ -967,14 +1135,16 @@ export default function ApprovalPage() {
         .update({ status: "approved", completed_at: completedDate })
         .eq("id", selectedDocument.id);
 
-      if (selectedDocument.equipment_order_id && selectedDocument.equipment_stage_key) {
+      const linkedEquipment = getLinkedEquipmentInfo(selectedDocument);
+
+      if (linkedEquipment) {
         await supabase
           .from("equipment_orders")
           .update({
-            [equipmentDateColumnByStage[selectedDocument.equipment_stage_key]]:
+            [equipmentDateColumnByStage[linkedEquipment.stageKey]]:
               completedDate.slice(0, 10),
           })
-          .eq("id", selectedDocument.equipment_order_id);
+          .eq("id", linkedEquipment.orderId);
       }
 
       await supabase.from("approval_notifications").insert({
@@ -1202,7 +1372,7 @@ export default function ApprovalPage() {
               <select
                 style={styles.input}
                 value={selectedEquipmentOrderId}
-                onChange={(event) => setSelectedEquipmentOrderId(event.target.value)}
+                onChange={(event) => handleEquipmentOrderChange(event.target.value)}
               >
                 <option value="">연결하지 않음</option>
                 {equipmentOrders.map((order) => (
@@ -1257,6 +1427,57 @@ export default function ApprovalPage() {
                 </label>
               ))}
             </div>
+          </section>
+
+          <section style={styles.referenceLineBox}>
+            <div
+              style={{
+                ...styles.panelTitleRow,
+                ...(isMobile ? styles.panelTitleRowMobile : {}),
+              }}
+            >
+              <div>
+                <h3 style={styles.sectionTitle}>참조 인원</h3>
+                <p style={styles.panelSubText}>승인 순서에는 포함되지 않고 문서 확인 알림만 전달됩니다.</p>
+              </div>
+              <button type="button" style={styles.ghostButton} onClick={addReference}>
+                참조 추가
+              </button>
+            </div>
+
+            {referenceIds.length === 0 ? (
+              <div style={styles.referenceEmpty}>지정된 참조 인원이 없습니다.</div>
+            ) : (
+              <div style={styles.approvalLineGrid}>
+                {referenceIds.map((profileId, index) => (
+                  <label key={`reference-${index}`} style={styles.approverSlot}>
+                    <span style={styles.approverLabel}>참조 {index + 1}</span>
+                    <div style={styles.approverControl}>
+                      <select
+                        style={styles.input}
+                        value={profileId}
+                        onChange={(event) => selectReference(index, event.target.value)}
+                      >
+                        <option value="">참조자 선택</option>
+                        {sortedProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        style={styles.removeLineButton}
+                        onClick={() => removeReference(index)}
+                        aria-label={`참조 ${index + 1} 삭제`}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </section>
 
           <div
@@ -1506,6 +1727,19 @@ export default function ApprovalPage() {
                   </div>
                 ))}
               </div>
+
+              {getReferenceInfos(selectedDocument.form_data).length > 0 && (
+                <div style={styles.referenceDetailBox}>
+                  <span style={styles.referenceDetailLabel}>참조</span>
+                  <div style={styles.referenceChipRow}>
+                    {getReferenceInfos(selectedDocument.form_data).map((reference) => (
+                      <span key={reference.id} style={styles.referenceChip}>
+                        {reference.name} / {reference.team || "-"}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {canAct && (
                 <div style={styles.actionRow}>
@@ -1871,6 +2105,22 @@ const styles: Record<string, CSSProperties> = {
     padding: "14px",
     marginBottom: "16px",
   },
+  referenceLineBox: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
+    padding: "14px",
+    marginBottom: "16px",
+  },
+  referenceEmpty: {
+    border: "1px dashed #cfd6df",
+    borderRadius: "8px",
+    color: "#667085",
+    padding: "12px",
+    fontSize: "12px",
+    fontWeight: 700,
+    textAlign: "center",
+  },
   approvalLineGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
@@ -2053,6 +2303,35 @@ const styles: Record<string, CSSProperties> = {
     gridTemplateColumns: "54px minmax(0, 1fr) 58px",
     gap: "6px",
     padding: "8px",
+  },
+  referenceDetailBox: {
+    marginTop: "14px",
+    border: "1px solid #edf0f3",
+    borderRadius: "8px",
+    padding: "10px",
+  },
+  referenceDetailLabel: {
+    display: "block",
+    color: "#667085",
+    fontSize: "11px",
+    fontWeight: 800,
+    marginBottom: "8px",
+  },
+  referenceChipRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+  },
+  referenceChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    minHeight: "24px",
+    borderRadius: "999px",
+    background: "#f3f4f6",
+    color: "#344054",
+    padding: "0 8px",
+    fontSize: "11px",
+    fontWeight: 800,
   },
   actionRow: {
     display: "flex",
