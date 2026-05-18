@@ -708,7 +708,11 @@ export default function ApprovalPage() {
 
   const filteredDocuments = useMemo(() => {
     if (activeFilter === "mine") {
-      return documents.filter((document) => document.requester_id === currentUserId);
+      return documents.filter(
+        (document) =>
+          document.requester_id === currentUserId &&
+          (!currentName || document.requester_name === currentName)
+      );
     }
 
     if (activeFilter === "pending") {
@@ -720,7 +724,7 @@ export default function ApprovalPage() {
     }
 
     return [];
-  }, [activeFilter, currentUserId, documents, pendingForMe]);
+  }, [activeFilter, currentName, currentUserId, documents, pendingForMe]);
 
   const sortedProfiles = useMemo(
     () =>

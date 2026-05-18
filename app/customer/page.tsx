@@ -682,12 +682,20 @@ export default function CustomerPage() {
                   <div style={styles.detailMeta}>담당자 상세</div>
                   <h2 style={styles.panelTitle}>{selectedContact.name}</h2>
                 </div>
-                <button
-                  style={styles.closeButton}
-                  onClick={() => setSelectedContactId(null)}
-                >
-                  닫기
-                </button>
+                <div style={styles.modalHeaderActions}>
+                  <button
+                    style={styles.modalDeleteButton}
+                    onClick={() => deleteContact(selectedContact.id)}
+                  >
+                    삭제
+                  </button>
+                  <button
+                    style={styles.closeButton}
+                    onClick={() => setSelectedContactId(null)}
+                  >
+                    닫기
+                  </button>
+                </div>
               </div>
 
               <div style={styles.detailGrid}>
@@ -701,12 +709,6 @@ export default function CustomerPage() {
                 <div style={styles.modalMemo}>{selectedContact.memo}</div>
               )}
 
-              <button
-                style={styles.modalDeleteButton}
-                onClick={() => deleteContact(selectedContact.id)}
-              >
-                담당자 삭제
-              </button>
             </div>
           </div>
         )}

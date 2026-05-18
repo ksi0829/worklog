@@ -277,10 +277,20 @@ export default function SalesPage() {
     setLoading(true);
     setLoadError("");
 
-    const { data: opportunityRows, error: opportunityError } = await supabase
+    let { data: opportunityRows, error: opportunityError } = await supabase
       .from("sales_opportunities")
       .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at")
       .order("created_at", { ascending: false });
+
+    if (opportunityError?.message?.includes("currency")) {
+      const fallback = await supabase
+        .from("sales_opportunities")
+        .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at")
+        .order("created_at", { ascending: false });
+
+      opportunityRows = fallback.data as OpportunityRow[] | null;
+      opportunityError = fallback.error;
+    }
 
     if (opportunityError) {
       setLoadError("영업관리 저장 테이블을 불러오지 못했습니다.");
