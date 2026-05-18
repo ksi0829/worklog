@@ -1,12 +1,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
-import {
-  getCurrentOrgTeam,
-} from "@/app/_lib/currentOrg";
+import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
 
 const supabase = createSupabaseBrowser();
 
@@ -14,18 +12,61 @@ type AppFrameProps = {
   children: ReactNode;
 };
 
+type IconName =
+  | "approval"
+  | "worklog"
+  | "as"
+  | "sales"
+  | "schedule"
+  | "customer"
+  | "org"
+  | "account"
+  | "logout"
+  | "notice";
+
 type MenuItem = {
   title: string;
   path: string;
+  icon: IconName;
+  description: string;
+};
+
+type ApprovalStatus = "pending" | "approved" | "rejected";
+
+type ApprovalLineRow = {
+  id: number;
+  step_order: number;
+  role_label: string;
+  approver_id?: string | null;
+  approver_name: string;
+  status: ApprovalStatus;
+};
+
+type ApprovalDocumentRow = {
+  id: number;
+  title: string;
+  status: ApprovalStatus;
+  form_data?: Record<string, unknown>;
+  approval_lines?: ApprovalLineRow[];
+};
+
+type ApprovalReferenceInfo = {
+  id?: string;
+  name?: string;
 };
 
 const MENU_ITEMS: MenuItem[] = [
-  { title: "결재문서", path: "/approval" },
-  { title: "업무일지", path: "/view" },
-  { title: "A/S 관리", path: "/as" },
-  { title: "영업관리", path: "/sales" },
-  { title: "일정관리", path: "/schedule" },
-  { title: "고객사", path: "/customer" },
+  { title: "결재문서", path: "/approval", icon: "approval", description: "상신 · 결재 · 문서함" },
+  { title: "업무일지", path: "/view", icon: "worklog", description: "팀 업무 조회" },
+  { title: "A/S 관리", path: "/as", icon: "as", description: "작업지시 · 처리 이력" },
+  { title: "영업관리", path: "/sales", icon: "sales", description: "국내 · 해외 영업" },
+  { title: "일정관리", path: "/schedule", icon: "schedule", description: "사내 일정 보드" },
+  { title: "고객사", path: "/customer", icon: "customer", description: "거래처 · 담당자" },
+];
+
+const UTILITY_ITEMS: MenuItem[] = [
+  { title: "조직도", path: "/organization", icon: "org", description: "조직 현황" },
+  { title: "계정관리", path: "/change-password", icon: "account", description: "비밀번호 변경" },
 ];
 
 const TITLE_BY_PATH: Record<string, string> = {
@@ -42,6 +83,75 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/notices": "공지관리",
 };
 
+const SUBMENU_BY_PATH: Record<string, string[]> = {
+  "/approval": ["결재 작성", "내 문서함", "결재 대기", "완료 히스토리"],
+  "/view": ["업무일지 조회", "팀별 보기", "일자 선택"],
+  "/as": ["작업지시", "처리중", "완료 히스토리"],
+  "/sales": ["국내영업", "해외영업", "활동 이력"],
+  "/schedule": ["월간 일정", "일정 등록", "휴가 일정"],
+  "/customer": ["고객사", "가공업체", "후처리", "담당자"],
+  "/organization": ["조직 현황", "부서 구성"],
+  "/change-password": ["계정 정보", "비밀번호 변경"],
+};
+
+function iconPath(name: IconName) {
+  switch (name) {
+    case "approval":
+      return "M7 3h10l3 3v15H7V3Zm10 0v4h4M10 11h8M10 15h8";
+    case "worklog":
+      return "M5 5h14v14H5V5Zm4 0v14M8 9h1M8 13h1M8 17h1";
+    case "as":
+      return "M14 7l3-3 3 3-3 3-3-3ZM4 18l7-7 3 3-7 7H4v-3Z";
+    case "sales":
+      return "M4 17l6-6 4 4 6-8M4 20h16";
+    case "schedule":
+      return "M7 3v4M17 3v4M4 8h16M5 5h14v15H5V5Zm4 7h2v2H9v-2Z";
+    case "customer":
+      return "M16 21v-2a4 4 0 0 0-8 0v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm5-1a3 3 0 0 1 3 3v1";
+    case "org":
+      return "M12 4v5M7 14v-3h10v3M5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
+    case "account":
+      return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0";
+    case "logout":
+      return "M10 5H5v14h5M14 8l4 4-4 4M18 12H9";
+    case "notice":
+      return "M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2ZM18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2Z";
+    default:
+      return "";
+  }
+}
+
+function NavIcon({ name }: { name: IconName }) {
+  return (
+    <svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true">
+      <path
+        d={iconPath(name)}
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function getFirstPendingLine(document?: ApprovalDocumentRow | null) {
+  if (!document) return null;
+  return [...(document.approval_lines || [])]
+    .sort((a, b) => a.step_order - b.step_order)
+    .find((line) => line.status === "pending") || null;
+}
+
+function getReferenceInfos(document?: ApprovalDocumentRow | null): ApprovalReferenceInfo[] {
+  const value = document?.form_data?._references;
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is ApprovalReferenceInfo => Boolean(item) && typeof item === "object");
+}
+
+function samePerson(left?: string | null, right?: string | null) {
+  return Boolean(left && right && left === right);
+}
+
 export function AppFrame({ children }: AppFrameProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -49,8 +159,44 @@ export function AppFrame({ children }: AppFrameProps) {
   const [name, setName] = useState("");
   const [team, setTeam] = useState("");
   const [role, setRole] = useState("");
-  const [mobileInputNotice, setMobileInputNotice] =
-    useState(false);
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
+  const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
+  const [mobileInputNotice, setMobileInputNotice] = useState(false);
+
+  const menuItems = useMemo(() => MENU_ITEMS, []);
+  const activeItem =
+    [...MENU_ITEMS, ...UTILITY_ITEMS].find(
+      (item) => pathname === item.path || (item.path === "/view" && pathname === "/")
+    ) || null;
+  const title = TITLE_BY_PATH[pathname] || "ZETA";
+  const subItems = SUBMENU_BY_PATH[activeItem?.path || pathname] || [];
+
+  const approvalAlerts = useMemo(() => {
+    return approvalDocuments.filter((document) => {
+      if (document.status !== "pending") return false;
+      const pendingLine = getFirstPendingLine(document);
+      const isMyTurn =
+        samePerson(pendingLine?.approver_name, name) ||
+        samePerson(pendingLine?.approver_id, currentUserId);
+      const isMyReference = getReferenceInfos(document).some(
+        (reference) => samePerson(reference.name, name) || samePerson(reference.id, currentUserId)
+      );
+
+      return isMyTurn || isMyReference;
+    });
+  }, [approvalDocuments, currentUserId, name]);
+
+  const loadApprovalAlerts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("approval_documents")
+      .select("id,title,status,form_data,approval_lines(id,step_order,role_label,approver_id,approver_name,status)")
+      .eq("status", "pending");
+
+    if (!error && data) {
+      setApprovalDocuments(data as ApprovalDocumentRow[]);
+    }
+  }, []);
 
   useEffect(() => {
     const storedName = localStorage.getItem("name") || "";
@@ -60,16 +206,14 @@ export function AppFrame({ children }: AppFrameProps) {
       setName(storedName);
       setTeam(getCurrentOrgTeam(storedName, storedTeam));
       setRole(localStorage.getItem("role") || "");
+      void supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || ""));
+      void loadApprovalAlerts();
     });
-  }, [pathname]);
-
-  const menuItems = useMemo(() => MENU_ITEMS, []);
+  }, [loadApprovalAlerts, pathname]);
 
   if (pathname === "/login") {
     return children;
   }
-
-  const title = TITLE_BY_PATH[pathname] || "ZETA";
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -90,6 +234,39 @@ export function AppFrame({ children }: AppFrameProps) {
 
   return (
     <div style={styles.frame}>
+      <aside className="app-icon-rail" style={styles.iconRail}>
+        <button
+          type="button"
+          style={styles.iconLogoButton}
+          onClick={() => router.push("/main")}
+          aria-label="메인으로 이동"
+        >
+          <span style={styles.logoMark}>Z</span>
+        </button>
+
+        <nav style={styles.iconNav} aria-label="주요 메뉴">
+          {menuItems.map((item) => {
+            const active = pathname === item.path || (item.path === "/view" && pathname === "/");
+
+            return (
+              <button
+                key={item.path}
+                type="button"
+                title={item.title}
+                style={{
+                  ...styles.iconNavItem,
+                  ...(active ? styles.iconNavItemActive : {}),
+                }}
+                onClick={() => router.push(item.path)}
+              >
+                <NavIcon name={item.icon} />
+                <span>{item.title}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
       <aside className="app-sidebar" style={styles.sidebar}>
         <button
           type="button"
@@ -97,42 +274,51 @@ export function AppFrame({ children }: AppFrameProps) {
           onClick={() => router.push("/main")}
           aria-label="메인으로 이동"
         >
-          <img
-            src="/brand/zeta-logo.png"
-            alt="ZETA"
-            style={styles.logo}
-          />
+          <img src="/brand/zeta-logo.png" alt="ZETA" style={styles.logo} />
         </button>
 
         <div style={styles.userBox}>
           <div style={styles.userName}>{name || "-"}</div>
-          <div style={styles.userMeta}>
-            {[team, role].filter(Boolean).join(" / ") || "-"}
-          </div>
+          <div style={styles.userMeta}>{[team, role].filter(Boolean).join(" / ") || "-"}</div>
         </div>
 
-        <nav className="app-nav" style={styles.nav}>
-          {menuItems.map((item) => {
-            const active =
-              pathname === item.path ||
-              (item.path === "/view" && pathname === "/");
+        <div style={styles.sideSection}>
+          <div style={styles.sideSectionTitle}>업무 메뉴</div>
+          <nav className="app-nav" style={styles.nav}>
+            {menuItems.map((item) => {
+              const active = pathname === item.path || (item.path === "/view" && pathname === "/");
 
-            return (
-              <button
-                key={item.path}
-                type="button"
-                style={{
-                  ...styles.navItem,
-                  ...(active ? styles.navItemActive : {}),
-                }}
-                onClick={() => router.push(item.path)}
-              >
-                <span>{item.title}</span>
-                <span style={styles.navArrow}>›</span>
-              </button>
-            );
-          })}
-        </nav>
+              return (
+                <button
+                  key={item.path}
+                  type="button"
+                  style={{
+                    ...styles.navItem,
+                    ...(active ? styles.navItemActive : {}),
+                  }}
+                  onClick={() => router.push(item.path)}
+                >
+                  <span style={styles.navTextWrap}>
+                    <strong>{item.title}</strong>
+                    <em>{item.description}</em>
+                  </span>
+                  <span style={styles.navArrow}>›</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div style={styles.sideSection}>
+          <div style={styles.sideSectionTitle}>{activeItem?.title || "현재 화면"}</div>
+          <div style={styles.subMenuList}>
+            {subItems.map((item, index) => (
+              <span key={item} style={index === 0 ? styles.subMenuActive : styles.subMenuItem}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
       </aside>
 
       <section style={styles.workspace}>
@@ -148,33 +334,33 @@ export function AppFrame({ children }: AppFrameProps) {
 
           <div style={styles.actions}>
             {pathname === "/view" && (
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={handleWorklogInput}
-              >
+              <button type="button" style={styles.primaryButton} onClick={handleWorklogInput}>
                 입력
               </button>
             )}
-            <button
-              type="button"
-              style={styles.actionButton}
-              onClick={() => router.push("/organization")}
-            >
-              조직도
-            </button>
-            <button
-              type="button"
-              style={styles.actionButton}
-              onClick={() => router.push("/change-password")}
-            >
-              계정관리
-            </button>
-            <button
-              type="button"
-              style={styles.actionButton}
-              onClick={handleLogout}
-            >
+            {approvalAlerts.length > 0 && (
+              <button
+                type="button"
+                style={styles.alertButton}
+                onClick={() => setApprovalAlertOpen(true)}
+                aria-label="결재 알림"
+                title="결재 알림"
+              >
+                <NavIcon name="notice" />
+                <span style={styles.alertCount}>{approvalAlerts.length}</span>
+              </button>
+            )}
+            {UTILITY_ITEMS.map((item) => (
+              <button
+                key={item.path}
+                type="button"
+                style={styles.actionButton}
+                onClick={() => router.push(item.path)}
+              >
+                {item.title}
+              </button>
+            ))}
+            <button type="button" style={styles.actionButton} onClick={handleLogout}>
               로그아웃
             </button>
           </div>
@@ -184,6 +370,48 @@ export function AppFrame({ children }: AppFrameProps) {
           {children}
         </main>
       </section>
+
+      {approvalAlertOpen && (
+        <div style={styles.modalBackdrop} onClick={() => setApprovalAlertOpen(false)}>
+          <section style={styles.alertModal} onClick={(event) => event.stopPropagation()}>
+            <div style={styles.alertModalHeader}>
+              <div>
+                <span style={styles.alertKicker}>결재 알림</span>
+                <h2 style={styles.alertTitle}>확인할 결재 문서가 있습니다.</h2>
+              </div>
+              <button
+                type="button"
+                style={styles.modalCloseButton}
+                onClick={() => setApprovalAlertOpen(false)}
+              >
+                닫기
+              </button>
+            </div>
+
+            <div style={styles.alertList}>
+              {approvalAlerts.map((document) => {
+                const pendingLine = getFirstPendingLine(document);
+
+                return (
+                  <button
+                    key={document.id}
+                    type="button"
+                    style={styles.alertItem}
+                    onClick={() => router.push("/approval")}
+                  >
+                    <strong>{document.title}</strong>
+                    <span>
+                      {pendingLine
+                        ? `${pendingLine.role_label} / ${pendingLine.approver_name} 결재 대기`
+                        : "참조 문서 확인"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -192,9 +420,64 @@ const styles: Record<string, CSSProperties> = {
   frame: {
     minHeight: "100dvh",
     display: "grid",
-    gridTemplateColumns: "220px minmax(0, 1fr)",
-    background: "#f3f5f7",
+    gridTemplateColumns: "78px 232px minmax(0, 1fr)",
+    background: "#f6f7f9",
     color: "#111827",
+  },
+  iconRail: {
+    position: "sticky",
+    top: 0,
+    alignSelf: "start",
+    height: "100dvh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "16px",
+    borderRight: "1px solid #e6e8eb",
+    background: "#ffffff",
+    padding: "18px 8px",
+    zIndex: 25,
+  },
+  iconLogoButton: {
+    width: "44px",
+    height: "44px",
+    border: "none",
+    borderRadius: "14px",
+    background: "#111820",
+    color: "#ffffff",
+    cursor: "pointer",
+  },
+  logoMark: {
+    fontSize: "21px",
+    fontWeight: 900,
+    letterSpacing: "0",
+  },
+  iconNav: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    width: "100%",
+  },
+  iconNavItem: {
+    width: "100%",
+    minHeight: "58px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    border: "1px solid transparent",
+    borderRadius: "14px",
+    background: "transparent",
+    color: "#667085",
+    fontSize: "11px",
+    fontWeight: 750,
+    cursor: "pointer",
+  },
+  iconNavItemActive: {
+    background: "#eef6f1",
+    borderColor: "#d7eee0",
+    color: "#0f8a56",
   },
   sidebar: {
     position: "sticky",
@@ -204,9 +487,9 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "18px",
-    borderRight: "1px solid #dfe3e8",
-    background: "#ffffff",
-    padding: "24px 18px",
+    borderRight: "1px solid #e1e5ea",
+    background: "#f3f4f6",
+    padding: "20px 16px",
   },
   logoButton: {
     border: "none",
@@ -221,8 +504,8 @@ const styles: Record<string, CSSProperties> = {
     height: "auto",
   },
   userBox: {
-    borderTop: "1px solid #edf0f3",
-    borderBottom: "1px solid #edf0f3",
+    borderTop: "1px solid #e2e6eb",
+    borderBottom: "1px solid #e2e6eb",
     padding: "14px 0",
   },
   userName: {
@@ -236,36 +519,76 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 650,
     lineHeight: 1.4,
   },
+  sideSection: {
+    display: "grid",
+    gap: "9px",
+  },
+  sideSectionTitle: {
+    color: "#8a94a3",
+    fontSize: "12px",
+    fontWeight: 850,
+  },
   nav: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: "5px",
   },
   navItem: {
     width: "100%",
-    minHeight: "42px",
+    minHeight: "48px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     border: "1px solid transparent",
-    borderRadius: "8px",
+    borderRadius: "10px",
     background: "transparent",
     color: "#344054",
     padding: "0 10px",
-    fontSize: "14px",
-    fontWeight: 750,
     cursor: "pointer",
   },
   navItemActive: {
-    background: "#111820",
-    borderColor: "#111820",
-    color: "#ffffff",
+    background: "#ffffff",
+    borderColor: "#ffffff",
+    boxShadow: "0 2px 8px rgba(15, 23, 42, 0.06)",
+    color: "#111820",
+  },
+  navTextWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "3px",
+    minWidth: 0,
   },
   navArrow: {
     color: "currentColor",
-    opacity: 0.62,
+    opacity: 0.48,
     fontSize: "18px",
     lineHeight: 1,
+  },
+  subMenuList: {
+    display: "grid",
+    gap: "4px",
+  },
+  subMenuItem: {
+    minHeight: "34px",
+    display: "flex",
+    alignItems: "center",
+    borderRadius: "9px",
+    color: "#475467",
+    padding: "0 10px",
+    fontSize: "13px",
+    fontWeight: 650,
+  },
+  subMenuActive: {
+    minHeight: "34px",
+    display: "flex",
+    alignItems: "center",
+    borderRadius: "9px",
+    background: "#e5e7eb",
+    color: "#111820",
+    padding: "0 10px",
+    fontSize: "13px",
+    fontWeight: 850,
   },
   workspace: {
     minWidth: 0,
@@ -277,20 +600,20 @@ const styles: Record<string, CSSProperties> = {
     position: "sticky",
     top: 0,
     zIndex: 20,
-    minHeight: "74px",
+    minHeight: "70px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "18px",
-    background: "rgba(243, 245, 247, 0.92)",
-    backdropFilter: "blur(10px)",
-    borderBottom: "1px solid #dfe3e8",
-    padding: "16px 26px",
+    background: "#ffffff",
+    borderBottom: "1px solid #e1e5ea",
+    boxShadow: "0 2px 10px rgba(15, 23, 42, 0.04)",
+    padding: "14px 24px",
   },
   title: {
     margin: 0,
     color: "#111820",
-    fontSize: "24px",
+    fontSize: "22px",
     fontWeight: 850,
     lineHeight: 1.2,
   },
@@ -307,8 +630,36 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
     flexWrap: "wrap",
   },
+  alertButton: {
+    position: "relative",
+    width: "38px",
+    height: "38px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "12px",
+    border: "1px solid #fecaca",
+    background: "#fff1f2",
+    color: "#dc2626",
+    cursor: "pointer",
+  },
+  alertCount: {
+    position: "absolute",
+    top: "-5px",
+    right: "-5px",
+    minWidth: "18px",
+    height: "18px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "999px",
+    background: "#ef4444",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontWeight: 900,
+  },
   actionButton: {
-    width: "82px",
+    minWidth: "82px",
     height: "36px",
     borderRadius: "9px",
     border: "1px solid #cfd6df",
@@ -319,11 +670,11 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
   },
   primaryButton: {
-    width: "82px",
+    minWidth: "82px",
     height: "36px",
     borderRadius: "9px",
-    border: "1px solid #111820",
-    background: "#111820",
+    border: "1px solid #0f8a56",
+    background: "#0f8a56",
     color: "#ffffff",
     fontSize: "13px",
     fontWeight: 850,
@@ -332,6 +683,71 @@ const styles: Record<string, CSSProperties> = {
   content: {
     minWidth: 0,
     flex: 1,
-    padding: "24px 26px 54px",
+    padding: "24px 24px 54px",
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 80,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+    background: "rgba(15, 23, 42, 0.34)",
+  },
+  alertModal: {
+    width: "min(430px, 100%)",
+    borderRadius: "12px",
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    padding: "18px",
+    boxShadow: "0 24px 70px rgba(15, 23, 42, 0.24)",
+  },
+  alertModalHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginBottom: "14px",
+  },
+  alertKicker: {
+    color: "#dc2626",
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+  alertTitle: {
+    margin: "4px 0 0",
+    color: "#111820",
+    fontSize: "18px",
+    fontWeight: 850,
+  },
+  modalCloseButton: {
+    height: "32px",
+    padding: "0 11px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  alertList: {
+    display: "grid",
+    gap: "8px",
+  },
+  alertItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    width: "100%",
+    border: "1px solid #e5eaf0",
+    borderRadius: "10px",
+    background: "#fbfcfd",
+    padding: "11px 12px",
+    color: "#111820",
+    textAlign: "left",
+    cursor: "pointer",
+    fontSize: "13px",
   },
 };

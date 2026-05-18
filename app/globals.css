@@ -87,17 +87,31 @@ textarea {
     grid-template-columns: 1fr !important;
   }
 
-  .app-sidebar {
+  .app-icon-rail {
     position: static !important;
+    width: 100% !important;
     height: auto !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    overflow-x: auto !important;
     border-right: 0 !important;
     border-bottom: 1px solid #dfe3e8 !important;
-    padding: 16px !important;
+    padding: 10px 12px !important;
   }
 
-  .app-nav {
-    display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  .app-icon-rail nav {
+    flex-direction: row !important;
+    width: auto !important;
+    min-width: max-content !important;
+  }
+
+  .app-icon-rail button {
+    flex: 0 0 auto !important;
+  }
+
+  .app-sidebar {
+    display: none !important;
   }
 
   .app-topbar {
@@ -113,8 +127,8 @@ textarea {
 }
 
 @media (max-width: 520px) {
-  .app-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  .app-icon-rail {
+    padding: 8px !important;
   }
 
   .app-topbar button {
