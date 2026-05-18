@@ -688,31 +688,67 @@ export default function ApprovalPage() {
   const [setupError, setSetupError] = useState("");
   const [message, setMessage] = useState("");
 
-  const selectedDocument = useMemo(
-    () => documents.find((document) => document.id === selectedDocumentId) || documents[0] || null,
-    [documents, selectedDocumentId]
+  const isCurrentUserId = useCallback(
+    (value?: string | null) => Boolean(currentUserId && value === currentUserId),
+    [currentUserId]
   );
-  const detailModalDocument = useMemo(
-    () => documents.find((document) => document.id === detailModalDocumentId) || null,
-    [detailModalDocumentId, documents]
+  const isCurrentUserName = useCallback(
+    (value?: string | null) => Boolean(currentName && value === currentName),
+    [currentName]
+  );
+  const isCurrentRequester = useCallback(
+    (document: ApprovalDocumentRow) => {
+      if (currentName) return document.requester_name === currentName;
+      return isCurrentUserId(document.requester_id);
+    },
+    [currentName, isCurrentUserId]
+  );
+  const isCurrentApprover = useCallback(
+    (document: ApprovalDocumentRow) =>
+      (document.approval_lines || []).some(
+        (line) => isCurrentUserId(line.approver_id) || isCurrentUserName(line.approver_name)
+      ),
+    [isCurrentUserId, isCurrentUserName]
+  );
+  const isCurrentReference = useCallback(
+    (document: ApprovalDocumentRow) =>
+      getReferenceInfos(document.form_data).some(
+        (reference) => isCurrentUserId(reference.id) || isCurrentUserName(reference.name)
+      ),
+    [isCurrentUserId, isCurrentUserName]
+  );
+  const isCurrentApprovalLine = useCallback(
+    (line?: ApprovalLineRow | null) =>
+      Boolean(line && (isCurrentUserId(line.approver_id) || isCurrentUserName(line.approver_name))),
+    [isCurrentUserId, isCurrentUserName]
+  );
+  const visibleDocuments = useMemo(
+    () =>
+      documents.filter(
+        (document) =>
+          isCurrentRequester(document) ||
+          isCurrentApprover(document) ||
+          isCurrentReference(document)
+      ),
+    [documents, isCurrentApprover, isCurrentReference, isCurrentRequester]
   );
 
   const pendingForMe = useMemo(
     () =>
-      documents.filter((document) => {
+      visibleDocuments.filter((document) => {
         const pendingLine = getFirstPendingLine(document);
-        return document.status === "pending" && pendingLine?.approver_id === currentUserId;
+        return document.status === "pending" && isCurrentApprovalLine(pendingLine);
       }),
-    [documents, currentUserId]
+    [isCurrentApprovalLine, visibleDocuments]
+  );
+  const completedForMe = useMemo(
+    () => visibleDocuments.filter((document) => document.status === "approved"),
+    [visibleDocuments]
   );
 
   const filteredDocuments = useMemo(() => {
     if (activeFilter === "mine") {
-      return documents.filter(
-        (document) =>
-          document.requester_id === currentUserId &&
-          (!currentName || document.requester_name === currentName)
-      );
+      return visibleDocuments.filter(isCurrentRequester);
     }
 
     if (activeFilter === "pending") {
@@ -720,11 +756,23 @@ export default function ApprovalPage() {
     }
 
     if (activeFilter === "history") {
-      return documents.filter((document) => document.status === "approved");
+      return completedForMe;
     }
 
     return [];
-  }, [activeFilter, currentName, currentUserId, documents, pendingForMe]);
+  }, [activeFilter, completedForMe, isCurrentRequester, pendingForMe, visibleDocuments]);
+
+  const selectedDocument = useMemo(
+    () =>
+      filteredDocuments.find((document) => document.id === selectedDocumentId) ||
+      filteredDocuments[0] ||
+      null,
+    [filteredDocuments, selectedDocumentId]
+  );
+  const detailModalDocument = useMemo(
+    () => visibleDocuments.find((document) => document.id === detailModalDocumentId) || null,
+    [detailModalDocumentId, visibleDocuments]
+  );
 
   const sortedProfiles = useMemo(
     () =>
@@ -1057,7 +1105,7 @@ export default function ApprovalPage() {
     if (!selectedDocument || !currentUserId) return;
     const pendingLine = getFirstPendingLine(selectedDocument);
 
-    if (!pendingLine || pendingLine.approver_id !== currentUserId) {
+    if (!pendingLine || !isCurrentApprovalLine(pendingLine)) {
       setMessage("현재 결재 순서가 아닙니다.");
       return;
     }
@@ -1098,6 +1146,12 @@ export default function ApprovalPage() {
         document_id: selectedDocument.id,
         message: `${selectedDocument.title} 최종 결재가 완료되었습니다.`,
       });
+
+      if (selectedDocument.template_key === "vacation_request") {
+        await supabase.rpc("add_vacation_schedule_from_document", {
+          target_document_id: selectedDocument.id,
+        });
+      }
     } else {
       const nextLine = remainingLines[0];
       await supabase
@@ -1128,7 +1182,7 @@ export default function ApprovalPage() {
     if (!selectedDocument || !currentUserId) return;
     const pendingLine = getFirstPendingLine(selectedDocument);
 
-    if (!pendingLine || pendingLine.approver_id !== currentUserId) {
+    if (!pendingLine || !isCurrentApprovalLine(pendingLine)) {
       setMessage("현재 결재 순서가 아닙니다.");
       return;
     }
@@ -1182,7 +1236,7 @@ export default function ApprovalPage() {
 
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
-    selectedDocument?.status === "pending" && currentPendingLine?.approver_id === currentUserId;
+    selectedDocument?.status === "pending" && isCurrentApprovalLine(currentPendingLine);
 
   return (
     <section style={styles.page}>
@@ -1203,7 +1257,7 @@ export default function ApprovalPage() {
         <div style={{ ...styles.summaryCard, ...(isMobile ? styles.summaryCardMobile : {}) }}>
           <span style={styles.summaryLabel}>완료 히스토리</span>
           <strong style={styles.summaryValue}>
-            {documents.filter((document) => document.status === "approved").length}건
+            {completedForMe.length}건
           </strong>
         </div>
       </div>
