@@ -284,6 +284,13 @@ export default function ViewPage() {
   async function deleteWorklog() {
     if (!selectedWorklogId)
       return;
+    if (
+      selectedUser?.name !== currentUser &&
+      currentRole !== "admin"
+    ) {
+      alert("작성자 또는 관리자만 삭제할 수 있습니다.");
+      return;
+    }
 
     const ok = confirm(
       "업무일지를 삭제하시겠습니까?"
@@ -515,8 +522,9 @@ export default function ViewPage() {
             }
           >
             <div style={styles.modalHeader}>
-              {selectedUser?.name ===
-                currentUser &&
+              {(selectedUser?.name ===
+                currentUser ||
+                currentRole === "admin") &&
                 selectedWorklogId && (
                   <div
                     style={

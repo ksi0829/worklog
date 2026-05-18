@@ -108,6 +108,13 @@ export default function SchedulePage() {
           "name"
         ) || ""
       : "";
+  const currentRole =
+    typeof window !== "undefined"
+      ? localStorage.getItem(
+          "role"
+        ) || ""
+      : "";
+  const isAdmin = currentRole === "admin";
 
   const year = currentDate.getFullYear();
 
@@ -315,7 +322,8 @@ export default function SchedulePage() {
     item: ScheduleItem
   ) {
     if (
-      item.writer !== currentUser
+      item.writer !== currentUser &&
+      !isAdmin
     ) {
       alert(
         "본인 일정만 삭제할 수 있습니다."
@@ -709,8 +717,9 @@ export default function SchedulePage() {
                             }
                           </div>
 
-                          {item.writer ===
-                            currentUser && (
+                          {(item.writer ===
+                            currentUser ||
+                            isAdmin) && (
                             <button
                               style={
                                 styles.deleteButton

@@ -29,6 +29,7 @@ type Opportunity = {
   nextAction: string;
   dueDate: string;
   createdAt: string;
+  createdBy: string | null;
 };
 
 type Activity = {
@@ -70,6 +71,7 @@ type OpportunityRow = {
   next_action: string | null;
   due_date: string | null;
   created_at: string | null;
+  created_by: string | null;
 };
 
 type ActivityRow = {
@@ -225,6 +227,7 @@ export default function SalesPage() {
     useState<ActivityForm>(emptyActivityForm);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -272,20 +275,29 @@ export default function SalesPage() {
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
   const canViewAmount = canAccessSales(currentName, currentTeam);
+  const isAdmin = currentRole === "admin";
+  const canManageSelectedOpportunity = Boolean(
+    selectedOpportunity && (isAdmin || selectedOpportunity.createdBy === currentUserId)
+  );
 
   const loadSalesData = useCallback(async () => {
     setLoading(true);
     setLoadError("");
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setCurrentUserId(user?.id || "");
+
     let { data: opportunityRows, error: opportunityError } = await supabase
       .from("sales_opportunities")
-      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at")
+      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
       .order("created_at", { ascending: false });
 
     if (opportunityError?.message?.includes("currency")) {
       const fallback = await supabase
         .from("sales_opportunities")
-        .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at")
+        .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at,created_by")
         .order("created_at", { ascending: false });
 
       opportunityRows = fallback.data as OpportunityRow[] | null;
@@ -332,6 +344,7 @@ export default function SalesPage() {
         nextAction: item.next_action || "",
         dueDate: item.due_date || "",
         createdAt: (item.created_at || today).slice(0, 10),
+        createdBy: item.created_by,
       })
     );
 
@@ -418,7 +431,7 @@ export default function SalesPage() {
         next_action: nextAction,
         due_date: opportunityForm.dueDate || null,
       })
-      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at")
+      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
       .single();
 
     if (error || !data) {
@@ -439,6 +452,7 @@ export default function SalesPage() {
       nextAction: row.next_action || "",
       dueDate: row.due_date || "",
       createdAt: (row.created_at || today).slice(0, 10),
+      createdBy: row.created_by,
     };
 
     setOpportunities((current) => [nextOpportunity, ...current]);
@@ -449,6 +463,10 @@ export default function SalesPage() {
   async function addActivity() {
     if (!selectedOpportunity) {
       alert("먼저 영업기회를 선택해주세요.");
+      return;
+    }
+    if (!canManageSelectedOpportunity) {
+      alert("작성자 또는 관리자만 활동 기록을 추가할 수 있습니다.");
       return;
     }
 
@@ -492,6 +510,10 @@ export default function SalesPage() {
 
   async function changeStage(nextStage: Stage) {
     if (!selectedOpportunity) return;
+    if (!canManageSelectedOpportunity) {
+      alert("작성자 또는 관리자만 단계를 변경할 수 있습니다.");
+      return;
+    }
 
     const { error } = await supabase
       .from("sales_opportunities")
@@ -512,6 +534,10 @@ export default function SalesPage() {
 
   async function removeOpportunity() {
     if (!selectedOpportunity) return;
+    if (!canManageSelectedOpportunity) {
+      alert("작성자 또는 관리자만 삭제할 수 있습니다.");
+      return;
+    }
     if (!confirm("선택한 영업기회를 삭제할까요?")) return;
 
     const { error } = await supabase
@@ -781,9 +807,11 @@ export default function SalesPage() {
                   <h2 style={styles.detailTitle}>{selectedOpportunity.item}</h2>
                 </div>
 
-                <button style={styles.deleteButton} onClick={removeOpportunity}>
-                  삭제
-                </button>
+                {canManageSelectedOpportunity && (
+                  <button style={styles.deleteButton} onClick={removeOpportunity}>
+                    삭제
+                  </button>
+                )}
               </div>
 
               <div style={styles.detailGrid}>
@@ -807,27 +835,30 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              <div style={styles.stageBox}>
-                <span style={styles.label}>단계 변경</span>
-                <div style={styles.stageButtons}>
-                  {stageOptions.map((stage) => (
-                    <button
-                      key={stage}
-                      style={
-                        selectedOpportunity.stage === stage
-                          ? styles.activeStageButton
-                          : styles.stageButton
-                      }
-                      onClick={() => changeStage(stage)}
-                    >
-                      {stageLabel[stage]}
-                    </button>
-                  ))}
+              {canManageSelectedOpportunity && (
+                <div style={styles.stageBox}>
+                  <span style={styles.label}>단계 변경</span>
+                  <div style={styles.stageButtons}>
+                    {stageOptions.map((stage) => (
+                      <button
+                        key={stage}
+                        style={
+                          selectedOpportunity.stage === stage
+                            ? styles.activeStageButton
+                            : styles.stageButton
+                        }
+                        onClick={() => changeStage(stage)}
+                      >
+                        {stageLabel[stage]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div style={styles.activityForm}>
-                <h3 style={styles.sectionTitle}>영업 활동 기록</h3>
+              {canManageSelectedOpportunity && (
+                <div style={styles.activityForm}>
+                  <h3 style={styles.sectionTitle}>영업 활동 기록</h3>
                 <div style={styles.formGrid}>
                   <Field label="구분">
                     <select
@@ -875,10 +906,11 @@ export default function SalesPage() {
                   />
                 </Field>
 
-                <button style={styles.primaryButton} onClick={addActivity}>
-                  활동 기록 추가
-                </button>
-              </div>
+                  <button style={styles.primaryButton} onClick={addActivity}>
+                    활동 기록 추가
+                  </button>
+                </div>
+              )}
 
               <div style={styles.activityList}>
                 <h3 style={styles.sectionTitle}>활동 이력</h3>

@@ -13,6 +13,7 @@ type Customer = {
   address: string;
   memo: string;
   updatedAt: string;
+  createdBy: string | null;
 };
 
 type Contact = {
@@ -24,6 +25,7 @@ type Contact = {
   phone: string;
   email: string;
   memo: string;
+  createdBy: string | null;
 };
 
 type CustomerForm = {
@@ -49,6 +51,7 @@ type CustomerRow = {
   address: string | null;
   memo: string | null;
   updated_at: string | null;
+  created_by: string | null;
 };
 
 type ContactRow = {
@@ -60,6 +63,7 @@ type ContactRow = {
   phone: string | null;
   email: string | null;
   memo: string | null;
+  created_by: string | null;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -96,6 +100,7 @@ export default function CustomerPage() {
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
 
   const currentName =
     typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
@@ -103,6 +108,7 @@ export default function CustomerPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+  const isAdmin = currentRole === "admin";
 
   const selectedCustomer =
     customers.find((customer) => customer.id === selectedCustomerId) || null;
@@ -149,14 +155,25 @@ export default function CustomerPage() {
 
   const selectedContact =
     selectedContacts.find((contact) => contact.id === selectedContactId) || null;
+  const canManageSelectedCustomer = Boolean(
+    selectedCustomer && (isAdmin || selectedCustomer.createdBy === currentUserId)
+  );
+  const canManageSelectedContact = Boolean(
+    selectedContact && (isAdmin || selectedContact.createdBy === currentUserId)
+  );
 
   async function loadCustomerData() {
     setLoading(true);
     setLoadError("");
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setCurrentUserId(user?.id || "");
+
     const { data: customerRows, error: customerError } = await supabase
       .from("customers")
-      .select("id,name,phone,address,memo,updated_at")
+      .select("id,name,phone,address,memo,updated_at,created_by")
       .order("name", { ascending: true });
 
     if (customerError) {
@@ -169,7 +186,7 @@ export default function CustomerPage() {
 
     const { data: contactRows, error: contactError } = await supabase
       .from("customer_contacts")
-      .select("id,customer_id,name,department,position,phone,email,memo")
+      .select("id,customer_id,name,department,position,phone,email,memo,created_by")
       .order("name", { ascending: true });
 
     if (contactError) {
@@ -186,6 +203,7 @@ export default function CustomerPage() {
         address: customer.address || "",
         memo: customer.memo || "",
         updatedAt: (customer.updated_at || today).slice(0, 10),
+        createdBy: customer.created_by,
       })
     );
 
@@ -200,6 +218,7 @@ export default function CustomerPage() {
         phone: contact.phone || "",
         email: contact.email || "",
         memo: contact.memo || "",
+        createdBy: contact.created_by,
       }))
     );
     setSelectedCustomerId((current) => {
@@ -254,7 +273,7 @@ export default function CustomerPage() {
         address: customerForm.address.trim(),
         memo: customerForm.memo.trim(),
       })
-      .select("id,name,phone,address,memo,updated_at")
+      .select("id,name,phone,address,memo,updated_at,created_by")
       .single();
 
     if (error || !data) {
@@ -270,6 +289,7 @@ export default function CustomerPage() {
       address: row.address || "",
       memo: row.memo || "",
       updatedAt: (row.updated_at || today).slice(0, 10),
+      createdBy: row.created_by,
     };
 
     setCustomers((current) => [...current, nextCustomer]);
@@ -302,7 +322,7 @@ export default function CustomerPage() {
         email: contactForm.email.trim(),
         memo: contactForm.memo.trim(),
       })
-      .select("id,customer_id,name,department,position,phone,email,memo")
+      .select("id,customer_id,name,department,position,phone,email,memo,created_by")
       .single();
 
     if (error || !data) {
@@ -310,10 +330,12 @@ export default function CustomerPage() {
       return;
     }
 
-    await supabase
-      .from("customers")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", selectedCustomer.id);
+    if (canManageSelectedCustomer) {
+      await supabase
+        .from("customers")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", selectedCustomer.id);
+    }
 
     const row = data as ContactRow;
     const nextContact: Contact = {
@@ -325,6 +347,7 @@ export default function CustomerPage() {
       phone: row.phone || "",
       email: row.email || "",
       memo: row.memo || "",
+      createdBy: row.created_by,
     };
 
     setContacts((current) => [...current, nextContact]);
@@ -341,6 +364,10 @@ export default function CustomerPage() {
 
   async function deleteCustomer() {
     if (!selectedCustomer) return;
+    if (!canManageSelectedCustomer) {
+      alert("작성자 또는 관리자만 업체를 삭제할 수 있습니다.");
+      return;
+    }
     if (!confirm("선택한 업체와 담당자를 삭제할까요?")) return;
 
     const { error } = await supabase
@@ -365,6 +392,11 @@ export default function CustomerPage() {
   }
 
   async function deleteContact(contactId: number) {
+    const contact = contacts.find((item) => item.id === contactId);
+    if (!contact || (!isAdmin && contact.createdBy !== currentUserId)) {
+      alert("작성자 또는 관리자만 담당자를 삭제할 수 있습니다.");
+      return;
+    }
     if (!confirm("담당자를 삭제할까요?")) return;
     const { error } = await supabase
       .from("customer_contacts")
@@ -474,9 +506,11 @@ export default function CustomerPage() {
                     <div style={styles.detailMeta}>선택 업체</div>
                     <h2 style={styles.detailTitle}>{selectedCustomer.name}</h2>
                   </div>
-                  <button style={styles.deleteButton} onClick={deleteCustomer}>
-                    업체 삭제
-                  </button>
+                  {canManageSelectedCustomer && (
+                    <button style={styles.deleteButton} onClick={deleteCustomer}>
+                      업체 삭제
+                    </button>
+                  )}
                 </div>
 
                 <div style={styles.infoGrid}>
@@ -683,12 +717,14 @@ export default function CustomerPage() {
                   <h2 style={styles.panelTitle}>{selectedContact.name}</h2>
                 </div>
                 <div style={styles.modalHeaderActions}>
-                  <button
-                    style={styles.modalDeleteButton}
-                    onClick={() => deleteContact(selectedContact.id)}
-                  >
-                    삭제
-                  </button>
+                  {canManageSelectedContact && (
+                    <button
+                      style={styles.modalDeleteButton}
+                      onClick={() => deleteContact(selectedContact.id)}
+                    >
+                      삭제
+                    </button>
+                  )}
                   <button
                     style={styles.closeButton}
                     onClick={() => setSelectedContactId(null)}

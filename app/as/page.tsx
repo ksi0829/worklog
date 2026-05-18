@@ -35,6 +35,7 @@ type WorkOrder = {
   status: Status;
   createdAt: string;
   updatedAt: string;
+  createdBy: string | null;
   logs: ServiceLog[];
 };
 
@@ -64,6 +65,7 @@ type WorkOrderRow = {
   status: Status;
   created_at: string | null;
   updated_at: string | null;
+  created_by: string | null;
 };
 
 type ServiceLogRow = {
@@ -186,6 +188,7 @@ export default function AsPage() {
   const [orderForm, setOrderForm] = useState<WorkOrderForm>(emptyOrderForm);
   const [logForm, setLogForm] = useState<LogForm>(emptyLogForm);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -226,14 +229,23 @@ export default function AsPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+  const isAdmin = currentRole === "admin";
+  const canManageSelectedOrder = Boolean(
+    selectedOrder && (isAdmin || selectedOrder.createdBy === currentUserId)
+  );
 
   async function loadOrders() {
     setLoading(true);
     setLoadError("");
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setCurrentUserId(user?.id || "");
+
     const { data: orderRows, error: orderError } = await supabase
       .from("as_work_orders")
-      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at")
+      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at,created_by")
       .order("updated_at", { ascending: false });
 
     if (orderError) {
@@ -285,6 +297,7 @@ export default function AsPage() {
       status: order.status,
       createdAt: (order.created_at || todayLabel).slice(0, 10),
       updatedAt: (order.updated_at || todayLabel).slice(0, 10),
+      createdBy: order.created_by,
       logs: logsByOrder.get(order.id) || [],
     }));
 
@@ -336,7 +349,7 @@ export default function AsPage() {
         priority: orderForm.priority,
         status: "OPEN",
       })
-      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at")
+      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at,created_by")
       .single();
 
     if (error || !data) {
@@ -356,6 +369,7 @@ export default function AsPage() {
       status: row.status,
       createdAt: (row.created_at || todayLabel).slice(0, 10),
       updatedAt: (row.updated_at || todayLabel).slice(0, 10),
+      createdBy: row.created_by,
       logs: [],
     };
 
@@ -367,6 +381,10 @@ export default function AsPage() {
 
   async function addServiceLog() {
     if (!selectedOrder) return;
+    if (!canManageSelectedOrder) {
+      alert("작성자 또는 관리자만 처리내역을 추가할 수 있습니다.");
+      return;
+    }
 
     const action = logForm.action.trim();
 
@@ -432,6 +450,10 @@ export default function AsPage() {
 
   async function closeOrder() {
     if (!selectedOrder) return;
+    if (!canManageSelectedOrder) {
+      alert("작성자 또는 관리자만 완료 처리할 수 있습니다.");
+      return;
+    }
     if (!confirm("선택한 작업지시를 완료 처리할까요?")) return;
 
     const { error } = await supabase
@@ -456,6 +478,10 @@ export default function AsPage() {
 
   async function deleteOrder() {
     if (!selectedOrder) return;
+    if (!canManageSelectedOrder) {
+      alert("작성자 또는 관리자만 삭제할 수 있습니다.");
+      return;
+    }
     if (!confirm("선택한 작업지시를 삭제할까요?")) return;
 
     const { error } = await supabase
@@ -690,14 +716,16 @@ export default function AsPage() {
                 <div style={styles.detailActions}>
                   <PriorityBadge priority={selectedOrder.priority} />
                   <StatusBadge status={selectedOrder.status} />
-                  {selectedOrder.status !== "CLOSED" && (
+                  {selectedOrder.status !== "CLOSED" && canManageSelectedOrder && (
                     <button style={styles.ghostButton} onClick={closeOrder}>
                       완료 처리
                     </button>
                   )}
-                  <button style={styles.dangerButton} onClick={deleteOrder}>
-                    삭제
-                  </button>
+                  {canManageSelectedOrder && (
+                    <button style={styles.dangerButton} onClick={deleteOrder}>
+                      삭제
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -705,7 +733,7 @@ export default function AsPage() {
                 <div style={styles.description}>{selectedOrder.description}</div>
               )}
 
-              {selectedOrder.status !== "CLOSED" && (
+              {selectedOrder.status !== "CLOSED" && canManageSelectedOrder && (
                 <div style={styles.logForm}>
                   <Field label="조치 내용">
                     <input
