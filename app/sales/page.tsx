@@ -13,6 +13,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/sales/styles";
 
 type SalesDivision = "domestic" | "overseas";
+type SalesCurrency = "KRW" | "USD" | "EUR" | "JPY" | "CNY";
 type Stage = "LEAD" | "MEETING" | "QUOTE" | "NEGOTIATION" | "WON" | "LOST";
 type ActivityType = "방문" | "전화" | "메일" | "견적" | "제안" | "후속";
 
@@ -23,6 +24,7 @@ type Opportunity = {
   contact: string;
   item: string;
   amount: number;
+  currency: SalesCurrency;
   stage: Stage;
   nextAction: string;
   dueDate: string;
@@ -43,6 +45,7 @@ type OpportunityForm = {
   contact: string;
   item: string;
   amount: string;
+  currency: SalesCurrency;
   stage: Stage;
   nextAction: string;
   dueDate: string;
@@ -62,6 +65,7 @@ type OpportunityRow = {
   contact: string | null;
   item: string;
   amount: number | string | null;
+  currency: SalesCurrency | null;
   stage: Stage;
   next_action: string | null;
   due_date: string | null;
@@ -112,12 +116,14 @@ const stageOptions: Stage[] = [
   "WON",
   "LOST",
 ];
+const currencyOptions: SalesCurrency[] = ["KRW", "USD", "EUR", "JPY", "CNY"];
 
 const emptyOpportunityForm: OpportunityForm = {
   company: "",
   contact: "",
   item: "",
   amount: "",
+  currency: "KRW",
   stage: "LEAD",
   nextAction: "",
   dueDate: "",
@@ -162,7 +168,7 @@ function createSalesSummarySheet(
         item.company,
         item.contact,
         item.item,
-        ...(canViewAmount ? [item.amount] : []),
+        ...(canViewAmount ? [formatAmount(item.amount, item.currency)] : []),
         stageLabel[item.stage],
         item.dueDate,
         item.nextAction,
@@ -184,7 +190,7 @@ function createSalesDetailSheet(
     ["고객사", opportunity.company],
     ["담당자", opportunity.contact],
     ["품목/내용", opportunity.item],
-    ...(canViewAmount ? [["예상금액", opportunity.amount]] : []),
+    ...(canViewAmount ? [["예상금액", formatAmount(opportunity.amount, opportunity.currency)]] : []),
     ["단계", stageLabel[opportunity.stage]],
     ["예정일", opportunity.dueDate],
     ["다음 액션", opportunity.nextAction],
@@ -273,7 +279,7 @@ export default function SalesPage() {
 
     const { data: opportunityRows, error: opportunityError } = await supabase
       .from("sales_opportunities")
-      .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at")
+      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at")
       .order("created_at", { ascending: false });
 
     if (opportunityError) {
@@ -311,6 +317,7 @@ export default function SalesPage() {
         contact: item.contact || "",
         item: item.item,
         amount: Number(item.amount || 0),
+        currency: item.currency || "KRW",
         stage: item.stage,
         nextAction: item.next_action || "",
         dueDate: item.due_date || "",
@@ -361,7 +368,10 @@ export default function SalesPage() {
   function changeDivision(nextDivision: SalesDivision) {
     setDivision(nextDivision);
     setSelectedId(null);
-    setOpportunityForm(emptyOpportunityForm);
+    setOpportunityForm({
+      ...emptyOpportunityForm,
+      currency: nextDivision === "overseas" ? "USD" : "KRW",
+    });
     setActivityForm(emptyActivityForm);
   }
 
@@ -393,11 +403,12 @@ export default function SalesPage() {
         contact,
         item,
         amount: canViewAmount ? amount || 0 : 0,
+        currency: canViewAmount ? opportunityForm.currency : "KRW",
         stage: opportunityForm.stage,
         next_action: nextAction,
         due_date: opportunityForm.dueDate || null,
       })
-      .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at")
+      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at")
       .single();
 
     if (error || !data) {
@@ -413,6 +424,7 @@ export default function SalesPage() {
       contact: row.contact || "",
       item: row.item,
       amount: Number(row.amount || 0),
+      currency: row.currency || "KRW",
       stage: row.stage,
       nextAction: row.next_action || "",
       dueDate: row.due_date || "",
@@ -571,7 +583,10 @@ export default function SalesPage() {
           <SummaryCard label="구분" value={divisionLabel[division]} />
           <SummaryCard label="진행 건" value={`${activeCount}건`} />
           {canViewAmount && (
-            <SummaryCard label="예상 금액" value={formatWon(totalAmount)} />
+            <SummaryCard
+              label="예상 금액"
+              value={formatAmount(totalAmount, division === "overseas" ? "USD" : "KRW")}
+            />
           )}
         </section>
 
@@ -635,15 +650,32 @@ export default function SalesPage() {
             <div style={styles.formGrid}>
               {canViewAmount && (
                 <Field label="예상 금액">
-                  <input
-                    value={opportunityForm.amount}
-                    onChange={(event) =>
-                      updateOpportunity("amount", event.target.value)
-                    }
-                    placeholder="숫자만 입력"
-                    inputMode="numeric"
-                    style={styles.input}
-                  />
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {division === "overseas" && (
+                      <select
+                        value={opportunityForm.currency}
+                        onChange={(event) =>
+                          updateOpportunity("currency", event.target.value as SalesCurrency)
+                        }
+                        style={{ ...styles.input, width: "96px", flex: "0 0 auto" }}
+                      >
+                        {currencyOptions.map((currency) => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <input
+                      value={opportunityForm.amount}
+                      onChange={(event) =>
+                        updateOpportunity("amount", event.target.value)
+                      }
+                      placeholder="숫자만 입력"
+                      inputMode="numeric"
+                      style={styles.input}
+                    />
+                  </div>
                 </Field>
               )}
               <Field label="단계">
@@ -752,7 +784,7 @@ export default function SalesPage() {
                 {canViewAmount && (
                   <div style={styles.detailBox}>
                     <span style={styles.detailLabel}>예상 금액</span>
-                    <strong>{formatWon(selectedOpportunity.amount)}</strong>
+                    <strong>{formatAmount(selectedOpportunity.amount, selectedOpportunity.currency)}</strong>
                   </div>
                 )}
                 <div style={styles.detailBox}>
@@ -889,5 +921,10 @@ function formatWon(value: number) {
     return `${(value / 100000000).toFixed(1).replace(".0", "")}억`;
   }
   return `${Math.round(value / 10000).toLocaleString("ko-KR")}만`;
+}
+
+function formatAmount(value: number, currency: SalesCurrency) {
+  if (currency === "KRW") return formatWon(value);
+  return `${currency} ${Number(value || 0).toLocaleString("ko-KR")}`;
 }
 

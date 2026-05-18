@@ -133,12 +133,6 @@ const equipmentStageByTemplate: Partial<Record<string, EquipmentStageKey>> = {
   inspection_request: "qa",
 };
 
-const equipmentDocumentColumnByStage: Record<EquipmentStageKey, string> = {
-  manufacturingRequest: "manufacturing_document_id",
-  purchaseRequest: "purchase_document_id",
-  qa: "qa_document_id",
-};
-
 const equipmentDateColumnByStage: Record<EquipmentStageKey, string> = {
   manufacturingRequest: "manufacturing_request_approved_on",
   purchaseRequest: "purchase_request_approved_on",
@@ -662,52 +656,9 @@ function getEquipmentOrderLabel(order: EquipmentOrderRow) {
   return `${formatShortDate(order.order_date)} · ${categoryText} · ${order.customer} · ${order.model}`;
 }
 
-function toEquipmentCategory(value: unknown): "domestic" | "overseas" | "parts" {
-  if (value === "해외 장비") return "overseas";
-  if (value === "부품") return "parts";
-  return "domestic";
-}
-
 function getStringValue(data: Record<string, unknown>, key: string) {
   const value = data[key];
   return typeof value === "string" ? value.trim() : "";
-}
-
-function buildEquipmentOrderFromManufacturing(
-  data: Record<string, unknown>,
-  currentName: string
-) {
-  const category = toEquipmentCategory(data.orderCategory);
-
-  return {
-    category,
-      order_date:
-      getStringValue(data, "orderDate") ||
-      getStringValue(data, "createdDate") ||
-      today,
-    country:
-      category === "domestic"
-        ? null
-        : getStringValue(data, "country") || null,
-    customer:
-      getStringValue(data, "client") ||
-      getStringValue(data, "customer") ||
-      "고객사 미입력",
-    model:
-      getStringValue(data, "productName") ||
-      getStringValue(data, "equipment") ||
-      "모델 미입력",
-    owner_name:
-      getStringValue(data, "owner") ||
-      getStringValue(data, "requester") ||
-      getStringValue(data, "applicant") ||
-      currentName ||
-      "담당자",
-    serial_no: getStringValue(data, "serialNo") || null,
-    delivery_place: getStringValue(data, "deliveryPlace") || null,
-    note: getStringValue(data, "reference") || null,
-    shipment_scheduled_on: getStringValue(data, "deliveryDate") || null,
-  };
 }
 
 export default function ApprovalPage() {
@@ -730,7 +681,7 @@ export default function ApprovalPage() {
   const [currentTeam, setCurrentTeam] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [detailModalDocumentId, setDetailModalDocumentId] = useState<number | null>(null);
-  const [activeFilter, setActiveFilter] = useState<"all" | "mine" | "pending" | "history">("all");
+  const [activeFilter, setActiveFilter] = useState<"mine" | "pending" | "history">("mine");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -768,11 +719,14 @@ export default function ApprovalPage() {
       return documents.filter((document) => document.status === "approved");
     }
 
-    return documents;
+    return [];
   }, [activeFilter, currentUserId, documents, pendingForMe]);
 
   const sortedProfiles = useMemo(
-    () => [...profiles].sort((a, b) => getProfileSortValue(a).localeCompare(getProfileSortValue(b), "ko")),
+    () =>
+      profiles
+        .filter((profile) => profile.name && ORG_MEMBER_MAP.has(profile.name))
+        .sort((a, b) => getProfileSortValue(a).localeCompare(getProfileSortValue(b), "ko")),
     [profiles]
   );
 
@@ -1011,27 +965,7 @@ export default function ApprovalPage() {
       shouldSelectEquipmentOrder && selectedEquipmentOrderId
         ? Number(selectedEquipmentOrderId)
         : null;
-    let createdEquipmentOrderId: number | null = null;
-
-    if (shouldCreateEquipmentOrder) {
-      const { data: createdOrder, error: orderError } = await supabase
-        .from("equipment_orders")
-        .insert(buildEquipmentOrderFromManufacturing(formData, currentName))
-        .select("id")
-        .single();
-
-      if (orderError || !createdOrder) {
-        setMessage(
-          "현황판 수주 건을 만들지 못했습니다. 수주 현황 테이블과 권한을 확인해 주세요."
-        );
-        setSaving(false);
-        return;
-      }
-
-      createdEquipmentOrderId = (createdOrder as { id: number }).id;
-    }
-
-    const finalEquipmentOrderId = createdEquipmentOrderId || linkedEquipmentOrderId;
+    const finalEquipmentOrderId = linkedEquipmentOrderId;
     const finalFormData = {
       ...formData,
       _equipmentOrderId: finalEquipmentOrderId,
@@ -1054,8 +988,11 @@ export default function ApprovalPage() {
       form_data: finalFormData,
     };
 
-    if (finalEquipmentOrderId && selectedEquipmentStage) {
+    if (finalEquipmentOrderId) {
       documentPayload.equipment_order_id = finalEquipmentOrderId;
+    }
+
+    if (selectedEquipmentStage) {
       documentPayload.equipment_stage_key = selectedEquipmentStage;
     }
 
@@ -1101,18 +1038,6 @@ export default function ApprovalPage() {
       );
       setSaving(false);
       return;
-    }
-
-    if (finalEquipmentOrderId && selectedEquipmentStage) {
-      await supabase
-        .from("equipment_orders")
-        .update({
-          [equipmentDocumentColumnByStage[selectedEquipmentStage]]: documentId,
-          ...(selectedEquipmentStage === "manufacturingRequest"
-            ? buildEquipmentOrderFromManufacturing(finalFormData, currentName)
-            : {}),
-        })
-        .eq("id", finalEquipmentOrderId);
     }
 
     setMessage("결재문서가 등록되었습니다.");
@@ -1645,7 +1570,6 @@ export default function ApprovalPage() {
             }}
           >
             {[
-              ["all", "전체"],
               ["mine", "내 문서"],
               ["pending", "결재 대기"],
               ["history", "완료"],
