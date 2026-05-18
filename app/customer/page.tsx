@@ -6,9 +6,12 @@ import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/customer/styles";
 
+type CustomerCategory = "customer" | "processing" | "postprocess" | "partner" | "other";
+
 type Customer = {
   id: number;
   name: string;
+  category: CustomerCategory;
   phone: string;
   address: string;
   memo: string;
@@ -30,6 +33,7 @@ type Contact = {
 
 type CustomerForm = {
   name: string;
+  category: CustomerCategory;
   phone: string;
   address: string;
   memo: string;
@@ -47,6 +51,7 @@ type ContactForm = {
 type CustomerRow = {
   id: number;
   name: string;
+  category?: CustomerCategory | null;
   phone: string | null;
   address: string | null;
   memo: string | null;
@@ -68,9 +73,21 @@ type ContactRow = {
 
 const today = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
+const customerCategories: { key: CustomerCategory | "all"; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "customer", label: "고객사" },
+  { key: "processing", label: "가공업체" },
+  { key: "postprocess", label: "후처리" },
+  { key: "partner", label: "협력사" },
+  { key: "other", label: "기타" },
+];
+const categoryLabel = Object.fromEntries(
+  customerCategories.map((item) => [item.key, item.label])
+) as Record<CustomerCategory | "all", string>;
 
 const emptyCustomerForm: CustomerForm = {
   name: "",
+  category: "customer",
   phone: "",
   address: "",
   memo: "",
@@ -95,6 +112,7 @@ export default function CustomerPage() {
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<CustomerCategory | "all">("all");
   const [customerForm, setCustomerForm] =
     useState<CustomerForm>(emptyCustomerForm);
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
@@ -118,6 +136,7 @@ export default function CustomerPage() {
 
     return customers
       .filter((customer) => {
+        if (categoryFilter !== "all" && customer.category !== categoryFilter) return false;
         if (!normalized) return true;
 
         const customerContacts = contacts.filter(
@@ -125,6 +144,7 @@ export default function CustomerPage() {
         );
         const text = [
           customer.name,
+          categoryLabel[customer.category],
           customer.phone,
           customer.address,
           customer.memo,
@@ -143,7 +163,7 @@ export default function CustomerPage() {
         return text.includes(normalized);
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [contacts, customers, query]);
+  }, [categoryFilter, contacts, customers, query]);
 
   const selectedContacts = useMemo(() => {
     if (!selectedCustomer) return [];
@@ -171,10 +191,22 @@ export default function CustomerPage() {
     } = await supabase.auth.getUser();
     setCurrentUserId(user?.id || "");
 
-    const { data: customerRows, error: customerError } = await supabase
+    const primaryCustomers = await supabase
       .from("customers")
-      .select("id,name,phone,address,memo,updated_at,created_by")
+      .select("id,name,category,phone,address,memo,updated_at,created_by")
       .order("name", { ascending: true });
+    let customerRows = primaryCustomers.data as CustomerRow[] | null;
+    let customerError = primaryCustomers.error;
+
+    if (customerError?.message?.includes("category")) {
+      const fallback = await supabase
+        .from("customers")
+        .select("id,name,phone,address,memo,updated_at,created_by")
+        .order("name", { ascending: true });
+
+      customerRows = fallback.data as CustomerRow[] | null;
+      customerError = fallback.error;
+    }
 
     if (customerError) {
       setLoadError(
@@ -199,6 +231,7 @@ export default function CustomerPage() {
       (customer) => ({
         id: customer.id,
         name: customer.name,
+        category: customer.category || "customer",
         phone: customer.phone || "",
         address: customer.address || "",
         memo: customer.memo || "",
@@ -269,15 +302,20 @@ export default function CustomerPage() {
       .from("customers")
       .insert({
         name,
+        category: customerForm.category,
         phone: customerForm.phone.trim(),
         address: customerForm.address.trim(),
         memo: customerForm.memo.trim(),
       })
-      .select("id,name,phone,address,memo,updated_at,created_by")
+      .select("id,name,category,phone,address,memo,updated_at,created_by")
       .single();
 
     if (error || !data) {
-      alert(error?.message || "업체 등록에 실패했습니다.");
+      if (error?.message?.includes("category")) {
+        alert("고객사 분류 컬럼이 아직 없습니다. project-docs/supabase-customer-category.sql을 먼저 실행해 주세요.");
+      } else {
+        alert(error?.message || "업체 등록에 실패했습니다.");
+      }
       return;
     }
 
@@ -285,6 +323,7 @@ export default function CustomerPage() {
     const nextCustomer: Customer = {
       id: row.id,
       name: row.name,
+      category: row.category || customerForm.category,
       phone: row.phone || "",
       address: row.address || "",
       memo: row.memo || "",
@@ -463,6 +502,24 @@ export default function CustomerPage() {
                 style={{ ...styles.input, marginBottom: 12 }}
               />
 
+              <div style={styles.categoryFilter}>
+                {customerCategories.map((category) => (
+                  <button
+                    key={category.key}
+                    type="button"
+                    style={{
+                      ...styles.categoryButton,
+                      ...(categoryFilter === category.key
+                        ? styles.categoryButtonActive
+                        : {}),
+                    }}
+                    onClick={() => setCategoryFilter(category.key)}
+                  >
+                    {category.label}
+                  </button>
+                ))}
+              </div>
+
               <div style={styles.customerList}>
                 {customerList.length === 0 ? (
                   <div style={styles.empty}>등록된 업체가 없습니다.</div>
@@ -484,6 +541,7 @@ export default function CustomerPage() {
                       >
                         <span style={styles.customerName}>{customer.name}</span>
                         <span style={styles.customerMeta}>
+                          {categoryLabel[customer.category]} ·{" "}
                           담당자 {contactCount}명
                         </span>
                       </button>
@@ -505,6 +563,9 @@ export default function CustomerPage() {
                   <div>
                     <div style={styles.detailMeta}>선택 업체</div>
                     <h2 style={styles.detailTitle}>{selectedCustomer.name}</h2>
+                    <div style={styles.categoryPill}>
+                      {categoryLabel[selectedCustomer.category]}
+                    </div>
                   </div>
                   {canManageSelectedCustomer && (
                     <button style={styles.deleteButton} onClick={deleteCustomer}>
@@ -584,6 +645,24 @@ export default function CustomerPage() {
                   placeholder="업체명"
                   style={styles.input}
                 />
+              </Field>
+
+              <Field label="분류">
+                <select
+                  value={customerForm.category}
+                  onChange={(event) =>
+                    updateCustomer("category", event.target.value as CustomerCategory)
+                  }
+                  style={styles.input}
+                >
+                  {customerCategories
+                    .filter((category) => category.key !== "all")
+                    .map((category) => (
+                      <option key={category.key} value={category.key}>
+                        {category.label}
+                      </option>
+                    ))}
+                </select>
               </Field>
 
               <Field label="대표 연락처">

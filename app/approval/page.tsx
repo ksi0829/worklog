@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
+  EXECUTIVE_NAMES,
   ORG_MEMBER_MAP,
   TEAM_ORDER,
   getCurrentOrgTeam,
@@ -679,6 +680,7 @@ export default function ApprovalPage() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentName, setCurrentName] = useState("");
   const [currentTeam, setCurrentTeam] = useState("");
+  const [currentRole, setCurrentRole] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [detailModalDocumentId, setDetailModalDocumentId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<"mine" | "pending" | "history">("mine");
@@ -722,15 +724,18 @@ export default function ApprovalPage() {
       Boolean(line && (isCurrentUserId(line.approver_id) || isCurrentUserName(line.approver_name))),
     [isCurrentUserId, isCurrentUserName]
   );
+  const isAdmin = currentRole === "admin";
   const visibleDocuments = useMemo(
     () =>
-      documents.filter(
+      isAdmin
+        ? documents
+        : documents.filter(
         (document) =>
           isCurrentRequester(document) ||
           isCurrentApprover(document) ||
           isCurrentReference(document)
       ),
-    [documents, isCurrentApprover, isCurrentReference, isCurrentRequester]
+    [documents, isAdmin, isCurrentApprover, isCurrentReference, isCurrentRequester]
   );
 
   const pendingForMe = useMemo(
@@ -748,6 +753,7 @@ export default function ApprovalPage() {
 
   const filteredDocuments = useMemo(() => {
     if (activeFilter === "mine") {
+      if (isAdmin) return visibleDocuments;
       return visibleDocuments.filter(isCurrentRequester);
     }
 
@@ -760,7 +766,7 @@ export default function ApprovalPage() {
     }
 
     return [];
-  }, [activeFilter, completedForMe, isCurrentRequester, pendingForMe, visibleDocuments]);
+  }, [activeFilter, completedForMe, isAdmin, isCurrentRequester, pendingForMe, visibleDocuments]);
 
   const selectedDocument = useMemo(
     () =>
@@ -777,7 +783,11 @@ export default function ApprovalPage() {
   const sortedProfiles = useMemo(
     () =>
       profiles
-        .filter((profile) => profile.name && ORG_MEMBER_MAP.has(profile.name))
+        .filter(
+          (profile) =>
+            profile.name &&
+            (ORG_MEMBER_MAP.has(profile.name) || EXECUTIVE_NAMES.includes(profile.name))
+        )
         .sort((a, b) => getProfileSortValue(a).localeCompare(getProfileSortValue(b), "ko")),
     [profiles]
   );
@@ -796,11 +806,13 @@ export default function ApprovalPage() {
 
     const storedName = typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
     const storedTeam = typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
+    const storedRole = typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
     const currentOrgTeam = getCurrentOrgTeam(storedName, storedTeam);
 
     setCurrentUserId(user?.id || "");
     setCurrentName(storedName);
     setCurrentTeam(currentOrgTeam);
+    setCurrentRole(storedRole);
     setFormData((prev) => applyCurrentUserFields(prev, storedName, currentOrgTeam));
 
     const { data: profileRows } = await supabase
@@ -1213,6 +1225,55 @@ export default function ApprovalPage() {
     });
 
     setMessage("반려 처리되었습니다.");
+    setSaving(false);
+    await loadData();
+  }
+
+  async function deleteSelectedDocument() {
+    if (!selectedDocument || !isAdmin) return;
+    if (!confirm("선택한 결재문서를 삭제할까요?")) return;
+
+    setSaving(true);
+    setMessage("");
+
+    await supabase
+      .from("approval_notifications")
+      .delete()
+      .eq("document_id", selectedDocument.id);
+    await supabase
+      .from("approval_references")
+      .delete()
+      .eq("document_id", selectedDocument.id);
+    await supabase
+      .from("approval_lines")
+      .delete()
+      .eq("document_id", selectedDocument.id);
+    await supabase
+      .from("equipment_orders")
+      .update({ manufacturing_document_id: null, manufacturing_request_approved_on: null })
+      .eq("manufacturing_document_id", selectedDocument.id);
+    await supabase
+      .from("equipment_orders")
+      .update({ purchase_document_id: null, purchase_request_approved_on: null })
+      .eq("purchase_document_id", selectedDocument.id);
+    await supabase
+      .from("equipment_orders")
+      .update({ qa_document_id: null, qa_approved_on: null })
+      .eq("qa_document_id", selectedDocument.id);
+
+    const { error } = await supabase
+      .from("approval_documents")
+      .delete()
+      .eq("id", selectedDocument.id);
+
+    if (error) {
+      setMessage(`문서를 삭제하지 못했습니다. ${getErrorMessage(error)}`);
+      setSaving(false);
+      return;
+    }
+
+    setSelectedDocumentId(null);
+    setMessage("결재문서가 삭제되었습니다.");
     setSaving(false);
     await loadData();
   }
@@ -1771,6 +1832,18 @@ export default function ApprovalPage() {
                     disabled={saving}
                   >
                     반려
+                  </button>
+                </div>
+              )}
+              {isAdmin && (
+                <div style={styles.actionRow}>
+                  <button
+                    type="button"
+                    style={styles.dangerButton}
+                    onClick={deleteSelectedDocument}
+                    disabled={saving}
+                  >
+                    관리자 삭제
                   </button>
                 </div>
               )}

@@ -175,6 +175,29 @@ export const styles: Record<string, CSSProperties> = {
     flexDirection: "column",
     gap: "8px",
   },
+  categoryFilter: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    flexWrap: "wrap",
+    margin: "0 0 12px",
+  },
+  categoryButton: {
+    height: "30px",
+    padding: "0 10px",
+    borderRadius: "999px",
+    border: "1px solid #d9e0e8",
+    background: "#ffffff",
+    color: "#475467",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  categoryButtonActive: {
+    borderColor: "#111827",
+    background: "#111827",
+    color: "#ffffff",
+  },
   customerCard: {
     width: "100%",
     display: "flex",
@@ -224,6 +247,18 @@ export const styles: Record<string, CSSProperties> = {
   detailTitle: {
     margin: "6px 0 0",
     fontSize: "19px",
+  },
+  categoryPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    height: "24px",
+    marginTop: "8px",
+    padding: "0 9px",
+    borderRadius: "999px",
+    background: "#eef6f1",
+    color: "#047857",
+    fontSize: "12px",
+    fontWeight: 850,
   },
   deleteButton: {
     height: "34px",
