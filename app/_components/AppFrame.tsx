@@ -165,12 +165,7 @@ export function AppFrame({ children }: AppFrameProps) {
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
-  const activeItem =
-    [...MENU_ITEMS, ...UTILITY_ITEMS].find(
-      (item) => pathname === item.path || (item.path === "/view" && pathname === "/")
-    ) || null;
   const title = TITLE_BY_PATH[pathname] || "ZETA";
-  const subItems = SUBMENU_BY_PATH[activeItem?.path || pathname] || [];
 
   const approvalAlerts = useMemo(() => {
     return approvalDocuments.filter((document) => {
@@ -267,60 +262,6 @@ export function AppFrame({ children }: AppFrameProps) {
         </nav>
       </aside>
 
-      <aside className="app-sidebar" style={styles.sidebar}>
-        <button
-          type="button"
-          style={styles.logoButton}
-          onClick={() => router.push("/main")}
-          aria-label="메인으로 이동"
-        >
-          <img src="/brand/zeta-logo.png" alt="ZETA" style={styles.logo} />
-        </button>
-
-        <div style={styles.userBox}>
-          <div style={styles.userName}>{name || "-"}</div>
-          <div style={styles.userMeta}>{[team, role].filter(Boolean).join(" / ") || "-"}</div>
-        </div>
-
-        <div style={styles.sideSection}>
-          <div style={styles.sideSectionTitle}>업무 메뉴</div>
-          <nav className="app-nav" style={styles.nav}>
-            {menuItems.map((item) => {
-              const active = pathname === item.path || (item.path === "/view" && pathname === "/");
-
-              return (
-                <button
-                  key={item.path}
-                  type="button"
-                  style={{
-                    ...styles.navItem,
-                    ...(active ? styles.navItemActive : {}),
-                  }}
-                  onClick={() => router.push(item.path)}
-                >
-                  <span style={styles.navTextWrap}>
-                    <strong>{item.title}</strong>
-                    <em>{item.description}</em>
-                  </span>
-                  <span style={styles.navArrow}>›</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div style={styles.sideSection}>
-          <div style={styles.sideSectionTitle}>{activeItem?.title || "현재 화면"}</div>
-          <div style={styles.subMenuList}>
-            {subItems.map((item, index) => (
-              <span key={item} style={index === 0 ? styles.subMenuActive : styles.subMenuItem}>
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-      </aside>
-
       <section style={styles.workspace}>
         <header className="app-topbar" style={styles.topbar}>
           <div>
@@ -338,18 +279,35 @@ export function AppFrame({ children }: AppFrameProps) {
                 입력
               </button>
             )}
-            {approvalAlerts.length > 0 && (
-              <button
-                type="button"
-                style={styles.alertButton}
-                onClick={() => setApprovalAlertOpen(true)}
-                aria-label="결재 알림"
-                title="결재 알림"
-              >
-                <NavIcon name="notice" />
+            <button
+              type="button"
+              style={styles.topbarIdentity}
+              onClick={() => router.push("/main")}
+              aria-label="메인으로 이동"
+            >
+              <img src="/brand/zeta-logo.png" alt="ZETA" style={styles.topbarLogo} />
+              <span style={styles.topbarUser}>
+                <span style={styles.topbarUserName}>{name || "-"}</span>
+                <span style={styles.topbarUserMeta}>
+                  {[team, role].filter(Boolean).join(" / ") || "-"}
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              style={{
+                ...styles.alertButton,
+                ...(approvalAlerts.length > 0 ? styles.alertButtonActive : {}),
+              }}
+              onClick={() => setApprovalAlertOpen(true)}
+              aria-label="결재 알림"
+              title="결재 알림"
+            >
+              <span style={styles.alertMark}>!</span>
+              {approvalAlerts.length > 0 && (
                 <span style={styles.alertCount}>{approvalAlerts.length}</span>
-              </button>
-            )}
+              )}
+            </button>
             {UTILITY_ITEMS.map((item) => (
               <button
                 key={item.path}
@@ -389,25 +347,29 @@ export function AppFrame({ children }: AppFrameProps) {
             </div>
 
             <div style={styles.alertList}>
-              {approvalAlerts.map((document) => {
-                const pendingLine = getFirstPendingLine(document);
+              {approvalAlerts.length === 0 ? (
+                <div style={styles.alertEmpty}>현재 확인할 결재 알림이 없습니다.</div>
+              ) : (
+                approvalAlerts.map((document) => {
+                  const pendingLine = getFirstPendingLine(document);
 
-                return (
-                  <button
-                    key={document.id}
-                    type="button"
-                    style={styles.alertItem}
-                    onClick={() => router.push("/approval")}
-                  >
-                    <strong>{document.title}</strong>
-                    <span>
-                      {pendingLine
-                        ? `${pendingLine.role_label} / ${pendingLine.approver_name} 결재 대기`
-                        : "참조 문서 확인"}
-                    </span>
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={document.id}
+                      type="button"
+                      style={styles.alertItem}
+                      onClick={() => router.push("/approval")}
+                    >
+                      <strong>{document.title}</strong>
+                      <span>
+                        {pendingLine
+                          ? `${pendingLine.role_label} / ${pendingLine.approver_name} 결재 대기`
+                          : "참조 문서 확인"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </section>
         </div>
@@ -420,7 +382,7 @@ const styles: Record<string, CSSProperties> = {
   frame: {
     minHeight: "100dvh",
     display: "grid",
-    gridTemplateColumns: "78px 232px minmax(0, 1fr)",
+    gridTemplateColumns: "78px minmax(0, 1fr)",
     background: "#f6f7f9",
     color: "#111827",
   },
@@ -630,6 +592,53 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
     flexWrap: "wrap",
   },
+  topbarIdentity: {
+    minWidth: "230px",
+    height: "42px",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "12px",
+    border: "1px solid #e1e5ea",
+    borderRadius: "10px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 12px",
+    cursor: "pointer",
+  },
+  topbarLogo: {
+    width: "82px",
+    height: "auto",
+    display: "block",
+    flex: "0 0 auto",
+  },
+  topbarUser: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "2px",
+    minWidth: 0,
+    borderLeft: "1px solid #edf0f3",
+    paddingLeft: "10px",
+    lineHeight: 1.15,
+  },
+  topbarUserName: {
+    maxWidth: "96px",
+    color: "#111820",
+    fontSize: "12px",
+    fontWeight: 900,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  topbarUserMeta: {
+    maxWidth: "112px",
+    color: "#667085",
+    fontSize: "11px",
+    fontWeight: 700,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
   alertButton: {
     position: "relative",
     width: "38px",
@@ -638,10 +647,20 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: "12px",
-    border: "1px solid #fecaca",
+    border: "1px solid #cfd6df",
+    background: "#ffffff",
+    color: "#667085",
+    cursor: "pointer",
+  },
+  alertButtonActive: {
+    borderColor: "#fecaca",
     background: "#fff1f2",
     color: "#dc2626",
-    cursor: "pointer",
+  },
+  alertMark: {
+    fontSize: "20px",
+    fontWeight: 950,
+    lineHeight: 1,
   },
   alertCount: {
     position: "absolute",
@@ -749,5 +768,15 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "left",
     cursor: "pointer",
     fontSize: "13px",
+  },
+  alertEmpty: {
+    border: "1px dashed #d6dce5",
+    borderRadius: "10px",
+    background: "#fbfcfd",
+    color: "#667085",
+    padding: "18px 14px",
+    textAlign: "center",
+    fontSize: "13px",
+    fontWeight: 750,
   },
 };
