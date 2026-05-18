@@ -1112,6 +1112,7 @@ export default function ApprovalPage() {
 
     setSaving(true);
     setMessage("");
+    let approvalMessage = "승인 처리되었습니다.";
 
     await supabase
       .from("approval_lines")
@@ -1148,9 +1149,14 @@ export default function ApprovalPage() {
       });
 
       if (selectedDocument.template_key === "vacation_request") {
-        await supabase.rpc("add_vacation_schedule_from_document", {
+        const { error: scheduleError } = await supabase.rpc("add_vacation_schedule_from_document", {
           target_document_id: selectedDocument.id,
         });
+
+        if (scheduleError) {
+          approvalMessage =
+            "승인은 완료됐지만 휴가 일정 자동 등록은 실패했습니다. project-docs/supabase-approval-vacation-schedule.sql을 다시 실행해 주세요.";
+        }
       }
     } else {
       const nextLine = remainingLines[0];
@@ -1173,7 +1179,7 @@ export default function ApprovalPage() {
       .eq("document_id", selectedDocument.id)
       .is("read_at", null);
 
-    setMessage("승인 처리되었습니다.");
+    setMessage(approvalMessage);
     setSaving(false);
     await loadData();
   }
