@@ -73,6 +73,24 @@ type ProductionOrderRow = {
   updated_at: string | null;
 };
 
+type ApprovalStatus = "pending" | "approved" | "rejected";
+
+type ApprovalLineRow = {
+  id: number;
+  step_order: number;
+  role_label: string;
+  approver_name: string;
+  status: ApprovalStatus;
+};
+
+type ApprovalDocumentRow = {
+  id: number;
+  template_title: string;
+  title: string;
+  status: ApprovalStatus;
+  approval_lines?: ApprovalLineRow[];
+};
+
 const stageDefs: StageDef[] = [
   {
     key: "manufacturingRequest",
@@ -221,6 +239,35 @@ function getStageText(status: StageStatus) {
   return "대기";
 }
 
+function getFirstPendingLine(document?: ApprovalDocumentRow | null) {
+  if (!document) return null;
+  const lines = [...(document.approval_lines || [])].sort(
+    (a, b) => a.step_order - b.step_order
+  );
+
+  return lines.find((line) => line.status === "pending") || null;
+}
+
+function getStageTooltip(
+  order: ProductionOrderRow,
+  stage: StageDef,
+  documentsById: Map<number, ApprovalDocumentRow>
+) {
+  const documentId = getStageDocumentId(order, stage);
+  if (!documentId) return `${stage.label}: ${getStageText(getStageStatus(getStageValue(order, stage)))}`;
+
+  const document = documentsById.get(documentId);
+  const pendingLine = getFirstPendingLine(document);
+
+  if (!document) return `${stage.label}: 연결 문서 #${documentId}`;
+  if (document.status === "approved") return `${document.template_title} · 승인완료`;
+  if (document.status === "rejected") return `${document.template_title} · 반려`;
+
+  return `${document.template_title} · ${document.title} · 대기: ${
+    pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "-"
+  }`;
+}
+
 function getCurrentStage(order: ProductionOrderRow) {
   const firstOpenStage = stageDefs.find(
     (stage) =>
@@ -262,6 +309,7 @@ export default function MainPage() {
     ScheduleRow[]
   >([]);
   const [orders, setOrders] = useState<ProductionOrderRow[]>([]);
+  const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
   const [isMobile, setIsMobile] = useState(false);
@@ -275,6 +323,10 @@ export default function MainPage() {
   const activeOrderCount = useMemo(
     () => orders.filter((order) => getOrderProgress(order) < 100).length,
     [orders]
+  );
+  const approvalDocumentsById = useMemo(
+    () => new Map(approvalDocuments.map((document) => [document.id, document])),
+    [approvalDocuments]
   );
 
   const loadLatestNotice = useCallback(async (currentTeam: string) => {
@@ -345,6 +397,16 @@ export default function MainPage() {
     setOrdersLoading(false);
   }, []);
 
+  const loadApprovalDocuments = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("approval_documents")
+      .select("id,template_title,title,status,approval_lines(id,step_order,role_label,approver_name,status)");
+
+    if (!error && data) {
+      setApprovalDocuments(data as ApprovalDocumentRow[]);
+    }
+  }, []);
+
   useEffect(() => {
     const storedName = localStorage.getItem("name") || "";
     const storedTeam = localStorage.getItem("team") || "";
@@ -357,8 +419,9 @@ export default function MainPage() {
       void loadLatestNotice(currentTeam);
       void loadUpcomingSchedules();
       void loadProductionOrders();
+      void loadApprovalDocuments();
     });
-  }, [loadLatestNotice, loadProductionOrders, loadUpcomingSchedules]);
+  }, [loadApprovalDocuments, loadLatestNotice, loadProductionOrders, loadUpcomingSchedules]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 760px)");
@@ -534,6 +597,7 @@ export default function MainPage() {
                                   />
                                 ) : (
                                   <span
+                                    title={getStageTooltip(order, stage, approvalDocumentsById)}
                                     style={{
                                       ...styles.stageChip,
                                       ...styles.stageChipMobile,
@@ -623,6 +687,7 @@ export default function MainPage() {
                                     />
                                   ) : (
                                     <span
+                                      title={getStageTooltip(order, stage, approvalDocumentsById)}
                                       style={{
                                         ...styles.stageChip,
                                         ...stageTone[status],

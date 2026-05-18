@@ -120,6 +120,7 @@ type EquipmentOrderRow = {
   serial_no?: string | null;
   delivery_place?: string | null;
   note?: string | null;
+  manufacturing_document_id?: number | null;
 };
 
 const supabase = createSupabaseBrowser();
@@ -516,6 +517,14 @@ function formatExcelValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function formatDocumentValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
 function getReferenceInfos(data: Record<string, unknown>): ApprovalReferenceInfo[] {
   const value = data._references;
   if (!Array.isArray(value)) return [];
@@ -720,6 +729,7 @@ export default function ApprovalPage() {
   const [currentName, setCurrentName] = useState("");
   const [currentTeam, setCurrentTeam] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [detailModalDocumentId, setDetailModalDocumentId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "mine" | "pending" | "history">("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -730,6 +740,10 @@ export default function ApprovalPage() {
   const selectedDocument = useMemo(
     () => documents.find((document) => document.id === selectedDocumentId) || documents[0] || null,
     [documents, selectedDocumentId]
+  );
+  const detailModalDocument = useMemo(
+    () => documents.find((document) => document.id === detailModalDocumentId) || null,
+    [detailModalDocumentId, documents]
   );
 
   const pendingForMe = useMemo(
@@ -792,7 +806,7 @@ export default function ApprovalPage() {
 
     const { data: equipmentRows } = await supabase
       .from("equipment_orders")
-      .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note")
+      .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note,manufacturing_document_id")
       .order("order_date", { ascending: false })
       .limit(80);
 
@@ -859,8 +873,20 @@ export default function ApprovalPage() {
 
     if (!selectedOrder) return;
 
-    setFormData((prev) => applyEquipmentOrderFields(prev, selectedOrder));
-  }, [equipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
+    const manufacturingDocument = documents.find(
+      (document) => document.id === selectedOrder.manufacturing_document_id
+    );
+    const serialFromDocument = manufacturingDocument
+      ? getStringValue(manufacturingDocument.form_data, "serialNo")
+      : "";
+
+    setFormData((prev) =>
+      applyEquipmentOrderFields(prev, {
+        ...selectedOrder,
+        serial_no: selectedOrder.serial_no || serialFromDocument || null,
+      })
+    );
+  }, [documents, equipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
 
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
@@ -1033,49 +1059,7 @@ export default function ApprovalPage() {
       documentPayload.equipment_stage_key = selectedEquipmentStage;
     }
 
-    let { data: insertedDocument, error: documentError } = await supabase
-      .from("approval_documents")
-      .insert(documentPayload)
-      .select()
-      .single();
-
-    if (documentError && finalEquipmentOrderId && selectedEquipmentStage) {
-      const fallbackPayload = { ...documentPayload };
-      delete fallbackPayload.equipment_order_id;
-      delete fallbackPayload.equipment_stage_key;
-
-      const retryResult = await supabase
-        .from("approval_documents")
-        .insert(fallbackPayload)
-        .select()
-        .single();
-
-      insertedDocument = retryResult.data;
-      documentError = retryResult.error;
-    }
-
-    if (documentError || !insertedDocument) {
-      const detail = getErrorMessage(documentError);
-      setMessage(
-        `문서를 저장하지 못했습니다. ${detail || "Supabase 테이블과 권한을 확인해 주세요."}`
-      );
-      setSaving(false);
-      return;
-    }
-
-    const documentId = (insertedDocument as ApprovalDocumentRow).id;
-
-    if (finalEquipmentOrderId && selectedEquipmentStage) {
-      await supabase
-        .from("equipment_orders")
-        .update({
-          [equipmentDocumentColumnByStage[selectedEquipmentStage]]: documentId,
-        })
-        .eq("id", finalEquipmentOrderId);
-    }
-
     const linePayload = selectedApprovers.map((slot) => ({
-      document_id: documentId,
       step_order: slot.stepOrder,
       role_label: slot.roleLabel,
       approver_id: slot.profile?.id || "",
@@ -1084,41 +1068,52 @@ export default function ApprovalPage() {
       status: "pending",
     }));
 
-    const { error: lineError } = await supabase.from("approval_lines").insert(linePayload);
+    const referencePayload = selectedReferences.map((profile) => ({
+      user_id: profile.id,
+      reference_name: profile.name || "참조자",
+      reference_team: getDisplayTeam(profile) || profile.team || null,
+    }));
+    const notificationPayload = [
+      ...selectedApprovers.map((slot) => ({
+        user_id: slot.profile?.id || "",
+        message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 결재라인에 지정했습니다.`,
+      })),
+      ...selectedReferences.map((profile) => ({
+        user_id: profile.id,
+        message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 참조자로 지정했습니다.`,
+      })),
+    ];
 
-    if (lineError) {
+    const { data: documentId, error: submitError } = await supabase.rpc(
+      "submit_approval_document",
+      {
+        document_payload: documentPayload,
+        line_payload: linePayload,
+        reference_payload: referencePayload,
+        notification_payload: notificationPayload,
+      }
+    );
+
+    if (submitError || !documentId) {
+      const detail = getErrorMessage(submitError);
       setMessage(
-        `결재라인 저장에 실패했습니다. ${getErrorMessage(lineError) || "문서를 삭제하거나 다시 확인해 주세요."}`
+        `문서를 저장하지 못했습니다. ${detail || "project-docs/supabase-approval-submit-rpc.sql 실행 여부를 확인해 주세요."}`
       );
       setSaving(false);
       return;
     }
 
-    if (selectedReferences.length > 0) {
-      await supabase.from("approval_references").insert(
-        selectedReferences.map((profile) => ({
-          document_id: documentId,
-          user_id: profile.id,
-          reference_name: profile.name || "참조자",
-          reference_team: getDisplayTeam(profile) || profile.team || null,
-        }))
-      );
+    if (finalEquipmentOrderId && selectedEquipmentStage) {
+      await supabase
+        .from("equipment_orders")
+        .update({
+          [equipmentDocumentColumnByStage[selectedEquipmentStage]]: documentId,
+          ...(selectedEquipmentStage === "manufacturingRequest"
+            ? buildEquipmentOrderFromManufacturing(finalFormData, currentName)
+            : {}),
+        })
+        .eq("id", finalEquipmentOrderId);
     }
-
-    await supabase.from("approval_notifications").insert(
-      [
-        ...selectedApprovers.map((slot) => ({
-          user_id: slot.profile?.id || "",
-          document_id: documentId,
-          message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 결재라인에 지정했습니다.`,
-        })),
-        ...selectedReferences.map((profile) => ({
-          user_id: profile.id,
-          document_id: documentId,
-          message: `${currentName || "작성자"}님이 ${selectedTemplate.title} 참조자로 지정했습니다.`,
-        })),
-      ]
-    );
 
     setMessage("결재문서가 등록되었습니다.");
     setFormData(applyCurrentUserFields(createEmptyFormData(selectedTemplate), currentName, currentTeam, true));
@@ -1690,7 +1685,10 @@ export default function ApprovalPage() {
                       ...styles.documentButton,
                       ...(active ? styles.documentButtonActive : {}),
                     }}
-                    onClick={() => setSelectedDocumentId(document.id)}
+                    onClick={() => {
+                      setSelectedDocumentId(document.id);
+                      setDetailModalDocumentId(document.id);
+                    }}
                   >
                     <span style={styles.documentTopLine}>
                       <strong>{document.title}</strong>
@@ -1792,6 +1790,103 @@ export default function ApprovalPage() {
           )}
         </aside>
       </div>
+
+      {detailModalDocument && (
+        <div style={styles.modalOverlay} onClick={() => setDetailModalDocumentId(null)}>
+          <section
+            style={{
+              ...styles.modalPanel,
+              ...(isMobile ? styles.modalPanelMobile : {}),
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={styles.modalHeader}>
+              <div>
+                <span style={styles.templateCategory}>{detailModalDocument.template_title}</span>
+                <h3 style={styles.detailTitle}>{detailModalDocument.title}</h3>
+              </div>
+              <button
+                type="button"
+                style={styles.ghostButton}
+                onClick={() => setDetailModalDocumentId(null)}
+              >
+                닫기
+              </button>
+            </div>
+
+            <div style={styles.modalMetaGrid}>
+              <div>
+                <span>작성자</span>
+                <strong>{detailModalDocument.requester_name}</strong>
+              </div>
+              <div>
+                <span>작성일</span>
+                <strong>{formatDate(detailModalDocument.submitted_at)}</strong>
+              </div>
+              <div>
+                <span>상태</span>
+                <strong>{statusText(detailModalDocument.status)}</strong>
+              </div>
+            </div>
+
+            <div style={styles.lineStatusList}>
+              {(detailModalDocument.approval_lines || []).map((line) => (
+                <div key={line.id} style={styles.lineStatusItem}>
+                  <span>{line.role_label}</span>
+                  <strong>{line.approver_name}</strong>
+                  <em>{statusText(line.status)}</em>
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.documentFieldGrid}>
+              {(templateMap[detailModalDocument.template_key]?.fields || []).map((field) => (
+                <div
+                  key={field.key}
+                  style={{
+                    ...styles.documentFieldItem,
+                    ...(field.span === 2 ? styles.documentFieldItemWide : {}),
+                  }}
+                >
+                  <span>{field.label}</span>
+                  <strong>{formatDocumentValue(detailModalDocument.form_data[field.key])}</strong>
+                </div>
+              ))}
+            </div>
+
+            {(templateMap[detailModalDocument.template_key]?.tables || []).map((table) => {
+              const rows = getRows(detailModalDocument.form_data[table.key]);
+              if (rows.length === 0) return null;
+
+              return (
+                <div key={table.key} style={styles.documentTableBox}>
+                  <h4 style={styles.documentTableTitle}>{table.title}</h4>
+                  <div style={styles.documentTableWrap}>
+                    <table style={styles.documentTable}>
+                      <thead>
+                        <tr>
+                          {table.columns.map((column) => (
+                            <th key={column.key}>{column.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {table.columns.map((column) => (
+                              <td key={column.key}>{formatDocumentValue(row[column.key])}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        </div>
+      )}
     </section>
   );
 }
@@ -2364,6 +2459,81 @@ const styles: Record<string, CSSProperties> = {
     padding: "0 8px",
     fontSize: "11px",
     fontWeight: 800,
+  },
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 40,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(17, 24, 39, 0.42)",
+    padding: "24px",
+  },
+  modalPanel: {
+    width: "min(920px, 100%)",
+    maxHeight: "88vh",
+    overflowY: "auto",
+    borderRadius: "14px",
+    border: "1px solid #dfe3e8",
+    background: "#ffffff",
+    padding: "22px",
+    boxShadow: "0 24px 80px rgba(15, 23, 42, 0.18)",
+  },
+  modalPanelMobile: {
+    maxHeight: "92vh",
+    padding: "16px",
+  },
+  modalHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "14px",
+    marginBottom: "14px",
+  },
+  modalMetaGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "8px",
+    marginBottom: "12px",
+  },
+  documentFieldGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+    marginTop: "14px",
+  },
+  documentFieldItem: {
+    minHeight: "58px",
+    border: "1px solid #edf0f3",
+    borderRadius: "8px",
+    background: "#fbfcfd",
+    padding: "10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+  documentFieldItemWide: {
+    gridColumn: "1 / -1",
+  },
+  documentTableBox: {
+    marginTop: "14px",
+  },
+  documentTableTitle: {
+    margin: "0 0 8px",
+    color: "#111820",
+    fontSize: "13px",
+    fontWeight: 850,
+  },
+  documentTableWrap: {
+    overflowX: "auto",
+    border: "1px solid #edf0f3",
+    borderRadius: "8px",
+  },
+  documentTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "12px",
   },
   actionRow: {
     display: "flex",
