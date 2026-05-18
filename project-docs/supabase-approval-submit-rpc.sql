@@ -14,6 +14,8 @@ as $$
 declare
   requester uuid;
   new_document_id bigint;
+  linked_order_id bigint;
+  linked_stage_key text;
 begin
   requester := auth.uid();
 
@@ -48,6 +50,23 @@ begin
     nullif(document_payload->>'equipment_stage_key', '')
   )
   returning id into new_document_id;
+
+  linked_order_id := nullif(document_payload->>'equipment_order_id', '')::bigint;
+  linked_stage_key := nullif(document_payload->>'equipment_stage_key', '');
+
+  if linked_order_id is not null and linked_stage_key = 'manufacturingRequest' then
+    update public.equipment_orders
+    set manufacturing_document_id = new_document_id
+    where id = linked_order_id;
+  elsif linked_order_id is not null and linked_stage_key = 'purchaseRequest' then
+    update public.equipment_orders
+    set purchase_document_id = new_document_id
+    where id = linked_order_id;
+  elsif linked_order_id is not null and linked_stage_key = 'qa' then
+    update public.equipment_orders
+    set qa_document_id = new_document_id
+    where id = linked_order_id;
+  end if;
 
   insert into public.approval_lines (
     document_id,
@@ -111,5 +130,26 @@ end;
 $$;
 
 grant execute on function public.submit_approval_document(jsonb, jsonb, jsonb, jsonb) to authenticated;
+
+update public.equipment_orders eo
+set manufacturing_document_id = d.id
+from public.approval_documents d
+where eo.id = coalesce(d.equipment_order_id, nullif(d.form_data->>'_equipmentOrderId', '')::bigint)
+  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'manufacturingRequest'
+  and eo.manufacturing_document_id is distinct from d.id;
+
+update public.equipment_orders eo
+set purchase_document_id = d.id
+from public.approval_documents d
+where eo.id = coalesce(d.equipment_order_id, nullif(d.form_data->>'_equipmentOrderId', '')::bigint)
+  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'purchaseRequest'
+  and eo.purchase_document_id is distinct from d.id;
+
+update public.equipment_orders eo
+set qa_document_id = d.id
+from public.approval_documents d
+where eo.id = coalesce(d.equipment_order_id, nullif(d.form_data->>'_equipmentOrderId', '')::bigint)
+  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'qa'
+  and eo.qa_document_id is distinct from d.id;
 
 commit;

@@ -314,6 +314,7 @@ export default function MainPage() {
   const [ordersError, setOrdersError] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
+  const [hoveredStageKey, setHoveredStageKey] = useState("");
 
   const canManageOrders = useMemo(
     () => canManageProductionOrders(name, role),
@@ -578,6 +579,8 @@ export default function MainPage() {
                               value,
                               getStageDocumentId(order, stage)
                             );
+                            const tooltip = getStageTooltip(order, stage, approvalDocumentsById);
+                            const stageHoverKey = `${order.id}-${stage.key}`;
 
                             return (
                               <div key={stage.key} style={styles.stageMobileCell}>
@@ -597,15 +600,26 @@ export default function MainPage() {
                                   />
                                 ) : (
                                   <span
-                                    title={getStageTooltip(order, stage, approvalDocumentsById)}
-                                    style={{
-                                      ...styles.stageChip,
-                                      ...styles.stageChipMobile,
-                                      ...stageTone[status],
-                                    }}
+                                    style={styles.stageTooltipWrap}
+                                    onMouseEnter={() => setHoveredStageKey(stageHoverKey)}
+                                    onMouseLeave={() => setHoveredStageKey("")}
+                                    onFocus={() => setHoveredStageKey(stageHoverKey)}
+                                    onBlur={() => setHoveredStageKey("")}
                                   >
-                                    <span>{getStageText(status)}</span>
-                                    <strong>{formatShortDate(value) || "-"}</strong>
+                                    <span
+                                      title={tooltip}
+                                      style={{
+                                        ...styles.stageChip,
+                                        ...styles.stageChipMobile,
+                                        ...stageTone[status],
+                                      }}
+                                    >
+                                      <span>{getStageText(status)}</span>
+                                      <strong>{formatShortDate(value) || "-"}</strong>
+                                    </span>
+                                    {hoveredStageKey === stageHoverKey && (
+                                      <span style={styles.stageTooltip}>{tooltip}</span>
+                                    )}
                                   </span>
                                 )}
                               </div>
@@ -669,6 +683,8 @@ export default function MainPage() {
                                 value,
                                 getStageDocumentId(order, stage)
                               );
+                              const tooltip = getStageTooltip(order, stage, approvalDocumentsById);
+                              const stageHoverKey = `${order.id}-${stage.key}`;
 
                               return (
                                 <td key={stage.key} style={styles.stageTd}>
@@ -687,14 +703,25 @@ export default function MainPage() {
                                     />
                                   ) : (
                                     <span
-                                      title={getStageTooltip(order, stage, approvalDocumentsById)}
-                                      style={{
-                                        ...styles.stageChip,
-                                        ...stageTone[status],
-                                      }}
+                                      style={styles.stageTooltipWrap}
+                                      onMouseEnter={() => setHoveredStageKey(stageHoverKey)}
+                                      onMouseLeave={() => setHoveredStageKey("")}
+                                      onFocus={() => setHoveredStageKey(stageHoverKey)}
+                                      onBlur={() => setHoveredStageKey("")}
                                     >
-                                      <span>{getStageText(status)}</span>
-                                      <strong>{formatShortDate(value) || "-"}</strong>
+                                      <span
+                                        title={tooltip}
+                                        style={{
+                                          ...styles.stageChip,
+                                          ...stageTone[status],
+                                        }}
+                                      >
+                                        <span>{getStageText(status)}</span>
+                                        <strong>{formatShortDate(value) || "-"}</strong>
+                                      </span>
+                                      {hoveredStageKey === stageHoverKey && (
+                                        <span style={styles.stageTooltip}>{tooltip}</span>
+                                      )}
                                     </span>
                                   )}
                                 </td>
@@ -965,6 +992,7 @@ const styles: Record<string, CSSProperties> = {
     marginTop: "10px",
   },
   stageMobileCell: {
+    position: "relative",
     minWidth: 0,
     border: "1px solid #edf0f3",
     borderRadius: "8px",
@@ -1082,6 +1110,31 @@ const styles: Record<string, CSSProperties> = {
     padding: "4px 7px",
     fontSize: "11px",
     lineHeight: 1.05,
+  },
+  stageTooltipWrap: {
+    position: "relative",
+    display: "inline-flex",
+    justifyContent: "center",
+  },
+  stageTooltip: {
+    position: "absolute",
+    left: "50%",
+    bottom: "calc(100% + 8px)",
+    zIndex: 20,
+    width: "220px",
+    transform: "translateX(-50%)",
+    border: "1px solid #cfd6df",
+    borderRadius: "8px",
+    background: "#111820",
+    color: "#ffffff",
+    padding: "8px 10px",
+    fontSize: "11px",
+    fontWeight: 700,
+    lineHeight: 1.45,
+    whiteSpace: "normal",
+    textAlign: "left",
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+    pointerEvents: "none",
   },
   stageDateInput: {
     width: "118px",
