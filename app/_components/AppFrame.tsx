@@ -50,6 +50,15 @@ type ApprovalDocumentRow = {
   approval_lines?: ApprovalLineRow[];
 };
 
+type AsWorkOrderAlertRow = {
+  id: number;
+  wo_no: string;
+  customer: string | null;
+  model: string | null;
+  title: string;
+  status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+};
+
 const MENU_ITEMS: MenuItem[] = [
   { title: "결재문서", path: "/approval", icon: "approval", description: "상신 · 결재 · 문서함" },
   { title: "업무일지", path: "/view", icon: "worklog", description: "팀 업무 조회" },
@@ -88,6 +97,8 @@ const SUBMENU_BY_PATH: Record<string, string[]> = {
   "/organization": ["조직 현황", "부서 구성"],
   "/change-password": ["계정 정보", "비밀번호 변경"],
 };
+
+const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
 
 function iconPath(name: IconName) {
   switch (name) {
@@ -150,6 +161,7 @@ export function AppFrame({ children }: AppFrameProps) {
   const [role, setRole] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
+  const [asWorkOrderAlerts, setAsWorkOrderAlerts] = useState<AsWorkOrderAlertRow[]>([]);
   const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
@@ -168,6 +180,8 @@ export function AppFrame({ children }: AppFrameProps) {
     });
   }, [approvalDocuments, currentUserId, name]);
 
+  const alertCount = approvalAlerts.length + asWorkOrderAlerts.length;
+
   const loadApprovalAlerts = useCallback(async () => {
     const { data, error } = await supabase
       .from("approval_documents")
@@ -176,6 +190,27 @@ export function AppFrame({ children }: AppFrameProps) {
 
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
+    }
+  }, []);
+
+  const loadAsWorkOrderAlerts = useCallback(async (storedName: string, storedTeam: string) => {
+    const orgTeam = getCurrentOrgTeam(storedName, storedTeam);
+    const shouldReceiveAsAlerts =
+      orgTeam === "기술 1팀" || TECH_1_MEMBERS.includes(storedName);
+
+    if (!shouldReceiveAsAlerts) {
+      setAsWorkOrderAlerts([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("as_work_orders")
+      .select("id,wo_no,customer,model,title,status")
+      .in("status", ["OPEN", "IN_PROGRESS"])
+      .order("updated_at", { ascending: false });
+
+    if (!error && data) {
+      setAsWorkOrderAlerts(data as AsWorkOrderAlertRow[]);
     }
   }, []);
 
@@ -189,8 +224,9 @@ export function AppFrame({ children }: AppFrameProps) {
       setRole(localStorage.getItem("role") || "");
       void supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || ""));
       void loadApprovalAlerts();
+      void loadAsWorkOrderAlerts(storedName, storedTeam);
     });
-  }, [loadApprovalAlerts, pathname]);
+  }, [loadApprovalAlerts, loadAsWorkOrderAlerts, pathname]);
 
   if (pathname === "/login") {
     return children;
@@ -302,15 +338,15 @@ export function AppFrame({ children }: AppFrameProps) {
               type="button"
               style={{
                 ...styles.alertButton,
-                ...(approvalAlerts.length > 0 ? styles.alertButtonActive : {}),
+                ...(alertCount > 0 ? styles.alertButtonActive : {}),
               }}
               onClick={() => setApprovalAlertOpen(true)}
-              aria-label="결재 알림"
-              title="결재 알림"
+              aria-label="업무 알림"
+              title="업무 알림"
             >
               <span style={styles.alertMark}>!</span>
-              {approvalAlerts.length > 0 && (
-                <span style={styles.alertCount}>{approvalAlerts.length}</span>
+              {alertCount > 0 && (
+                <span style={styles.alertCount}>{alertCount}</span>
               )}
             </button>
             {UTILITY_ITEMS.map((item) => (
@@ -383,8 +419,8 @@ export function AppFrame({ children }: AppFrameProps) {
           <section style={styles.alertModal} onClick={(event) => event.stopPropagation()}>
             <div style={styles.alertModalHeader}>
               <div>
-                <span style={styles.alertKicker}>결재 알림</span>
-                <h2 style={styles.alertTitle}>확인할 결재 문서가 있습니다.</h2>
+                <span style={styles.alertKicker}>업무 알림</span>
+                <h2 style={styles.alertTitle}>확인할 업무 알림이 있습니다.</h2>
               </div>
               <button
                 type="button"
@@ -396,28 +432,43 @@ export function AppFrame({ children }: AppFrameProps) {
             </div>
 
             <div style={styles.alertList}>
-              {approvalAlerts.length === 0 ? (
-                <div style={styles.alertEmpty}>현재 확인할 결재 알림이 없습니다.</div>
+              {alertCount === 0 ? (
+                <div style={styles.alertEmpty}>현재 확인할 업무 알림이 없습니다.</div>
               ) : (
-                approvalAlerts.map((document) => {
-                  const pendingLine = getFirstPendingLine(document);
+                <>
+                  {approvalAlerts.map((document) => {
+                    const pendingLine = getFirstPendingLine(document);
 
-                  return (
+                    return (
+                      <button
+                        key={`approval-${document.id}`}
+                        type="button"
+                        style={styles.alertItem}
+                        onClick={() => navigateTo("/approval")}
+                      >
+                        <strong>{document.title}</strong>
+                        <span>
+                          {pendingLine
+                            ? `${pendingLine.role_label} / ${pendingLine.approver_name} 결재 대기`
+                            : "참조 문서 확인"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {asWorkOrderAlerts.map((order) => (
                     <button
-                      key={document.id}
+                      key={`as-${order.id}`}
                       type="button"
                       style={styles.alertItem}
-                      onClick={() => navigateTo("/approval")}
+                      onClick={() => navigateTo("/as")}
                     >
-                      <strong>{document.title}</strong>
+                      <strong>{order.wo_no} / {order.customer || "업체 미입력"}</strong>
                       <span>
-                        {pendingLine
-                          ? `${pendingLine.role_label} / ${pendingLine.approver_name} 결재 대기`
-                          : "참조 문서 확인"}
+                        A/S 작업지시 확인 필요 · {order.model || order.title}
                       </span>
                     </button>
-                  );
-                })
+                  ))}
+                </>
               )}
             </div>
           </section>

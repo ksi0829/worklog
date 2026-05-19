@@ -322,22 +322,13 @@ export default function MainPage() {
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
-  const [approvalDocumentsLoaded, setApprovalDocumentsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
   const [hoveredStageKey, setHoveredStageKey] = useState("");
 
   const visibleOrders = useMemo(() => {
-    if (!approvalDocumentsLoaded) return orders;
-
-    const existingDocumentIds = new Set(approvalDocuments.map((document) => document.id));
-
-    return orders.filter(
-      (order) =>
-        Boolean(order.manufacturing_document_id) &&
-        existingDocumentIds.has(order.manufacturing_document_id as number)
-    );
-  }, [approvalDocuments, approvalDocumentsLoaded, orders]);
+    return orders.filter((order) => Boolean(order.manufacturing_document_id));
+  }, [orders]);
 
   const activeOrderCount = useMemo(
     () => visibleOrders.filter((order) => getOrderProgress(order) < 100).length,
@@ -423,7 +414,6 @@ export default function MainPage() {
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
     }
-    setApprovalDocumentsLoaded(true);
   }, []);
 
   useEffect(() => {

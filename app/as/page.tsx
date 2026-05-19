@@ -8,6 +8,7 @@ import {
   exportDateStamp,
   exportExcelWorkbook,
 } from "@/app/_lib/excelExport";
+import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/as/styles";
 
@@ -28,6 +29,8 @@ type WorkOrder = {
   id: number;
   woNo: string;
   customer: string;
+  contactName: string;
+  contactPhone: string;
   model: string;
   title: string;
   description: string;
@@ -42,6 +45,8 @@ type WorkOrder = {
 type WorkOrderForm = {
   woNo: string;
   customer: string;
+  contactName: string;
+  contactPhone: string;
   model: string;
   title: string;
   description: string;
@@ -58,6 +63,8 @@ type WorkOrderRow = {
   id: number;
   wo_no: string;
   customer: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
   model: string | null;
   title: string;
   description: string | null;
@@ -83,12 +90,21 @@ type CustomerOption = {
   name: string;
 };
 
+type CustomerContactOption = {
+  id: number;
+  customer_id: number;
+  name: string;
+  phone: string | null;
+};
+
 const todayLabel = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
 
 const emptyOrderForm: WorkOrderForm = {
   woNo: "",
   customer: "",
+  contactName: "",
+  contactPhone: "",
   model: "",
   title: "",
   description: "",
@@ -112,6 +128,18 @@ const statusLabel: Record<Status, string> = {
   IN_PROGRESS: "처리중",
   CLOSED: "완료",
 };
+
+const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
+const TEAM_LEAD_NAMES = [
+  "서중석",
+  "한차현",
+  "이승준",
+  "장동철",
+  "권현진",
+  "김혜정",
+  "정대용",
+  "이양로",
+];
 
 function createAsSummarySheet(orders: WorkOrder[]): ExcelSheet {
   return {
@@ -188,6 +216,7 @@ export default function AsPage() {
   const [orderForm, setOrderForm] = useState<WorkOrderForm>(emptyOrderForm);
   const [logForm, setLogForm] = useState<LogForm>(emptyLogForm);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
+  const [contactOptions, setContactOptions] = useState<CustomerContactOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -225,14 +254,33 @@ export default function AsPage() {
 
   const currentName =
     typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
-  const currentTeam =
+  const storedTeam =
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
+  const currentTeam = getCurrentOrgTeam(currentName, storedTeam);
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
   const isAdmin = currentRole === "admin";
-  const canManageSelectedOrder = Boolean(
+  const isLeadOrAbove =
+    isAdmin ||
+    currentRole === "lead" ||
+    currentRole === "executive" ||
+    TEAM_LEAD_NAMES.includes(currentName);
+  const isSalesTeam = currentTeam === "국내영업" || currentTeam === "해외영업";
+  const isTech1Member = currentTeam === "기술 1팀" || TECH_1_MEMBERS.includes(currentName);
+  const canCreateWorkOrder = isLeadOrAbove || isSalesTeam;
+  const canDeleteSelectedOrder = Boolean(
     selectedOrder && (isAdmin || selectedOrder.createdBy === currentUserId)
   );
+  const canHandleSelectedOrder = Boolean(
+    selectedOrder && selectedOrder.status !== "CLOSED" && (isAdmin || isTech1Member)
+  );
+  const selectedCustomerOption = customerOptions.find(
+    (customer) => customer.name === orderForm.customer
+  );
+  const filteredContactOptions = contactOptions.filter((contact) => {
+    if (!selectedCustomerOption) return true;
+    return contact.customer_id === selectedCustomerOption.id;
+  });
 
   async function loadOrders() {
     setLoading(true);
@@ -245,7 +293,7 @@ export default function AsPage() {
 
     const { data: orderRows, error: orderError } = await supabase
       .from("as_work_orders")
-      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at,created_by")
+      .select("id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by")
       .order("updated_at", { ascending: false });
 
     if (orderError) {
@@ -270,6 +318,11 @@ export default function AsPage() {
       .select("id,name")
       .order("name", { ascending: true });
 
+    const { data: contactRows } = await supabase
+      .from("customer_contacts")
+      .select("id,customer_id,name,phone")
+      .order("name", { ascending: true });
+
     const logsByOrder = new Map<number, ServiceLog[]>();
     ((logRows || []) as ServiceLogRow[]).forEach((log) => {
       const nextLog: ServiceLog = {
@@ -290,6 +343,8 @@ export default function AsPage() {
       id: order.id,
       woNo: order.wo_no,
       customer: order.customer || "",
+      contactName: order.contact_name || "",
+      contactPhone: order.contact_phone || "",
       model: order.model || "",
       title: order.title,
       description: order.description || "",
@@ -303,6 +358,7 @@ export default function AsPage() {
 
     setOrders(mappedOrders);
     setCustomerOptions((customerRows || []) as CustomerOption[]);
+    setContactOptions((contactRows || []) as CustomerContactOption[]);
     setSelectedId((current) => {
       if (current && mappedOrders.some((order) => order.id === current)) {
         return current;
@@ -323,13 +379,39 @@ export default function AsPage() {
     setOrderForm((current) => ({ ...current, [key]: value }));
   }
 
+  function handleCustomerChange(value: string) {
+    setOrderForm((current) => ({
+      ...current,
+      customer: value,
+      contactName: "",
+      contactPhone: "",
+    }));
+  }
+
+  function handleContactNameChange(value: string) {
+    const matchedContact = filteredContactOptions.find((contact) => contact.name === value);
+
+    setOrderForm((current) => ({
+      ...current,
+      contactName: value,
+      contactPhone: matchedContact?.phone || current.contactPhone,
+    }));
+  }
+
   function updateLog<K extends keyof LogForm>(key: K, value: LogForm[K]) {
     setLogForm((current) => ({ ...current, [key]: value }));
   }
 
   async function addWorkOrder() {
+    if (!canCreateWorkOrder) {
+      alert("A/S 작업지시는 각 팀장급 이상 또는 영업팀만 등록할 수 있습니다.");
+      return;
+    }
+
     const woNo = orderForm.woNo.trim();
     const customer = orderForm.customer.trim();
+    const contactName = orderForm.contactName.trim();
+    const contactPhone = orderForm.contactPhone.trim();
     const model = orderForm.model.trim();
     const title = orderForm.title.trim();
 
@@ -343,13 +425,15 @@ export default function AsPage() {
       .insert({
         wo_no: woNo,
         customer,
+        contact_name: contactName,
+        contact_phone: contactPhone,
         model,
         title,
         description: orderForm.description.trim(),
         priority: orderForm.priority,
         status: "OPEN",
       })
-      .select("id,wo_no,customer,model,title,description,priority,status,created_at,updated_at,created_by")
+      .select("id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by")
       .single();
 
     if (error || !data) {
@@ -362,6 +446,8 @@ export default function AsPage() {
       id: row.id,
       woNo: row.wo_no,
       customer: row.customer || "",
+      contactName: row.contact_name || "",
+      contactPhone: row.contact_phone || "",
       model: row.model || "",
       title: row.title,
       description: row.description || "",
@@ -381,8 +467,8 @@ export default function AsPage() {
 
   async function addServiceLog() {
     if (!selectedOrder) return;
-    if (!canManageSelectedOrder) {
-      alert("작성자 또는 관리자만 처리내역을 추가할 수 있습니다.");
+    if (!canHandleSelectedOrder) {
+      alert("처리내역은 기술 1팀 또는 관리자만 추가할 수 있습니다.");
       return;
     }
 
@@ -450,8 +536,8 @@ export default function AsPage() {
 
   async function closeOrder() {
     if (!selectedOrder) return;
-    if (!canManageSelectedOrder) {
-      alert("작성자 또는 관리자만 완료 처리할 수 있습니다.");
+    if (!canHandleSelectedOrder) {
+      alert("완료 처리는 기술 1팀 또는 관리자만 할 수 있습니다.");
       return;
     }
     if (!confirm("선택한 작업지시를 완료 처리할까요?")) return;
@@ -478,7 +564,7 @@ export default function AsPage() {
 
   async function deleteOrder() {
     if (!selectedOrder) return;
-    if (!canManageSelectedOrder) {
+    if (!canDeleteSelectedOrder) {
       alert("작성자 또는 관리자만 삭제할 수 있습니다.");
       return;
     }
@@ -575,9 +661,28 @@ export default function AsPage() {
               <Field label="업체명">
                 <input
                   value={orderForm.customer}
-                  onChange={(event) => updateOrder("customer", event.target.value)}
+                  onChange={(event) => handleCustomerChange(event.target.value)}
                   placeholder="업체명 입력"
                   list="as-customer-options"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="담당자">
+                <input
+                  value={orderForm.contactName}
+                  onChange={(event) => handleContactNameChange(event.target.value)}
+                  placeholder="담당자명"
+                  list="as-contact-options"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="연락처">
+                <input
+                  value={orderForm.contactPhone}
+                  onChange={(event) => updateOrder("contactPhone", event.target.value)}
+                  placeholder="휴대폰 또는 내선"
                   style={styles.input}
                 />
               </Field>
@@ -611,6 +716,15 @@ export default function AsPage() {
                 <option key={customer.id} value={customer.name} />
               ))}
             </datalist>
+            <datalist id="as-contact-options">
+              {filteredContactOptions.map((contact) => (
+                <option
+                  key={contact.id}
+                  value={contact.name}
+                  label={contact.phone || undefined}
+                />
+              ))}
+            </datalist>
 
             <Field label="제목">
               <input
@@ -630,7 +744,21 @@ export default function AsPage() {
               />
             </Field>
 
-            <button style={styles.primaryButton} onClick={addWorkOrder}>
+            {!canCreateWorkOrder && (
+              <div style={styles.empty}>
+                A/S 작업지시는 각 팀장급 이상 또는 영업팀만 등록할 수 있습니다.
+              </div>
+            )}
+
+            <button
+              style={{
+                ...styles.primaryButton,
+                opacity: canCreateWorkOrder ? 1 : 0.45,
+                cursor: canCreateWorkOrder ? "pointer" : "not-allowed",
+              }}
+              onClick={addWorkOrder}
+              disabled={!canCreateWorkOrder}
+            >
               작업지시 등록
             </button>
           </div>
@@ -710,18 +838,24 @@ export default function AsPage() {
                   <div style={styles.detailMeta}>
                     {selectedOrder.woNo} / {selectedOrder.customer} / {selectedOrder.model}
                   </div>
+                  {(selectedOrder.contactName || selectedOrder.contactPhone) && (
+                    <div style={styles.detailMeta}>
+                      담당자 {selectedOrder.contactName || "-"} / 연락처{" "}
+                      {selectedOrder.contactPhone || "-"}
+                    </div>
+                  )}
                   <h2 style={styles.detailTitle}>{selectedOrder.title}</h2>
                 </div>
 
                 <div style={styles.detailActions}>
                   <PriorityBadge priority={selectedOrder.priority} />
                   <StatusBadge status={selectedOrder.status} />
-                  {selectedOrder.status !== "CLOSED" && canManageSelectedOrder && (
+                  {canHandleSelectedOrder && (
                     <button style={styles.ghostButton} onClick={closeOrder}>
                       완료 처리
                     </button>
                   )}
-                  {canManageSelectedOrder && (
+                  {canDeleteSelectedOrder && (
                     <button style={styles.dangerButton} onClick={deleteOrder}>
                       삭제
                     </button>
@@ -733,7 +867,7 @@ export default function AsPage() {
                 <div style={styles.description}>{selectedOrder.description}</div>
               )}
 
-              {selectedOrder.status !== "CLOSED" && canManageSelectedOrder && (
+              {canHandleSelectedOrder && (
                 <div style={styles.logForm}>
                   <Field label="조치 내용">
                     <input

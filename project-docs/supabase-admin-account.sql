@@ -30,7 +30,6 @@ begin
       email,
       encrypted_password,
       email_confirmed_at,
-      confirmed_at,
       raw_app_meta_data,
       raw_user_meta_data,
       created_at,
@@ -44,7 +43,6 @@ begin
       admin_email,
       crypt(admin_password, gen_salt('bf')),
       now(),
-      now(),
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{}'::jsonb,
       now(),
@@ -54,36 +52,38 @@ begin
     update auth.users
     set encrypted_password = crypt(admin_password, gen_salt('bf')),
         email_confirmed_at = coalesce(email_confirmed_at, now()),
-        confirmed_at = coalesce(confirmed_at, now()),
         updated_at = now()
     where id = admin_user_id;
   end if;
 
   if to_regclass('auth.identities') is not null then
-    insert into auth.identities (
-      id,
-      user_id,
-      provider_id,
-      identity_data,
-      provider,
-      last_sign_in_at,
-      created_at,
-      updated_at
-    )
-    values (
-      gen_random_uuid(),
-      admin_user_id,
-      admin_email,
-      jsonb_build_object('sub', admin_user_id::text, 'email', admin_email),
-      'email',
-      now(),
-      now(),
-      now()
-    )
-    on conflict (provider, provider_id) do update
-    set user_id = excluded.user_id,
-        identity_data = excluded.identity_data,
-        updated_at = now();
+    begin
+      insert into auth.identities (
+        user_id,
+        provider_id,
+        identity_data,
+        provider,
+        last_sign_in_at,
+        created_at,
+        updated_at
+      )
+      values (
+        admin_user_id,
+        admin_user_id::text,
+        jsonb_build_object('sub', admin_user_id::text, 'email', admin_email),
+        'email',
+        now(),
+        now(),
+        now()
+      )
+      on conflict (provider, provider_id) do update
+      set user_id = excluded.user_id,
+          identity_data = excluded.identity_data,
+          updated_at = now();
+    exception
+      when others then
+        raise notice 'auth.identities upsert skipped: %', sqlerrm;
+    end;
   end if;
 
   insert into public.profiles (
