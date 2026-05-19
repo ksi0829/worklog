@@ -1248,10 +1248,17 @@ export default function ApprovalPage() {
       .from("approval_lines")
       .delete()
       .eq("document_id", selectedDocument.id);
-    await supabase
-      .from("equipment_orders")
-      .update({ manufacturing_document_id: null, manufacturing_request_approved_on: null })
-      .eq("manufacturing_document_id", selectedDocument.id);
+    if (selectedDocument.template_key === "manufacturing_request") {
+      await supabase
+        .from("equipment_orders")
+        .delete()
+        .eq("manufacturing_document_id", selectedDocument.id);
+    } else {
+      await supabase
+        .from("equipment_orders")
+        .update({ manufacturing_document_id: null, manufacturing_request_approved_on: null })
+        .eq("manufacturing_document_id", selectedDocument.id);
+    }
     await supabase
       .from("equipment_orders")
       .update({ purchase_document_id: null, purchase_request_approved_on: null })
@@ -1391,7 +1398,7 @@ export default function ApprovalPage() {
                     ...(isMobile ? styles.templateRowMobile : {}),
                   }}
                 >
-                  {row.map((template) => {
+                  {row.map((template, templateIndex) => {
                     const active = template.key === selectedTemplate.key;
 
                     return (
@@ -1401,6 +1408,9 @@ export default function ApprovalPage() {
                         style={{
                           ...styles.templateButton,
                           ...(isMobile ? styles.templateButtonMobile : {}),
+                          ...(templateIndex === manufacturingTemplateKeys.length - 1
+                            ? styles.templateGroupBreak
+                            : {}),
                           ...(active ? styles.templateButtonActive : {}),
                         }}
                         onClick={() => changeTemplate(template.key)}
@@ -2123,6 +2133,9 @@ const styles: Record<string, CSSProperties> = {
     minHeight: "50px",
     padding: "8px 10px",
     fontSize: "12px",
+  },
+  templateGroupBreak: {
+    marginRight: "18px",
   },
   templateButtonActive: {
     borderColor: "#0f8a56",

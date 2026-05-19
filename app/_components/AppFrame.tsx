@@ -50,11 +50,6 @@ type ApprovalDocumentRow = {
   approval_lines?: ApprovalLineRow[];
 };
 
-type ApprovalReferenceInfo = {
-  id?: string;
-  name?: string;
-};
-
 const MENU_ITEMS: MenuItem[] = [
   { title: "결재문서", path: "/approval", icon: "approval", description: "상신 · 결재 · 문서함" },
   { title: "업무일지", path: "/view", icon: "worklog", description: "팀 업무 조회" },
@@ -142,12 +137,6 @@ function getFirstPendingLine(document?: ApprovalDocumentRow | null) {
     .find((line) => line.status === "pending") || null;
 }
 
-function getReferenceInfos(document?: ApprovalDocumentRow | null): ApprovalReferenceInfo[] {
-  const value = document?.form_data?._references;
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is ApprovalReferenceInfo => Boolean(item) && typeof item === "object");
-}
-
 function samePerson(left?: string | null, right?: string | null) {
   return Boolean(left && right && left === right);
 }
@@ -162,6 +151,7 @@ export function AppFrame({ children }: AppFrameProps) {
   const [currentUserId, setCurrentUserId] = useState("");
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
@@ -171,21 +161,17 @@ export function AppFrame({ children }: AppFrameProps) {
     return approvalDocuments.filter((document) => {
       if (document.status !== "pending") return false;
       const pendingLine = getFirstPendingLine(document);
-      const isMyTurn =
+      return (
         samePerson(pendingLine?.approver_name, name) ||
-        samePerson(pendingLine?.approver_id, currentUserId);
-      const isMyReference = getReferenceInfos(document).some(
-        (reference) => samePerson(reference.name, name) || samePerson(reference.id, currentUserId)
+        samePerson(pendingLine?.approver_id, currentUserId)
       );
-
-      return isMyTurn || isMyReference;
     });
   }, [approvalDocuments, currentUserId, name]);
 
   const loadApprovalAlerts = useCallback(async () => {
     const { data, error } = await supabase
       .from("approval_documents")
-      .select("id,title,status,form_data,approval_lines(id,step_order,role_label,approver_id,approver_name,status)")
+      .select("id,title,status,approval_lines(id,step_order,role_label,approver_id,approver_name,status)")
       .eq("status", "pending");
 
     if (!error && data) {
@@ -227,6 +213,12 @@ export function AppFrame({ children }: AppFrameProps) {
     router.push("/");
   }
 
+  function navigateTo(path: string) {
+    setMobileMenuOpen(false);
+    setApprovalAlertOpen(false);
+    router.push(path);
+  }
+
   return (
     <div style={styles.frame}>
       <aside className="app-icon-rail" style={styles.iconRail}>
@@ -252,7 +244,7 @@ export function AppFrame({ children }: AppFrameProps) {
                   ...styles.iconNavItem,
                   ...(active ? styles.iconNavItemActive : {}),
                 }}
-                onClick={() => router.push(item.path)}
+                onClick={() => navigateTo(item.path)}
               >
                 <NavIcon name={item.icon} />
                 <span>{item.title}</span>
@@ -265,7 +257,20 @@ export function AppFrame({ children }: AppFrameProps) {
       <section style={styles.workspace}>
         <header className="app-topbar" style={styles.topbar}>
           <div>
-            <h1 style={styles.title}>{title}</h1>
+            <div style={styles.mobileTitleRow}>
+              <button
+                type="button"
+                className="app-mobile-menu-button"
+                style={styles.mobileMenuButton}
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="메뉴 열기"
+              >
+                <span />
+                <span />
+                <span />
+              </button>
+              <h1 style={styles.title}>{title}</h1>
+            </div>
             {mobileInputNotice && (
               <div style={styles.mobileNotice}>
                 모바일 환경에서는 업무일지 작성이 제한됩니다. PC에서 작성해 주세요.
@@ -282,7 +287,7 @@ export function AppFrame({ children }: AppFrameProps) {
             <button
               type="button"
               style={styles.topbarIdentity}
-              onClick={() => router.push("/main")}
+              onClick={() => navigateTo("/main")}
               aria-label="메인으로 이동"
             >
               <img src="/brand/zeta-logo.png" alt="ZETA" style={styles.topbarLogo} />
@@ -313,7 +318,7 @@ export function AppFrame({ children }: AppFrameProps) {
                 key={item.path}
                 type="button"
                 style={styles.actionButton}
-                onClick={() => router.push(item.path)}
+                onClick={() => navigateTo(item.path)}
               >
                 {item.title}
               </button>
@@ -323,6 +328,50 @@ export function AppFrame({ children }: AppFrameProps) {
             </button>
           </div>
         </header>
+
+        {mobileMenuOpen && (
+          <div
+            className="app-mobile-menu-backdrop"
+            style={styles.mobileMenuBackdrop}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <aside
+              style={styles.mobileDrawer}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div style={styles.mobileDrawerHeader}>
+                <strong>메뉴</strong>
+                <button
+                  type="button"
+                  style={styles.mobileDrawerClose}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  닫기
+                </button>
+              </div>
+              <nav style={styles.mobileDrawerNav}>
+                {menuItems.map((item) => {
+                  const active = pathname === item.path || (pathname === "/" && item.path === "/view");
+
+                  return (
+                    <button
+                      key={item.path}
+                      type="button"
+                      style={{
+                        ...styles.mobileDrawerItem,
+                        ...(active ? styles.mobileDrawerItemActive : {}),
+                      }}
+                      onClick={() => navigateTo(item.path)}
+                    >
+                      <NavIcon name={item.icon} />
+                      <span>{item.title}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+          </div>
+        )}
 
         <main className="app-shell-content" style={styles.content}>
           {children}
@@ -358,7 +407,7 @@ export function AppFrame({ children }: AppFrameProps) {
                       key={document.id}
                       type="button"
                       style={styles.alertItem}
-                      onClick={() => router.push("/approval")}
+                      onClick={() => navigateTo("/approval")}
                     >
                       <strong>{document.title}</strong>
                       <span>
@@ -578,6 +627,79 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "22px",
     fontWeight: 850,
     lineHeight: 1.2,
+  },
+  mobileTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  mobileMenuButton: {
+    width: "40px",
+    height: "38px",
+    display: "none",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "4px",
+    border: "1px solid #cfd6df",
+    borderRadius: "10px",
+    background: "#ffffff",
+    cursor: "pointer",
+  },
+  mobileMenuBackdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 70,
+    background: "rgba(15, 23, 42, 0.32)",
+  },
+  mobileDrawer: {
+    width: "min(280px, 82vw)",
+    minHeight: "100dvh",
+    background: "#ffffff",
+    borderRight: "1px solid #e1e5ea",
+    padding: "16px",
+    boxShadow: "16px 0 48px rgba(15, 23, 42, 0.18)",
+  },
+  mobileDrawerHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "14px",
+  },
+  mobileDrawerClose: {
+    height: "32px",
+    padding: "0 10px",
+    border: "1px solid #cfd6df",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  mobileDrawerNav: {
+    display: "grid",
+    gap: "7px",
+  },
+  mobileDrawerItem: {
+    width: "100%",
+    minHeight: "46px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
+    color: "#344054",
+    padding: "0 12px",
+    fontSize: "13px",
+    fontWeight: 850,
+    cursor: "pointer",
+  },
+  mobileDrawerItemActive: {
+    background: "#eef6f1",
+    borderColor: "#d7eee0",
+    color: "#0f8a56",
   },
   mobileNotice: {
     marginTop: "7px",

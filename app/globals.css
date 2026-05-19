@@ -88,26 +88,19 @@ textarea {
   }
 
   .app-icon-rail {
-    position: static !important;
-    width: 100% !important;
-    height: auto !important;
-    flex-direction: row !important;
-    justify-content: flex-start !important;
-    align-items: center !important;
-    overflow-x: auto !important;
-    border-right: 0 !important;
-    border-bottom: 1px solid #dfe3e8 !important;
-    padding: 10px 12px !important;
+    display: none !important;
   }
 
-  .app-icon-rail nav {
-    flex-direction: row !important;
-    width: auto !important;
-    min-width: max-content !important;
+  .app-mobile-menu-button {
+    display: inline-flex !important;
   }
 
-  .app-icon-rail button {
-    flex: 0 0 auto !important;
+  .app-mobile-menu-button span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: #111827;
   }
 
   .app-sidebar {
@@ -127,13 +120,15 @@ textarea {
 }
 
 @media (max-width: 520px) {
-  .app-icon-rail {
-    padding: 8px !important;
-  }
-
   .app-topbar button {
     width: auto !important;
     min-width: 74px !important;
     padding: 0 10px !important;
+  }
+
+  .app-topbar .app-mobile-menu-button {
+    width: 40px !important;
+    min-width: 40px !important;
+    padding: 0 !important;
   }
 }

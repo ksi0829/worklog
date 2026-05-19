@@ -322,13 +322,26 @@ export default function MainPage() {
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState("");
+  const [approvalDocumentsLoaded, setApprovalDocumentsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
   const [hoveredStageKey, setHoveredStageKey] = useState("");
 
+  const visibleOrders = useMemo(() => {
+    if (!approvalDocumentsLoaded) return orders;
+
+    const existingDocumentIds = new Set(approvalDocuments.map((document) => document.id));
+
+    return orders.filter(
+      (order) =>
+        Boolean(order.manufacturing_document_id) &&
+        existingDocumentIds.has(order.manufacturing_document_id as number)
+    );
+  }, [approvalDocuments, approvalDocumentsLoaded, orders]);
+
   const activeOrderCount = useMemo(
-    () => orders.filter((order) => getOrderProgress(order) < 100).length,
-    [orders]
+    () => visibleOrders.filter((order) => getOrderProgress(order) < 100).length,
+    [visibleOrders]
   );
   const approvalDocumentsById = useMemo(
     () => new Map(approvalDocuments.map((document) => [document.id, document])),
@@ -410,6 +423,7 @@ export default function MainPage() {
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
     }
+    setApprovalDocumentsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -487,7 +501,7 @@ export default function MainPage() {
           <div>
             <h2 style={styles.productionTitle}>장비 발주 및 제작 현황</h2>
             <div style={styles.productionMeta}>
-              제조요구서 상신 시 자동 등록 · 전체 {orders.length}건 · 진행중{" "}
+              제조요구서 상신 시 자동 등록 · 전체 {visibleOrders.length}건 · 진행중{" "}
               {activeOrderCount}건
             </div>
           </div>
@@ -523,7 +537,7 @@ export default function MainPage() {
 
         <div style={styles.orderSections}>
           {sectionDefs.map((section) => {
-            const sectionOrders = orders.filter(
+            const sectionOrders = visibleOrders.filter(
               (order) => order.category === section.key
             );
             const extraColumn = getSectionExtraColumn(section.key);
@@ -1018,10 +1032,10 @@ const styles: Record<string, CSSProperties> = {
   stageConfirmButtonMobile: {
     width: "100%",
     height: "34px",
-    border: "1px solid #111827",
+    border: "1px solid #cfd6df",
     borderRadius: "8px",
-    background: "#111827",
-    color: "#ffffff",
+    background: "#ffffff",
+    color: "#111827",
     fontSize: "12px",
     fontWeight: 850,
     cursor: "pointer",
@@ -1155,10 +1169,10 @@ const styles: Record<string, CSSProperties> = {
   stageConfirmButton: {
     width: "74px",
     height: "34px",
-    border: "1px solid #111827",
+    border: "1px solid #cfd6df",
     borderRadius: "8px",
-    background: "#111827",
-    color: "#ffffff",
+    background: "#ffffff",
+    color: "#111827",
     fontSize: "12px",
     fontWeight: 850,
     cursor: "pointer",
