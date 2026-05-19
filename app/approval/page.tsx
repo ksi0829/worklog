@@ -17,6 +17,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 type FieldType = "text" | "date" | "select" | "textarea";
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "qa";
+type InputMode = "modern" | "legacy";
 
 type FieldDef = {
   key: string;
@@ -665,6 +666,7 @@ function getStringValue(data: Record<string, unknown>, key: string) {
 export default function ApprovalPage() {
   const [selectedTemplateKey, setSelectedTemplateKey] = useState(templates[0].key);
   const selectedTemplate = templateMap[selectedTemplateKey] || templates[0];
+  const [inputMode, setInputMode] = useState<InputMode>("modern");
   const [formData, setFormData] = useState<Record<string, unknown>>(() =>
     createEmptyFormData(selectedTemplate)
   );
@@ -909,6 +911,7 @@ export default function ApprovalPage() {
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
     setSelectedTemplateKey(templateKey);
+    setInputMode("modern");
     setFormData(applyCurrentUserFields(createEmptyFormData(nextTemplate), currentName, currentTeam, true));
     setApproverSlots(createDefaultApproverSlots());
     setReferenceIds([]);
@@ -1032,6 +1035,7 @@ export default function ApprovalPage() {
     const finalEquipmentOrderId = linkedEquipmentOrderId;
     const finalFormData = {
       ...formData,
+      _inputMode: inputMode,
       _equipmentOrderId: finalEquipmentOrderId,
       _equipmentStageKey: selectedEquipmentStage,
       _references: selectedReferences.map((profile) => ({
@@ -1436,6 +1440,35 @@ export default function ApprovalPage() {
             </section>
           )}
 
+          {selectedTemplate.key === "manufacturing_request" && (
+            <section style={styles.inputModeBox}>
+              <div>
+                <h3 style={styles.sectionTitle}>입력 방식</h3>
+                <p style={styles.panelSubText}>
+                  구형양식은 기존 제조요구서 배치에 맞춰 입력하고, 신규양식은 웹 입력 흐름으로 작성합니다.
+                </p>
+              </div>
+              <div style={styles.inputModeActions}>
+                {[
+                  ["legacy", "구형양식 입력"],
+                  ["modern", "신규양식 입력"],
+                ].map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    style={{
+                      ...styles.modeButton,
+                      ...(inputMode === mode ? styles.modeButtonActive : {}),
+                    }}
+                    onClick={() => setInputMode(mode as InputMode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           {shouldSelectEquipmentOrder && (
             <section style={styles.orderReferenceBox}>
               <div
@@ -1562,115 +1595,127 @@ export default function ApprovalPage() {
             )}
           </section>
 
-          <div
-            style={{
-              ...styles.formGrid,
-              ...(isMobile ? styles.formGridMobile : {}),
-            }}
-          >
-            {selectedTemplate.fields.map((field) => {
-              const readOnlyField = ["applicant", "requester", "owner", "team"].includes(field.key);
+          {selectedTemplate.key === "manufacturing_request" && inputMode === "legacy" ? (
+            <LegacyManufacturingForm
+              data={formData}
+              specTable={selectedTemplate.tables[0]}
+              isMobile={isMobile}
+              onFieldChange={updateField}
+              onSpecChange={updateTableCell}
+            />
+          ) : (
+            <>
+              <div
+                style={{
+                  ...styles.formGrid,
+                  ...(isMobile ? styles.formGridMobile : {}),
+                }}
+              >
+                {selectedTemplate.fields.map((field) => {
+                  const readOnlyField = ["applicant", "requester", "owner", "team"].includes(field.key);
 
-              return (
-                <label
-                  key={field.key}
-                  style={{
-                    ...styles.field,
-                    gridColumn: field.span === 2 ? "1 / -1" : undefined,
-                  }}
-                >
-                  <span>{field.label}</span>
-                  {field.type === "textarea" ? (
-                    <textarea
-                      style={styles.textarea}
-                      value={String(formData[field.key] || "")}
-                      placeholder={field.placeholder}
-                      onChange={(event) => updateField(field.key, event.target.value)}
-                    />
-                  ) : field.type === "select" ? (
-                    <select
-                      style={styles.input}
-                      value={String(formData[field.key] || "")}
-                      onChange={(event) => updateField(field.key, event.target.value)}
-                    >
-                      <option value="">선택</option>
-                      {(field.options || []).map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
+                  return (
+                    <label
+                      key={field.key}
                       style={{
-                        ...styles.input,
-                        ...(readOnlyField ? styles.readOnlyInput : {}),
+                        ...styles.field,
+                        gridColumn: field.span === 2 ? "1 / -1" : undefined,
                       }}
-                      type={field.type}
-                      value={String(formData[field.key] || "")}
-                      placeholder={field.placeholder}
-                      readOnly={readOnlyField}
-                      onChange={(event) => updateField(field.key, event.target.value)}
-                    />
-                  )}
-                </label>
-              );
-            })}
-          </div>
-
-          {selectedTemplate.tables.map((table) => (
-            <section key={table.key} style={styles.tableSection}>
-              <div style={styles.panelTitleRow}>
-                <h3 style={styles.sectionTitle}>{table.title}</h3>
-                <button type="button" style={styles.ghostButton} onClick={() => addTableRow(table)}>
-                  행 추가
-                </button>
+                    >
+                      <span>{field.label}</span>
+                      {field.type === "textarea" ? (
+                        <textarea
+                          style={styles.textarea}
+                          value={String(formData[field.key] || "")}
+                          placeholder={field.placeholder}
+                          onChange={(event) => updateField(field.key, event.target.value)}
+                        />
+                      ) : field.type === "select" ? (
+                        <select
+                          style={styles.input}
+                          value={String(formData[field.key] || "")}
+                          onChange={(event) => updateField(field.key, event.target.value)}
+                        >
+                          <option value="">선택</option>
+                          {(field.options || []).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          style={{
+                            ...styles.input,
+                            ...(readOnlyField ? styles.readOnlyInput : {}),
+                          }}
+                          type={field.type}
+                          value={String(formData[field.key] || "")}
+                          placeholder={field.placeholder}
+                          readOnly={readOnlyField}
+                          onChange={(event) => updateField(field.key, event.target.value)}
+                        />
+                      )}
+                    </label>
+                  );
+                })}
               </div>
 
-              <div style={styles.tableWrap}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...styles.th, width: "48px" }}>No</th>
-                      {table.columns.map((column) => (
-                        <th key={column.key} style={{ ...styles.th, width: column.width }}>
-                          {column.label}
-                        </th>
-                      ))}
-                      <th style={{ ...styles.th, width: "58px" }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getRows(formData[table.key]).map((row, rowIndex) => (
-                      <tr key={rowIndex}>
-                        <td style={styles.td}>{rowIndex + 1}</td>
-                        {table.columns.map((column) => (
-                          <td key={column.key} style={styles.td}>
-                            <input
-                              style={styles.tableInput}
-                              value={row[column.key] || ""}
-                              onChange={(event) =>
-                                updateTableCell(table, rowIndex, column.key, event.target.value)
-                              }
-                            />
-                          </td>
+              {selectedTemplate.tables.map((table) => (
+                <section key={table.key} style={styles.tableSection}>
+                  <div style={styles.panelTitleRow}>
+                    <h3 style={styles.sectionTitle}>{table.title}</h3>
+                    <button type="button" style={styles.ghostButton} onClick={() => addTableRow(table)}>
+                      행 추가
+                    </button>
+                  </div>
+
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead>
+                        <tr>
+                          <th style={{ ...styles.th, width: "48px" }}>No</th>
+                          {table.columns.map((column) => (
+                            <th key={column.key} style={{ ...styles.th, width: column.width }}>
+                              {column.label}
+                            </th>
+                          ))}
+                          <th style={{ ...styles.th, width: "58px" }} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getRows(formData[table.key]).map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            <td style={styles.td}>{rowIndex + 1}</td>
+                            {table.columns.map((column) => (
+                              <td key={column.key} style={styles.td}>
+                                <input
+                                  style={styles.tableInput}
+                                  value={row[column.key] || ""}
+                                  onChange={(event) =>
+                                    updateTableCell(table, rowIndex, column.key, event.target.value)
+                                  }
+                                />
+                              </td>
+                            ))}
+                            <td style={styles.td}>
+                              <button
+                                type="button"
+                                style={styles.smallDangerButton}
+                                onClick={() => removeTableRow(table, rowIndex)}
+                              >
+                                삭제
+                              </button>
+                            </td>
+                          </tr>
                         ))}
-                        <td style={styles.td}>
-                          <button
-                            type="button"
-                            style={styles.smallDangerButton}
-                            onClick={() => removeTableRow(table, rowIndex)}
-                          >
-                            삭제
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+            </>
+          )}
 
         </section>
 
@@ -1958,6 +2003,199 @@ export default function ApprovalPage() {
           </section>
         </div>
       )}
+    </section>
+  );
+}
+
+type LegacyManufacturingFormProps = {
+  data: Record<string, unknown>;
+  specTable?: TableDef;
+  isMobile: boolean;
+  onFieldChange: (key: string, value: string) => void;
+  onSpecChange: (table: TableDef, rowIndex: number, columnKey: string, value: string) => void;
+};
+
+function LegacyManufacturingForm({
+  data,
+  specTable,
+  isMobile,
+  onFieldChange,
+  onSpecChange,
+}: LegacyManufacturingFormProps) {
+  const specs = specTable ? getRows(data[specTable.key]) : [];
+  const value = (key: string) => String(data[key] || "");
+  const specValue = (index: number) => specs[index]?.content || "";
+
+  function updateSpec(index: number, nextValue: string) {
+    if (!specTable) return;
+    onSpecChange(specTable, index, "content", nextValue);
+  }
+
+  return (
+    <section style={styles.legacySheet}>
+      <div style={styles.legacyTopNotice}>
+        <label style={styles.legacyMiniField}>
+          <span>현황 구분</span>
+          <select
+            style={styles.legacyInput}
+            value={value("orderCategory")}
+            onChange={(event) => onFieldChange("orderCategory", event.target.value)}
+          >
+            <option value="">선택</option>
+            <option value="국내 장비">국내 장비</option>
+            <option value="해외 장비">해외 장비</option>
+            <option value="부품">부품</option>
+          </select>
+        </label>
+        <label style={styles.legacyMiniField}>
+          <span>국가/구분</span>
+          <input
+            style={styles.legacyInput}
+            value={value("country")}
+            onChange={(event) => onFieldChange("country", event.target.value)}
+          />
+        </label>
+        <label style={styles.legacyMiniField}>
+          <span>수주일</span>
+          <input
+            type="date"
+            style={styles.legacyInput}
+            value={value("orderDate")}
+            onChange={(event) => onFieldChange("orderDate", event.target.value)}
+          />
+        </label>
+      </div>
+
+      <div style={{ ...styles.legacyPaper, ...(isMobile ? styles.legacyPaperMobile : {}) }}>
+        <div style={styles.legacyHeaderGrid}>
+          <div style={styles.legacyDocTitle}>■제조, □협조 요구서</div>
+          <div style={styles.legacyApprovalBox}>
+            <div style={styles.legacyApprovalTitle}>결 재</div>
+            {["담당", "팀장", "이사", "부사장", "사장"].map((label) => (
+              <div key={label} style={styles.legacyApprovalCell}>
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={styles.legacyCopyLabel}>( 영업부 보관용 )</div>
+
+        <div style={styles.legacyGrid}>
+          <label style={styles.legacyCell}>
+            <span>제품명</span>
+            <input
+              style={styles.legacyInput}
+              value={value("productName")}
+              onChange={(event) => onFieldChange("productName", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>수 량</span>
+            <input
+              style={styles.legacyInput}
+              value={value("qty")}
+              onChange={(event) => onFieldChange("qty", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>작성일</span>
+            <input
+              type="date"
+              style={styles.legacyInput}
+              value={value("createdDate")}
+              onChange={(event) => onFieldChange("createdDate", event.target.value)}
+            />
+          </label>
+          <label style={{ ...styles.legacyCell, gridColumn: "span 2" }}>
+            <span>발주처</span>
+            <input
+              style={styles.legacyInput}
+              value={value("client")}
+              onChange={(event) => onFieldChange("client", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>납 기(내)</span>
+            <input
+              type="date"
+              style={styles.legacyInput}
+              value={value("deliveryDate")}
+              onChange={(event) => onFieldChange("deliveryDate", event.target.value)}
+            />
+          </label>
+          <label style={{ ...styles.legacyCell, gridColumn: "span 2" }}>
+            <span>문서 NO</span>
+            <input
+              style={styles.legacyInput}
+              value={value("documentNo")}
+              onChange={(event) => onFieldChange("documentNo", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>Serial No</span>
+            <input
+              style={styles.legacyInput}
+              value={value("serialNo")}
+              onChange={(event) => onFieldChange("serialNo", event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div style={styles.legacySpecTitle}>S P E C I F I C A T I O N</div>
+        <div style={styles.legacySpecRows}>
+          <label style={styles.legacyWideRow}>
+            <span>전 원</span>
+            <input
+              style={styles.legacyInput}
+              value={value("power")}
+              onChange={(event) => onFieldChange("power", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyWideRow}>
+            <span>제품규격</span>
+            <textarea
+              style={styles.legacyTextarea}
+              value={value("productSpec")}
+              onChange={(event) => onFieldChange("productSpec", event.target.value)}
+            />
+          </label>
+          {[0, 1, 2, 3].map((index) => (
+            <label key={index} style={styles.legacyWideRow}>
+              <span>규격 {index + 2}</span>
+              <input
+                style={styles.legacyInput}
+                value={specValue(index)}
+                onChange={(event) => updateSpec(index, event.target.value)}
+              />
+            </label>
+          ))}
+          <label style={styles.legacyWideRow}>
+            <span>추가사항</span>
+            <textarea
+              style={styles.legacyTextarea}
+              value={value("additional")}
+              onChange={(event) => onFieldChange("additional", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyWideRow}>
+            <span>참고사항</span>
+            <textarea
+              style={styles.legacyTextarea}
+              value={value("reference")}
+              onChange={(event) => onFieldChange("reference", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyWideRow}>
+            <span>첨 부</span>
+            <input
+              style={styles.legacyInput}
+              value={value("attachment")}
+              onChange={(event) => onFieldChange("attachment", event.target.value)}
+            />
+          </label>
+        </div>
+      </div>
     </section>
   );
 }
@@ -2296,6 +2534,162 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
   },
+  legacySheet: {
+    marginTop: "16px",
+    borderTop: "1px solid #edf0f3",
+    paddingTop: "16px",
+  },
+  legacyTopNotice: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "10px",
+    marginBottom: "12px",
+  },
+  legacyMiniField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    color: "#475467",
+    fontSize: "11px",
+    fontWeight: 800,
+  },
+  legacyPaper: {
+    minWidth: "820px",
+    border: "1px solid #cfd6df",
+    borderRadius: "4px",
+    background: "#ffffff",
+    padding: "14px",
+    overflowX: "auto",
+  },
+  legacyPaperMobile: {
+    minWidth: "760px",
+  },
+  legacyHeaderGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) 360px",
+    alignItems: "stretch",
+    gap: "12px",
+    marginBottom: "8px",
+  },
+  legacyDocTitle: {
+    minHeight: "56px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: "1px solid #111820",
+    color: "#111820",
+    fontSize: "20px",
+    fontWeight: 900,
+    letterSpacing: "0.04em",
+  },
+  legacyApprovalBox: {
+    display: "grid",
+    gridTemplateColumns: "44px repeat(5, 1fr)",
+    borderTop: "1px solid #111820",
+    borderLeft: "1px solid #111820",
+  },
+  legacyApprovalTitle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRight: "1px solid #111820",
+    borderBottom: "1px solid #111820",
+    color: "#111820",
+    fontSize: "12px",
+    fontWeight: 850,
+    writingMode: "vertical-rl",
+  },
+  legacyApprovalCell: {
+    minHeight: "56px",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    borderRight: "1px solid #111820",
+    borderBottom: "1px solid #111820",
+    color: "#111820",
+    paddingTop: "7px",
+    fontSize: "12px",
+    fontWeight: 850,
+  },
+  legacyCopyLabel: {
+    color: "#111820",
+    fontSize: "12px",
+    fontWeight: 800,
+    marginBottom: "8px",
+  },
+  legacyGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    borderTop: "1px solid #111820",
+    borderLeft: "1px solid #111820",
+  },
+  legacyCell: {
+    minHeight: "58px",
+    display: "grid",
+    gridTemplateColumns: "86px minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "8px",
+    borderRight: "1px solid #111820",
+    borderBottom: "1px solid #111820",
+    color: "#111820",
+    padding: "8px",
+    fontSize: "12px",
+    fontWeight: 850,
+  },
+  legacySpecTitle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "34px",
+    borderLeft: "1px solid #111820",
+    borderRight: "1px solid #111820",
+    borderBottom: "1px solid #111820",
+    color: "#111820",
+    fontSize: "15px",
+    fontWeight: 900,
+    letterSpacing: "0.16em",
+  },
+  legacySpecRows: {
+    borderLeft: "1px solid #111820",
+    borderRight: "1px solid #111820",
+  },
+  legacyWideRow: {
+    minHeight: "44px",
+    display: "grid",
+    gridTemplateColumns: "120px minmax(0, 1fr)",
+    alignItems: "stretch",
+    borderBottom: "1px solid #111820",
+    color: "#111820",
+    fontSize: "12px",
+    fontWeight: 850,
+  },
+  legacyInput: {
+    width: "100%",
+    minWidth: 0,
+    height: "34px",
+    border: "1px solid #d7dde5",
+    borderRadius: "4px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 9px",
+    fontSize: "13px",
+    fontWeight: 600,
+    boxSizing: "border-box",
+  },
+  legacyTextarea: {
+    width: "100%",
+    minHeight: "78px",
+    border: "1px solid #d7dde5",
+    borderRadius: "4px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "9px",
+    fontSize: "13px",
+    fontWeight: 600,
+    lineHeight: 1.45,
+    resize: "vertical",
+    boxSizing: "border-box",
+  },
   approvalLineBox: {
     marginTop: "20px",
     borderTop: "1px solid #edf0f3",
@@ -2314,6 +2708,39 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     padding: "14px",
     marginBottom: "16px",
+  },
+  inputModeBox: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "14px",
+    border: "1px solid #e1e5ea",
+    borderRadius: "8px",
+    background: "#fbfcfd",
+    padding: "14px",
+    marginBottom: "16px",
+  },
+  inputModeActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+  modeButton: {
+    height: "36px",
+    border: "1px solid #cfd6df",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 13px",
+    fontSize: "12px",
+    fontWeight: 850,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  modeButtonActive: {
+    borderColor: "#0f8a56",
+    background: "#eef6f1",
+    color: "#0b6b43",
   },
   referenceLineBox: {
     border: "1px solid #e1e5ea",
