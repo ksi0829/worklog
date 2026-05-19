@@ -69,7 +69,7 @@ export default function LoginPage() {
         });
 
       if (error || !data.user) {
-        alert("로그인 실패");
+        alert(error?.message ? `로그인 실패: ${error.message}` : "로그인 실패");
         setLoading(false);
         return;
       }
