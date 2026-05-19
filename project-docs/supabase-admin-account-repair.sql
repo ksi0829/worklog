@@ -99,7 +99,12 @@ begin
     '관리자',
     'admin',
     false
-  );
+  )
+  on conflict (id) do update
+  set name = excluded.name,
+      team = excluded.team,
+      role = excluded.role,
+      must_change_password = false;
 
   update public.profiles p
   set team = '국내영업',
