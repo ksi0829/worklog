@@ -72,7 +72,7 @@ begin
       updated_at
     )
     values (
-      admin_user_id::text,
+      admin_user_id,
       admin_user_id,
       admin_user_id::text,
       jsonb_build_object(
