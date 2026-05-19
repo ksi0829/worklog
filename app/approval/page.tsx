@@ -1429,23 +1429,12 @@ export default function ApprovalPage() {
             </div>
           </section>
 
-          {shouldCreateEquipmentOrder && (
-            <section style={styles.orderReferenceBox}>
+          {selectedTemplate.key === "manufacturing_request" && (
+            <section style={styles.inputModeBox}>
               <div>
                 <h3 style={styles.sectionTitle}>현황판 자동 등록</h3>
                 <p style={styles.panelSubText}>
                   제조요구서를 상신하면 입력한 수주 정보로 메인 현황판에 새 건이 자동 생성됩니다.
-                </p>
-              </div>
-            </section>
-          )}
-
-          {selectedTemplate.key === "manufacturing_request" && (
-            <section style={styles.inputModeBox}>
-              <div>
-                <h3 style={styles.sectionTitle}>입력 방식</h3>
-                <p style={styles.panelSubText}>
-                  구형양식은 기존 제조요구서 배치에 맞춰 입력하고, 신규양식은 웹 입력 흐름으로 작성합니다.
                 </p>
               </div>
               <div style={styles.inputModeActions}>
@@ -1542,66 +1531,63 @@ export default function ApprovalPage() {
                 </label>
               ))}
             </div>
-          </section>
-
-          <section style={styles.referenceLineBox}>
-            <div
-              style={{
-                ...styles.panelTitleRow,
-                ...(isMobile ? styles.panelTitleRowMobile : {}),
-              }}
-            >
-              <div>
-                <h3 style={styles.sectionTitle}>참조 인원</h3>
-                <p style={styles.panelSubText}>승인 순서에는 포함되지 않고 문서 확인 알림만 전달됩니다.</p>
+            <div style={styles.referenceInsideBox}>
+              <div
+                style={{
+                  ...styles.panelTitleRow,
+                  ...(isMobile ? styles.panelTitleRowMobile : {}),
+                }}
+              >
+                <div>
+                  <h3 style={styles.sectionTitle}>참조 인원</h3>
+                  <p style={styles.panelSubText}>승인 순서에는 포함되지 않고 문서 확인 알림만 전달됩니다.</p>
+                </div>
+                <button type="button" style={styles.ghostButton} onClick={addReference}>
+                  참조 추가
+                </button>
               </div>
-              <button type="button" style={styles.ghostButton} onClick={addReference}>
-                참조 추가
-              </button>
+
+              {referenceIds.length === 0 ? (
+                <div style={styles.referenceEmpty}>지정된 참조 인원이 없습니다.</div>
+              ) : (
+                <div style={styles.approvalLineGrid}>
+                  {referenceIds.map((profileId, index) => (
+                    <label key={`reference-${index}`} style={styles.approverSlot}>
+                      <span style={styles.approverLabel}>참조 {index + 1}</span>
+                      <div style={styles.approverControl}>
+                        <select
+                          style={styles.input}
+                          value={profileId}
+                          onChange={(event) => selectReference(index, event.target.value)}
+                        >
+                          <option value="">참조자 선택</option>
+                          {sortedProfiles.map((profile) => (
+                            <option key={profile.id} value={profile.id}>
+                              {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          style={styles.removeLineButton}
+                          onClick={() => removeReference(index)}
+                          aria-label={`참조 ${index + 1} 삭제`}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
-
-            {referenceIds.length === 0 ? (
-              <div style={styles.referenceEmpty}>지정된 참조 인원이 없습니다.</div>
-            ) : (
-              <div style={styles.approvalLineGrid}>
-                {referenceIds.map((profileId, index) => (
-                  <label key={`reference-${index}`} style={styles.approverSlot}>
-                    <span style={styles.approverLabel}>참조 {index + 1}</span>
-                    <div style={styles.approverControl}>
-                      <select
-                        style={styles.input}
-                        value={profileId}
-                        onChange={(event) => selectReference(index, event.target.value)}
-                      >
-                        <option value="">참조자 선택</option>
-                        {sortedProfiles.map((profile) => (
-                          <option key={profile.id} value={profile.id}>
-                            {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        style={styles.removeLineButton}
-                        onClick={() => removeReference(index)}
-                        aria-label={`참조 ${index + 1} 삭제`}
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
           </section>
 
           {selectedTemplate.key === "manufacturing_request" && inputMode === "legacy" ? (
             <LegacyManufacturingForm
               data={formData}
-              specTable={selectedTemplate.tables[0]}
               isMobile={isMobile}
               onFieldChange={updateField}
-              onSpecChange={updateTableCell}
             />
           ) : (
             <>
@@ -2009,27 +1995,17 @@ export default function ApprovalPage() {
 
 type LegacyManufacturingFormProps = {
   data: Record<string, unknown>;
-  specTable?: TableDef;
   isMobile: boolean;
   onFieldChange: (key: string, value: string) => void;
-  onSpecChange: (table: TableDef, rowIndex: number, columnKey: string, value: string) => void;
 };
 
 function LegacyManufacturingForm({
   data,
-  specTable,
   isMobile,
   onFieldChange,
-  onSpecChange,
 }: LegacyManufacturingFormProps) {
-  const specs = specTable ? getRows(data[specTable.key]) : [];
   const value = (key: string) => String(data[key] || "");
-  const specValue = (index: number) => specs[index]?.content || "";
-
-  function updateSpec(index: number, nextValue: string) {
-    if (!specTable) return;
-    onSpecChange(specTable, index, "content", nextValue);
-  }
+  const requestType = value("requestType") || "제조";
 
   return (
     <section style={styles.legacySheet}>
@@ -2068,7 +2044,29 @@ function LegacyManufacturingForm({
 
       <div style={{ ...styles.legacyPaper, ...(isMobile ? styles.legacyPaperMobile : {}) }}>
         <div style={styles.legacyHeaderGrid}>
-          <div style={styles.legacyDocTitle}>■제조, □협조 요구서</div>
+          <div style={styles.legacyDocTitle}>
+            {[
+              ["제조", "제조"],
+              ["협조", "협조"],
+            ].map(([type, label]) => (
+              <button
+                key={type}
+                type="button"
+                style={styles.legacyCheckButton}
+                onClick={() => onFieldChange("requestType", type)}
+                aria-pressed={requestType === type}
+              >
+                <span
+                  style={{
+                    ...styles.legacyCheckBox,
+                    ...(requestType === type ? styles.legacyCheckBoxActive : {}),
+                  }}
+                />
+                {label}
+              </button>
+            ))}
+            <span>요구서</span>
+          </div>
           <div style={styles.legacyApprovalBox}>
             <div style={styles.legacyApprovalTitle}>결 재</div>
             {["담당", "팀장", "이사", "부사장", "사장"].map((label) => (
@@ -2155,21 +2153,11 @@ function LegacyManufacturingForm({
           <label style={styles.legacyWideRow}>
             <span>제품규격</span>
             <textarea
-              style={styles.legacyTextarea}
+              style={{ ...styles.legacyTextarea, ...styles.legacyProductSpecTextarea }}
               value={value("productSpec")}
               onChange={(event) => onFieldChange("productSpec", event.target.value)}
             />
           </label>
-          {[0, 1, 2, 3].map((index) => (
-            <label key={index} style={styles.legacyWideRow}>
-              <span>규격 {index + 2}</span>
-              <input
-                style={styles.legacyInput}
-                value={specValue(index)}
-                onChange={(event) => updateSpec(index, event.target.value)}
-              />
-            </label>
-          ))}
           <label style={styles.legacyWideRow}>
             <span>추가사항</span>
             <textarea
@@ -2576,11 +2564,38 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    gap: "4px",
+    flexWrap: "wrap",
     border: "1px solid #111820",
     color: "#111820",
     fontSize: "20px",
     fontWeight: 900,
     letterSpacing: "0.04em",
+  },
+  legacyCheckButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "3px",
+    border: 0,
+    background: "transparent",
+    color: "inherit",
+    padding: "0 1px",
+    font: "inherit",
+    fontWeight: 900,
+    letterSpacing: "0.04em",
+    cursor: "pointer",
+  },
+  legacyCheckBox: {
+    width: "13px",
+    height: "13px",
+    display: "inline-block",
+    border: "2px solid #111820",
+    borderRadius: "2px",
+    background: "#ffffff",
+    boxSizing: "border-box",
+  },
+  legacyCheckBoxActive: {
+    background: "#111820",
   },
   legacyApprovalBox: {
     display: "grid",
@@ -2690,6 +2705,9 @@ const styles: Record<string, CSSProperties> = {
     resize: "vertical",
     boxSizing: "border-box",
   },
+  legacyProductSpecTextarea: {
+    minHeight: "180px",
+  },
   approvalLineBox: {
     marginTop: "20px",
     borderTop: "1px solid #edf0f3",
@@ -2748,6 +2766,11 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     padding: "14px",
     marginBottom: "16px",
+  },
+  referenceInsideBox: {
+    marginTop: "14px",
+    borderTop: "1px solid #e1e5ea",
+    paddingTop: "14px",
   },
   referenceEmpty: {
     border: "1px dashed #cfd6df",
