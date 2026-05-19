@@ -1500,86 +1500,88 @@ export default function ApprovalPage() {
                 결재라인 추가
               </button>
             </div>
-            <div style={styles.approvalLineGrid}>
-              {approverSlots.map((slot, index) => (
-                <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
-                  <span style={styles.approverLabel}>{slot.roleLabel}</span>
-                  <div style={styles.approverControl}>
-                    <select
-                      style={styles.input}
-                      value={slot.approverId}
-                      onChange={(event) => selectApprover(index, event.target.value)}
-                    >
-                      <option value="">결재자 선택</option>
-                      {sortedProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
-                        </option>
-                      ))}
-                    </select>
-                    {approverSlots.length > 1 && (
-                      <button
-                        type="button"
-                        style={styles.removeLineButton}
-                        onClick={() => removeApproverSlot(index)}
-                        aria-label={`${slot.roleLabel} 삭제`}
-                      >
-                        삭제
-                      </button>
-                    )}
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div style={styles.referenceInsideBox}>
-              <div
-                style={{
-                  ...styles.panelTitleRow,
-                  ...(isMobile ? styles.panelTitleRowMobile : {}),
-                }}
-              >
-                <div>
-                  <h3 style={styles.sectionTitle}>참조 인원</h3>
-                  <p style={styles.panelSubText}>승인 순서에는 포함되지 않고 문서 확인 알림만 전달됩니다.</p>
-                </div>
-                <button type="button" style={styles.ghostButton} onClick={addReference}>
-                  참조 추가
-                </button>
-              </div>
-
-              {referenceIds.length === 0 ? (
-                <div style={styles.referenceEmpty}>지정된 참조 인원이 없습니다.</div>
-              ) : (
+            <div
+              style={{
+                ...styles.approvalReferenceRow,
+                ...(isMobile ? styles.approvalReferenceRowMobile : {}),
+              }}
+            >
+              <div style={styles.approverCompactArea}>
                 <div style={styles.approvalLineGrid}>
-                  {referenceIds.map((profileId, index) => (
-                    <label key={`reference-${index}`} style={styles.approverSlot}>
-                      <span style={styles.approverLabel}>참조 {index + 1}</span>
+                  {approverSlots.map((slot, index) => (
+                    <label key={`${slot.roleLabel}-${index}`} style={styles.approverSlot}>
+                      <span style={styles.approverLabel}>{slot.roleLabel}</span>
                       <div style={styles.approverControl}>
                         <select
                           style={styles.input}
-                          value={profileId}
-                          onChange={(event) => selectReference(index, event.target.value)}
+                          value={slot.approverId}
+                          onChange={(event) => selectApprover(index, event.target.value)}
                         >
-                          <option value="">참조자 선택</option>
+                          <option value="">결재자 선택</option>
                           {sortedProfiles.map((profile) => (
                             <option key={profile.id} value={profile.id}>
                               {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
                             </option>
                           ))}
                         </select>
-                        <button
-                          type="button"
-                          style={styles.removeLineButton}
-                          onClick={() => removeReference(index)}
-                          aria-label={`참조 ${index + 1} 삭제`}
-                        >
-                          삭제
-                        </button>
+                        {approverSlots.length > 1 && (
+                          <button
+                            type="button"
+                            style={styles.removeLineButton}
+                            onClick={() => removeApproverSlot(index)}
+                            aria-label={`${slot.roleLabel} 삭제`}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     </label>
                   ))}
                 </div>
-              )}
+              </div>
+
+              <div style={styles.referenceCompactArea}>
+                <div style={styles.referenceCompactHeader}>
+                  <h3 style={styles.sectionTitle}>참조 인원</h3>
+                  <button type="button" style={styles.ghostButton} onClick={addReference}>
+                    참조 추가
+                  </button>
+                </div>
+
+                {referenceIds.length === 0 ? (
+                  <div style={styles.referenceEmpty}>참조 없음</div>
+                ) : (
+                  <div style={styles.referenceGridCompact}>
+                    {referenceIds.map((profileId, index) => (
+                      <label key={`reference-${index}`} style={styles.approverSlot}>
+                        <span style={styles.approverLabel}>참조 {index + 1}</span>
+                        <div style={styles.approverControl}>
+                          <select
+                            style={styles.input}
+                            value={profileId}
+                            onChange={(event) => selectReference(index, event.target.value)}
+                          >
+                            <option value="">참조자 선택</option>
+                            {sortedProfiles.map((profile) => (
+                              <option key={profile.id} value={profile.id}>
+                                {profile.name || "-"} / {getDisplayTeam(profile) || "-"}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            style={styles.removeLineButton}
+                            onClick={() => removeReference(index)}
+                            aria-label={`참조 ${index + 1} 삭제`}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 
@@ -2720,6 +2722,18 @@ const styles: Record<string, CSSProperties> = {
     padding: "13px",
     marginBottom: "14px",
   },
+  approvalReferenceRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 340px)",
+    gap: "10px",
+    alignItems: "start",
+  },
+  approvalReferenceRowMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+  },
+  approverCompactArea: {
+    minWidth: 0,
+  },
   orderReferenceBox: {
     border: "1px solid #e1e5ea",
     borderRadius: "8px",
@@ -2772,20 +2786,37 @@ const styles: Record<string, CSSProperties> = {
     borderTop: "1px solid #e1e5ea",
     paddingTop: "14px",
   },
+  referenceCompactArea: {
+    minWidth: 0,
+    borderLeft: "1px solid #e1e5ea",
+    paddingLeft: "10px",
+  },
+  referenceCompactHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    marginBottom: "8px",
+  },
   referenceEmpty: {
     border: "1px dashed #cfd6df",
     borderRadius: "8px",
     color: "#667085",
-    padding: "12px",
+    padding: "9px",
     fontSize: "12px",
     fontWeight: 700,
     textAlign: "center",
   },
+  referenceGridCompact: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "8px",
+  },
   approvalLineGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-    gap: "10px",
-    marginTop: "12px",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "8px",
+    marginTop: "8px",
   },
   approverSlot: {
     display: "flex",
@@ -2804,11 +2835,11 @@ const styles: Record<string, CSSProperties> = {
   approverControl: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) auto",
-    gap: "6px",
+    gap: "5px",
   },
   removeLineButton: {
-    width: "48px",
-    height: "40px",
+    width: "42px",
+    height: "38px",
     border: "1px solid #fee2e2",
     borderRadius: "8px",
     background: "#ffffff",
