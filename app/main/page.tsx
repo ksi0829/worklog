@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { canManageProductionOrders, getCurrentOrgTeam } from "@/app/_lib/currentOrg";
+import { EXECUTIVE_NAMES, getCurrentOrgTeam } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
@@ -36,8 +36,7 @@ type StageKey =
   | "purchaseRequest"
   | "inbound"
   | "assembly"
-  | "control"
-  | "test"
+  | "setup"
   | "qa"
   | "shipment";
 
@@ -47,6 +46,7 @@ type StageDef = {
   column: keyof ProductionOrderRow;
   documentColumn?: keyof ProductionOrderRow;
   manual: boolean;
+  confirmRole?: "purchaseLead" | "technicalLead";
 };
 
 type ProductionOrderRow = {
@@ -111,24 +111,21 @@ const stageDefs: StageDef[] = [
     label: "최종입고",
     column: "inbound_completed_on",
     manual: true,
+    confirmRole: "purchaseLead",
   },
   {
     key: "assembly",
     label: "조립완료",
     column: "assembly_completed_on",
     manual: true,
+    confirmRole: "technicalLead",
   },
   {
-    key: "control",
-    label: "전기/제어",
-    column: "control_completed_on",
-    manual: true,
-  },
-  {
-    key: "test",
-    label: "생산테스트",
+    key: "setup",
+    label: "셋업",
     column: "test_completed_on",
     manual: true,
+    confirmRole: "technicalLead",
   },
   {
     key: "qa",
@@ -141,9 +138,12 @@ const stageDefs: StageDef[] = [
     key: "shipment",
     label: "출고예정",
     column: "shipment_scheduled_on",
-    manual: true,
+    manual: false,
   },
 ];
+
+const PURCHASE_LEAD_NAMES = ["권현진"];
+const TECHNICAL_LEAD_NAMES = ["한차현", "이승준", "장동철"];
 
 const sectionDefs: {
   key: OrderCategory;
@@ -239,6 +239,16 @@ function getStageText(status: StageStatus) {
   return "대기";
 }
 
+function canConfirmStage(stage: StageDef, currentName: string, currentRole: string) {
+  if (!stage.manual) return false;
+  if (currentRole === "admin" || currentRole === "executive") return true;
+  if (EXECUTIVE_NAMES.includes(currentName)) return true;
+  if (stage.confirmRole === "purchaseLead") return PURCHASE_LEAD_NAMES.includes(currentName);
+  if (stage.confirmRole === "technicalLead") return TECHNICAL_LEAD_NAMES.includes(currentName);
+
+  return false;
+}
+
 function getFirstPendingLine(document?: ApprovalDocumentRow | null) {
   if (!document) return null;
   const lines = [...(document.approval_lines || [])].sort(
@@ -315,11 +325,6 @@ export default function MainPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
   const [hoveredStageKey, setHoveredStageKey] = useState("");
-
-  const canManageOrders = useMemo(
-    () => canManageProductionOrders(name, role),
-    [name, role]
-  );
 
   const activeOrderCount = useMemo(
     () => orders.filter((order) => getOrderProgress(order) < 100).length,
@@ -434,10 +439,11 @@ export default function MainPage() {
 
   async function updateManualStage(
     order: ProductionOrderRow,
-    stage: StageDef,
-    value: string
+    stage: StageDef
   ) {
-    if (!canManageOrders || !stage.manual) return;
+    if (!canConfirmStage(stage, name, role)) return;
+
+    const value = todayKey();
 
     const { error } = await supabase
       .from("equipment_orders")
@@ -456,7 +462,7 @@ export default function MainPage() {
           : item
       )
     );
-    setMessage("진행 날짜가 저장되었습니다.");
+    setMessage(`${stage.label} 확인이 완료되었습니다.`);
   }
 
   return (
@@ -584,19 +590,14 @@ export default function MainPage() {
                             return (
                               <div key={stage.key} style={styles.stageMobileCell}>
                                 <span style={styles.stageMobileLabel}>{stage.label}</span>
-                                {stage.manual && canManageOrders ? (
-                                  <input
-                                    type="date"
-                                    value={value}
-                                    style={styles.stageDateInputMobile}
-                                    onChange={(event) =>
-                                      updateManualStage(
-                                        order,
-                                        stage,
-                                        event.target.value
-                                      )
-                                    }
-                                  />
+                                {stage.manual && !value && canConfirmStage(stage, name, role) ? (
+                                  <button
+                                    type="button"
+                                    style={styles.stageConfirmButtonMobile}
+                                    onClick={() => updateManualStage(order, stage)}
+                                  >
+                                    확인
+                                  </button>
                                 ) : (
                                   <span
                                     style={styles.stageTooltipWrap}
@@ -687,19 +688,14 @@ export default function MainPage() {
 
                               return (
                                 <td key={stage.key} style={styles.stageTd}>
-                                  {stage.manual && canManageOrders ? (
-                                    <input
-                                      type="date"
-                                      value={value}
-                                      style={styles.stageDateInput}
-                                      onChange={(event) =>
-                                        updateManualStage(
-                                          order,
-                                          stage,
-                                          event.target.value
-                                        )
-                                      }
-                                    />
+                                  {stage.manual && !value && canConfirmStage(stage, name, role) ? (
+                                    <button
+                                      type="button"
+                                      style={styles.stageConfirmButton}
+                                      onClick={() => updateManualStage(order, stage)}
+                                    >
+                                      확인
+                                    </button>
                                   ) : (
                                     <span
                                       style={styles.stageTooltipWrap}
@@ -1019,6 +1015,17 @@ const styles: Record<string, CSSProperties> = {
     padding: "0 7px",
     fontSize: "12px",
   },
+  stageConfirmButtonMobile: {
+    width: "100%",
+    height: "34px",
+    border: "1px solid #111827",
+    borderRadius: "8px",
+    background: "#111827",
+    color: "#ffffff",
+    fontSize: "12px",
+    fontWeight: 850,
+    cursor: "pointer",
+  },
   orderMobileNote: {
     marginTop: "10px",
     color: "#667085",
@@ -1144,6 +1151,17 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     padding: "0 7px",
     fontSize: "12px",
+  },
+  stageConfirmButton: {
+    width: "74px",
+    height: "34px",
+    border: "1px solid #111827",
+    borderRadius: "8px",
+    background: "#111827",
+    color: "#ffffff",
+    fontSize: "12px",
+    fontWeight: 850,
+    cursor: "pointer",
   },
   noteTd: {
     minWidth: "120px",

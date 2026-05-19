@@ -354,11 +354,11 @@ const manufacturingTemplateKeys = [
   "inspection_request",
 ];
 const generalTemplateKeys = ["draft", "expense_request", "vacation_request", "holiday_work_request"];
-const templateRows = [manufacturingTemplateKeys, generalTemplateKeys].map((keys) =>
-  keys
+const templateRows = [
+  [...manufacturingTemplateKeys, ...generalTemplateKeys]
     .map((key) => templateMap[key])
-    .filter((template): template is TemplateDef => Boolean(template))
-);
+    .filter((template): template is TemplateDef => Boolean(template)),
+];
 
 function createDefaultApproverSlots(count = DEFAULT_APPROVER_COUNT): ApproverSlot[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -2088,15 +2088,19 @@ const styles: Record<string, CSSProperties> = {
   },
   templateRow: {
     display: "flex",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: "8px",
+    overflowX: "auto",
+    paddingBottom: "2px",
   },
   templateRowMobile: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    display: "flex",
+    flexWrap: "nowrap",
     gap: "7px",
+    overflowX: "auto",
   },
   templateButton: {
+    flex: "0 0 128px",
     minWidth: "128px",
     minHeight: "50px",
     display: "flex",
@@ -2114,7 +2118,8 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "13px",
   },
   templateButtonMobile: {
-    minWidth: 0,
+    flexBasis: "118px",
+    minWidth: "118px",
     minHeight: "50px",
     padding: "8px 10px",
     fontSize: "12px",

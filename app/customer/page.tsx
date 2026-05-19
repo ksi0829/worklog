@@ -121,9 +121,9 @@ export default function CustomerPage() {
   const [expandedCategories, setExpandedCategories] = useState<
     Record<CustomerCategory, boolean>
   >({
-    customer: true,
-    partner: true,
-    other: true,
+    customer: false,
+    partner: false,
+    other: false,
   });
   const [customerForm, setCustomerForm] =
     useState<CustomerForm>(emptyCustomerForm);
