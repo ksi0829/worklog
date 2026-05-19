@@ -57,33 +57,35 @@ begin
   end if;
 
   if to_regclass('auth.identities') is not null then
-    begin
-      insert into auth.identities (
-        user_id,
-        provider_id,
-        identity_data,
-        provider,
-        last_sign_in_at,
-        created_at,
-        updated_at
-      )
-      values (
-        admin_user_id,
-        admin_user_id::text,
-        jsonb_build_object('sub', admin_user_id::text, 'email', admin_email),
-        'email',
-        now(),
-        now(),
-        now()
-      )
-      on conflict (provider, provider_id) do update
-      set user_id = excluded.user_id,
-          identity_data = excluded.identity_data,
-          updated_at = now();
-    exception
-      when others then
-        raise notice 'auth.identities upsert skipped: %', sqlerrm;
-    end;
+    delete from auth.identities
+    where user_id = admin_user_id
+       or (provider = 'email' and provider_id in (admin_email, admin_user_id::text));
+
+    insert into auth.identities (
+      id,
+      user_id,
+      provider_id,
+      identity_data,
+      provider,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    )
+    values (
+      admin_user_id::text,
+      admin_user_id,
+      admin_user_id::text,
+      jsonb_build_object(
+        'sub', admin_user_id::text,
+        'email', admin_email,
+        'email_verified', true,
+        'phone_verified', false
+      ),
+      'email',
+      now(),
+      now(),
+      now()
+    );
   end if;
 
   insert into public.profiles (

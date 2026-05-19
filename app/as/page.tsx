@@ -23,6 +23,9 @@ type ServiceLog = {
   part: string;
   memo: string;
   createdAt: string;
+  createdBy: string | null;
+  handlerName: string;
+  handlerTeam: string;
 };
 
 type WorkOrder = {
@@ -83,6 +86,13 @@ type ServiceLogRow = {
   part: string | null;
   memo: string | null;
   created_at: string | null;
+  created_by: string | null;
+};
+
+type ProfileRow = {
+  id: string;
+  name: string | null;
+  team: string | null;
 };
 
 type CustomerOption = {
@@ -179,7 +189,7 @@ function createAsSummarySheet(orders: WorkOrder[]): ExcelSheet {
 function createAsDetailSheet(order: WorkOrder): ExcelSheet {
   return {
     name: `${order.createdAt.slice(2).replaceAll("-", "")}_${order.woNo}`,
-    widths: [110, 180, 160, 260, 110],
+    widths: [110, 110, 150, 220, 110, 220],
     rows: [
       ["A/S 작업지시서"],
       [""],
@@ -194,10 +204,11 @@ function createAsDetailSheet(order: WorkOrder): ExcelSheet {
       ["최종수정", order.updatedAt],
       ["증상/요청사항", order.description],
       [""],
-      ["차수", "일자", "조치내용", "부품", "메모"],
+      ["차수", "일자", "처리자", "조치내용", "부품", "메모"],
       ...order.logs.map((log) => [
         `${log.seq}차`,
         log.createdAt,
+        [log.handlerName, log.handlerTeam].filter(Boolean).join(" / "),
         log.action,
         log.part,
         log.memo,
@@ -304,7 +315,7 @@ export default function AsPage() {
 
     const { data: logRows, error: logError } = await supabase
       .from("as_service_logs")
-      .select("id,work_order_id,seq,action,part,memo,created_at")
+      .select("id,work_order_id,seq,action,part,memo,created_at,created_by")
       .order("seq", { ascending: false });
 
     if (logError) {
@@ -323,8 +334,24 @@ export default function AsPage() {
       .select("id,customer_id,name,phone")
       .order("name", { ascending: true });
 
+    const logUserIds = Array.from(
+      new Set(
+        ((logRows || []) as ServiceLogRow[])
+          .map((log) => log.created_by)
+          .filter(Boolean) as string[]
+      )
+    );
+    const { data: profileRows } =
+      logUserIds.length > 0
+        ? await supabase.from("profiles").select("id,name,team").in("id", logUserIds)
+        : { data: [] as ProfileRow[] };
+    const profilesById = new Map(
+      ((profileRows || []) as ProfileRow[]).map((profile) => [profile.id, profile])
+    );
+
     const logsByOrder = new Map<number, ServiceLog[]>();
     ((logRows || []) as ServiceLogRow[]).forEach((log) => {
+      const handler = log.created_by ? profilesById.get(log.created_by) : null;
       const nextLog: ServiceLog = {
         id: log.id,
         seq: log.seq,
@@ -332,6 +359,9 @@ export default function AsPage() {
         part: log.part || "",
         memo: log.memo || "",
         createdAt: (log.created_at || todayLabel).slice(0, 10),
+        createdBy: log.created_by,
+        handlerName: handler?.name || "",
+        handlerTeam: handler?.team || "",
       };
       logsByOrder.set(log.work_order_id, [
         nextLog,
@@ -489,7 +519,7 @@ export default function AsPage() {
         part: logForm.part.trim(),
         memo: logForm.memo.trim(),
       })
-      .select("id,work_order_id,seq,action,part,memo,created_at")
+      .select("id,work_order_id,seq,action,part,memo,created_at,created_by")
       .single();
 
     if (error || !data) {
@@ -516,6 +546,9 @@ export default function AsPage() {
       part: row.part || "",
       memo: row.memo || "",
       createdAt: (row.created_at || todayLabel).slice(0, 10),
+      createdBy: row.created_by,
+      handlerName: currentName,
+      handlerTeam: currentTeam,
     };
 
     setOrders((current) =>
@@ -913,7 +946,15 @@ export default function AsPage() {
                     <div key={log.id} style={styles.logItem}>
                       <div style={styles.logTop}>
                         <span style={styles.logSeq}>#{log.seq}차</span>
-                        <span style={styles.logDate}>{log.createdAt}</span>
+                        <span style={styles.logDate}>
+                          {[
+                            log.createdAt,
+                            log.handlerName ? `처리자 ${log.handlerName}` : "",
+                            log.handlerTeam,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
                       </div>
                       <div style={styles.logAction}>{log.action}</div>
                       {(log.part || log.memo) && (
