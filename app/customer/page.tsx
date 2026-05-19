@@ -6,7 +6,7 @@ import { BrandLogo } from "@/app/_components/BrandLogo";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { styles } from "@/app/_modules/customer/styles";
 
-type CustomerCategory = "customer" | "processing" | "postprocess" | "partner" | "other";
+type CustomerCategory = "customer" | "partner" | "other";
 
 type Customer = {
   id: number;
@@ -51,7 +51,7 @@ type ContactForm = {
 type CustomerRow = {
   id: number;
   name: string;
-  category?: CustomerCategory | null;
+  category?: string | null;
   phone: string | null;
   address: string | null;
   memo: string | null;
@@ -73,17 +73,23 @@ type ContactRow = {
 
 const today = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
-const customerCategories: { key: CustomerCategory | "all"; label: string }[] = [
-  { key: "all", label: "전체" },
+const customerCategories: { key: CustomerCategory; label: string }[] = [
   { key: "customer", label: "고객사" },
-  { key: "processing", label: "가공업체" },
-  { key: "postprocess", label: "후처리" },
   { key: "partner", label: "협력사" },
   { key: "other", label: "기타" },
 ];
 const categoryLabel = Object.fromEntries(
   customerCategories.map((item) => [item.key, item.label])
-) as Record<CustomerCategory | "all", string>;
+) as Record<CustomerCategory, string>;
+
+function normalizeCustomerCategory(value?: string | null): CustomerCategory {
+  if (value === "customer") return "customer";
+  if (value === "partner" || value === "processing" || value === "postprocess") {
+    return "partner";
+  }
+
+  return "other";
+}
 
 const emptyCustomerForm: CustomerForm = {
   name: "",
@@ -112,7 +118,13 @@ export default function CustomerPage() {
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<CustomerCategory | "all">("all");
+  const [expandedCategories, setExpandedCategories] = useState<
+    Record<CustomerCategory, boolean>
+  >({
+    customer: true,
+    partner: true,
+    other: true,
+  });
   const [customerForm, setCustomerForm] =
     useState<CustomerForm>(emptyCustomerForm);
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
@@ -136,7 +148,6 @@ export default function CustomerPage() {
 
     return customers
       .filter((customer) => {
-        if (categoryFilter !== "all" && customer.category !== categoryFilter) return false;
         if (!normalized) return true;
 
         const customerContacts = contacts.filter(
@@ -163,7 +174,21 @@ export default function CustomerPage() {
         return text.includes(normalized);
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [categoryFilter, contacts, customers, query]);
+  }, [contacts, customers, query]);
+
+  const groupedCustomers = useMemo(() => {
+    const groups: Record<CustomerCategory, Customer[]> = {
+      customer: [],
+      partner: [],
+      other: [],
+    };
+
+    customerList.forEach((customer) => {
+      groups[customer.category].push(customer);
+    });
+
+    return groups;
+  }, [customerList]);
 
   const selectedContacts = useMemo(() => {
     if (!selectedCustomer) return [];
@@ -181,6 +206,13 @@ export default function CustomerPage() {
   const canManageSelectedContact = Boolean(
     selectedContact && (isAdmin || selectedContact.createdBy === currentUserId)
   );
+
+  function toggleCategory(category: CustomerCategory) {
+    setExpandedCategories((current) => ({
+      ...current,
+      [category]: !current[category],
+    }));
+  }
 
   async function loadCustomerData() {
     setLoading(true);
@@ -231,7 +263,7 @@ export default function CustomerPage() {
       (customer) => ({
         id: customer.id,
         name: customer.name,
-        category: customer.category || "customer",
+        category: normalizeCustomerCategory(customer.category ?? "customer"),
         phone: customer.phone || "",
         address: customer.address || "",
         memo: customer.memo || "",
@@ -312,7 +344,7 @@ export default function CustomerPage() {
 
     if (error || !data) {
       if (error?.message?.includes("category")) {
-        alert("고객사 분류 컬럼이 아직 없습니다. project-docs/supabase-customer-category.sql을 먼저 실행해 주세요.");
+        alert("고객사 분류 컬럼이 아직 없습니다. project-docs/supabase-customer-category-three.sql을 먼저 실행해 주세요.");
       } else {
         alert(error?.message || "업체 등록에 실패했습니다.");
       }
@@ -323,7 +355,7 @@ export default function CustomerPage() {
     const nextCustomer: Customer = {
       id: row.id,
       name: row.name,
-      category: row.category || customerForm.category,
+      category: normalizeCustomerCategory(row.category ?? customerForm.category),
       phone: row.phone || "",
       address: row.address || "",
       memo: row.memo || "",
@@ -502,49 +534,68 @@ export default function CustomerPage() {
                 style={{ ...styles.input, marginBottom: 12 }}
               />
 
-              <div style={styles.categoryFilter}>
-                {customerCategories.map((category) => (
-                  <button
-                    key={category.key}
-                    type="button"
-                    style={{
-                      ...styles.categoryButton,
-                      ...(categoryFilter === category.key
-                        ? styles.categoryButtonActive
-                        : {}),
-                    }}
-                    onClick={() => setCategoryFilter(category.key)}
-                  >
-                    {category.label}
-                  </button>
-                ))}
-              </div>
-
               <div style={styles.customerList}>
                 {customerList.length === 0 ? (
                   <div style={styles.empty}>등록된 업체가 없습니다.</div>
                 ) : (
-                  customerList.map((customer) => {
-                    const contactCount = contacts.filter(
-                      (contact) => contact.customerId === customer.id
-                    ).length;
+                  customerCategories.map((category) => {
+                    const items = groupedCustomers[category.key];
+                    const expanded = expandedCategories[category.key];
 
                     return (
-                      <button
-                        key={customer.id}
-                        style={
-                          selectedCustomer?.id === customer.id
-                            ? styles.selectedCustomerCard
-                            : styles.customerCard
-                        }
-                        onClick={() => setSelectedCustomerId(customer.id)}
-                      >
-                        <span style={styles.customerName}>{customer.name}</span>
-                        <span style={styles.customerMeta}>
-                          {categoryLabel[customer.category]} ·{" "}
-                          담당자 {contactCount}명
-                        </span>
-                      </button>
+                      <section key={category.key} style={styles.categorySection}>
+                        <button
+                          type="button"
+                          style={styles.categoryHeader}
+                          onClick={() => toggleCategory(category.key)}
+                        >
+                          <span>{category.label}</span>
+                          <strong>{items.length}개</strong>
+                          <span
+                            style={{
+                              ...styles.categoryArrow,
+                              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+                            }}
+                          >
+                            ›
+                          </span>
+                        </button>
+
+                        {expanded && (
+                          <div style={styles.categoryBody}>
+                            {items.length === 0 ? (
+                              <div style={styles.categoryEmpty}>
+                                등록된 업체가 없습니다.
+                              </div>
+                            ) : (
+                              items.map((customer) => {
+                                const contactCount = contacts.filter(
+                                  (contact) => contact.customerId === customer.id
+                                ).length;
+
+                                return (
+                                  <button
+                                    key={customer.id}
+                                    style={
+                                      selectedCustomer?.id === customer.id
+                                        ? styles.selectedCustomerCard
+                                        : styles.customerCard
+                                    }
+                                    onClick={() => setSelectedCustomerId(customer.id)}
+                                  >
+                                    <span style={styles.customerName}>
+                                      {customer.name}
+                                    </span>
+                                    <span style={styles.customerMeta}>
+                                      담당자 {contactCount}명
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </section>
                     );
                   })
                 )}
@@ -655,13 +706,11 @@ export default function CustomerPage() {
                   }
                   style={styles.input}
                 >
-                  {customerCategories
-                    .filter((category) => category.key !== "all")
-                    .map((category) => (
-                      <option key={category.key} value={category.key}>
-                        {category.label}
-                      </option>
-                    ))}
+                  {customerCategories.map((category) => (
+                    <option key={category.key} value={category.key}>
+                      {category.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
 

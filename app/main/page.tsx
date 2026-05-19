@@ -79,15 +79,8 @@ type ApprovalLineRow = {
   id: number;
   step_order: number;
   role_label: string;
-  approver_id?: string;
   approver_name: string;
   status: ApprovalStatus;
-};
-
-type ApprovalReferenceInfo = {
-  id?: string;
-  name?: string;
-  team?: string;
 };
 
 type ApprovalDocumentRow = {
@@ -95,7 +88,6 @@ type ApprovalDocumentRow = {
   template_title: string;
   title: string;
   status: ApprovalStatus;
-  form_data?: Record<string, unknown>;
   approval_lines?: ApprovalLineRow[];
 };
 
@@ -256,20 +248,6 @@ function getFirstPendingLine(document?: ApprovalDocumentRow | null) {
   return lines.find((line) => line.status === "pending") || null;
 }
 
-function getReferenceInfos(document?: ApprovalDocumentRow | null): ApprovalReferenceInfo[] {
-  const value = document?.form_data?._references;
-  if (!Array.isArray(value)) return [];
-
-  return value.filter(
-    (item): item is ApprovalReferenceInfo =>
-      Boolean(item) && typeof item === "object"
-  );
-}
-
-function isSamePerson(left?: string | null, right?: string | null) {
-  return Boolean(left && right && left === right);
-}
-
 function getStageTooltip(
   order: ProductionOrderRow,
   stage: StageDef,
@@ -324,7 +302,6 @@ export default function MainPage() {
   const router = useRouter();
   const [role, setRole] = useState("");
   const [name, setName] = useState("");
-  const [currentUserId, setCurrentUserId] = useState("");
   const [noticeTitle, setNoticeTitle] = useState("공지");
   const [noticeText, setNoticeText] =
     useState(defaultNotice);
@@ -338,7 +315,6 @@ export default function MainPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [message, setMessage] = useState("");
   const [hoveredStageKey, setHoveredStageKey] = useState("");
-  const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
 
   const canManageOrders = useMemo(
     () => canManageProductionOrders(name, role),
@@ -353,31 +329,6 @@ export default function MainPage() {
     () => new Map(approvalDocuments.map((document) => [document.id, document])),
     [approvalDocuments]
   );
-  const approvalAlerts = useMemo(() => {
-    const matched = approvalDocuments.filter((document) => {
-      if (document.status !== "pending") return false;
-
-      const pendingLine = getFirstPendingLine(document);
-      const isMyTurn =
-        isSamePerson(pendingLine?.approver_name, name) ||
-        isSamePerson(pendingLine?.approver_id, currentUserId);
-      const isMyReference = getReferenceInfos(document).some(
-        (reference) =>
-          isSamePerson(reference.name, name) || isSamePerson(reference.id, currentUserId)
-      );
-
-      return isMyTurn || isMyReference;
-    });
-
-    return matched.map((document) => ({
-      document,
-      pendingLine: getFirstPendingLine(document),
-      referenceMatched: getReferenceInfos(document).some((reference) =>
-        isSamePerson(reference.name, name) || isSamePerson(reference.id, currentUserId)
-      ),
-    }));
-  }, [approvalDocuments, currentUserId, name]);
-
   const loadLatestNotice = useCallback(async (currentTeam: string) => {
     const { data, error } = await supabase
       .from("notices")
@@ -449,7 +400,7 @@ export default function MainPage() {
   const loadApprovalDocuments = useCallback(async () => {
     const { data, error } = await supabase
       .from("approval_documents")
-      .select("id,template_title,title,status,form_data,approval_lines(id,step_order,role_label,approver_id,approver_name,status)");
+      .select("id,template_title,title,status,approval_lines(id,step_order,role_label,approver_name,status)");
 
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
@@ -465,9 +416,6 @@ export default function MainPage() {
     void Promise.resolve().then(() => {
       setName(storedName);
       setRole(storedRole);
-      void supabase.auth.getUser().then(({ data }) => {
-        setCurrentUserId(data.user?.id || "");
-      });
       void loadLatestNotice(currentTeam);
       void loadUpcomingSchedules();
       void loadProductionOrders();
@@ -524,17 +472,6 @@ export default function MainPage() {
             onClick={() => router.push("/notices")}
           >
             공지관리
-          </button>
-        )}
-        {approvalAlerts.length > 0 && (
-          <button
-            type="button"
-            style={styles.approvalAlertButton}
-            onClick={() => setApprovalAlertOpen(true)}
-            aria-label="결재 알림"
-          >
-            <span style={styles.approvalAlertIcon}>!</span>
-            <span style={styles.approvalAlertText}>{approvalAlerts.length}</span>
           </button>
         )}
       </div>
@@ -845,53 +782,6 @@ export default function MainPage() {
           </div>
         )}
       </section>
-      {approvalAlertOpen && (
-        <div style={styles.modalBackdrop} onClick={() => setApprovalAlertOpen(false)}>
-          <div style={styles.alertModal} onClick={(event) => event.stopPropagation()}>
-            <div style={styles.alertModalHeader}>
-              <div>
-                <div style={styles.alertModalKicker}>결재 알림</div>
-                <h3 style={styles.alertModalTitle}>확인할 결재 문서가 있습니다.</h3>
-              </div>
-              <button
-                type="button"
-                style={styles.modalCloseButton}
-                onClick={() => setApprovalAlertOpen(false)}
-              >
-                닫기
-              </button>
-            </div>
-
-            <div style={styles.alertList}>
-              {approvalAlerts.map(({ document, pendingLine, referenceMatched }) => (
-                <button
-                  key={document.id}
-                  type="button"
-                  style={styles.alertItem}
-                  onClick={() => router.push("/approval")}
-                >
-                  <strong>{document.title}</strong>
-                  <span>
-                    {referenceMatched
-                      ? "참조 문서"
-                      : `결재 대기: ${pendingLine?.role_label || "-"} / ${
-                          pendingLine?.approver_name || "-"
-                        }`}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              style={styles.primaryModalButton}
-              onClick={() => router.push("/approval")}
-            >
-              결재문서로 이동
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -937,38 +827,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap",
-  },
-  approvalAlertButton: {
-    height: "34px",
-    minWidth: "48px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    borderRadius: "999px",
-    border: "1px solid #fecaca",
-    background: "#fff1f2",
-    color: "#b91c1c",
-    fontSize: "12px",
-    fontWeight: 900,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
-  approvalAlertIcon: {
-    width: "18px",
-    height: "18px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: "999px",
-    background: "#ef4444",
-    color: "#ffffff",
-    fontSize: "13px",
-    fontWeight: 900,
-    lineHeight: 1,
-  },
-  approvalAlertText: {
-    minWidth: "10px",
   },
   productionPanel: {
     background: "#ffffff",
@@ -1386,83 +1244,5 @@ const styles: Record<string, CSSProperties> = {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-  },
-  modalBackdrop: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 80,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
-    background: "rgba(15, 23, 42, 0.36)",
-  },
-  alertModal: {
-    width: "100%",
-    maxWidth: "440px",
-    borderRadius: "14px",
-    border: "1px solid #e5e7eb",
-    background: "#ffffff",
-    padding: "18px",
-    boxShadow: "0 24px 70px rgba(15, 23, 42, 0.24)",
-  },
-  alertModalHeader: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "12px",
-    marginBottom: "14px",
-  },
-  alertModalKicker: {
-    color: "#dc2626",
-    fontSize: "12px",
-    fontWeight: 900,
-  },
-  alertModalTitle: {
-    margin: "4px 0 0",
-    color: "#111820",
-    fontSize: "18px",
-    fontWeight: 850,
-  },
-  modalCloseButton: {
-    height: "32px",
-    padding: "0 11px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    background: "#ffffff",
-    color: "#111827",
-    fontSize: "12px",
-    fontWeight: 800,
-    cursor: "pointer",
-  },
-  alertList: {
-    display: "grid",
-    gap: "8px",
-    marginBottom: "14px",
-  },
-  alertItem: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-    width: "100%",
-    border: "1px solid #e5eaf0",
-    borderRadius: "10px",
-    background: "#fbfcfd",
-    padding: "11px 12px",
-    color: "#111820",
-    textAlign: "left",
-    cursor: "pointer",
-    fontSize: "13px",
-  },
-  primaryModalButton: {
-    width: "100%",
-    height: "40px",
-    border: "none",
-    borderRadius: "10px",
-    background: "#111827",
-    color: "#ffffff",
-    fontSize: "13px",
-    fontWeight: 850,
-    cursor: "pointer",
   },
 };
