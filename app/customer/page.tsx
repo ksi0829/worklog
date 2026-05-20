@@ -115,6 +115,7 @@ export default function CustomerPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [customerEditModalOpen, setCustomerEditModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -126,6 +127,8 @@ export default function CustomerPage() {
     other: false,
   });
   const [customerForm, setCustomerForm] =
+    useState<CustomerForm>(emptyCustomerForm);
+  const [customerEditForm, setCustomerEditForm] =
     useState<CustomerForm>(emptyCustomerForm);
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
   const [loading, setLoading] = useState(true);
@@ -203,6 +206,7 @@ export default function CustomerPage() {
   const canManageSelectedCustomer = Boolean(
     selectedCustomer && (isAdmin || selectedCustomer.createdBy === currentUserId)
   );
+  const canEditSelectedCustomer = Boolean(selectedCustomer && isAdmin);
   const canManageSelectedContact = Boolean(
     selectedContact && (isAdmin || selectedContact.createdBy === currentUserId)
   );
@@ -306,6 +310,30 @@ export default function CustomerPage() {
     setCustomerForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateCustomerEdit<K extends keyof CustomerForm>(
+    key: K,
+    value: CustomerForm[K]
+  ) {
+    setCustomerEditForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function openCustomerEdit() {
+    if (!selectedCustomer) return;
+    if (!isAdmin) {
+      alert("관리자만 업체 정보를 수정할 수 있습니다.");
+      return;
+    }
+
+    setCustomerEditForm({
+      name: selectedCustomer.name,
+      category: selectedCustomer.category,
+      phone: selectedCustomer.phone,
+      address: selectedCustomer.address,
+      memo: selectedCustomer.memo,
+    });
+    setCustomerEditModalOpen(true);
+  }
+
   function updateContact<K extends keyof ContactForm>(
     key: K,
     value: ContactForm[K]
@@ -367,6 +395,75 @@ export default function CustomerPage() {
     setSelectedCustomerId(nextCustomer.id);
     setCustomerForm(emptyCustomerForm);
     setCustomerModalOpen(false);
+  }
+
+  async function updateSelectedCustomer() {
+    if (!selectedCustomer) return;
+    if (!isAdmin) {
+      alert("관리자만 업체 정보를 수정할 수 있습니다.");
+      return;
+    }
+
+    const name = customerEditForm.name.trim();
+
+    if (!name) {
+      alert("업체명은 필수입니다.");
+      return;
+    }
+
+    const duplicate = customers.some(
+      (customer) =>
+        customer.id !== selectedCustomer.id &&
+        customer.name.trim().toLowerCase() === name.toLowerCase()
+    );
+
+    if (duplicate) {
+      alert("이미 등록된 업체명입니다.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("customers")
+      .update({
+        name,
+        category: customerEditForm.category,
+        phone: customerEditForm.phone.trim(),
+        address: customerEditForm.address.trim(),
+        memo: customerEditForm.memo.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedCustomer.id)
+      .select("id,name,category,phone,address,memo,updated_at,created_by")
+      .single();
+
+    if (error || !data) {
+      if (error?.message?.includes("category")) {
+        alert("고객사 분류 컬럼이 아직 없습니다. project-docs/supabase-customer-category-three.sql을 먼저 실행해 주세요.");
+      } else {
+        alert(error?.message || "업체 정보 수정에 실패했습니다.");
+      }
+      return;
+    }
+
+    const row = data as CustomerRow;
+    const nextCustomer: Customer = {
+      id: row.id,
+      name: row.name,
+      category: normalizeCustomerCategory(row.category ?? customerEditForm.category),
+      phone: row.phone || "",
+      address: row.address || "",
+      memo: row.memo || "",
+      updatedAt: (row.updated_at || today).slice(0, 10),
+      createdBy: row.created_by,
+    };
+
+    setCustomers((current) =>
+      current.map((customer) =>
+        customer.id === nextCustomer.id ? nextCustomer : customer
+      )
+    );
+    setCustomerEditForm(emptyCustomerForm);
+    setCustomerEditModalOpen(false);
   }
 
   async function addContact() {
@@ -459,6 +556,7 @@ export default function CustomerPage() {
     );
     setSelectedCustomerId(null);
     setContactModalOpen(false);
+    setCustomerEditModalOpen(false);
     setSelectedContactId(null);
   }
 
@@ -618,10 +716,19 @@ export default function CustomerPage() {
                       {categoryLabel[selectedCustomer.category]}
                     </div>
                   </div>
-                  {canManageSelectedCustomer && (
-                    <button style={styles.deleteButton} onClick={deleteCustomer}>
-                      업체 삭제
-                    </button>
+                  {(canEditSelectedCustomer || canManageSelectedCustomer) && (
+                    <div style={styles.detailActions}>
+                      {canEditSelectedCustomer && (
+                        <button style={styles.editButton} onClick={openCustomerEdit}>
+                          정보 수정
+                        </button>
+                      )}
+                      {canManageSelectedCustomer && (
+                        <button style={styles.deleteButton} onClick={deleteCustomer}>
+                          업체 삭제
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -743,6 +850,95 @@ export default function CustomerPage() {
 
               <button style={styles.primaryButton} onClick={addCustomer}>
                 업체 등록
+              </button>
+            </div>
+          </div>
+        )}
+
+        {customerEditModalOpen && selectedCustomer && (
+          <div style={styles.modalBackdrop}>
+            <div style={styles.modal}>
+              <div style={styles.modalHeader}>
+                <div>
+                  <div style={styles.detailMeta}>선택 업체</div>
+                  <h2 style={styles.panelTitle}>업체 정보 수정</h2>
+                </div>
+                <button
+                  style={styles.closeButton}
+                  onClick={() => {
+                    setCustomerEditModalOpen(false);
+                    setCustomerEditForm(emptyCustomerForm);
+                  }}
+                >
+                  닫기
+                </button>
+              </div>
+
+              <Field label="업체명">
+                <input
+                  value={customerEditForm.name}
+                  onChange={(event) =>
+                    updateCustomerEdit("name", event.target.value)
+                  }
+                  placeholder="업체명"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="분류">
+                <select
+                  value={customerEditForm.category}
+                  onChange={(event) =>
+                    updateCustomerEdit(
+                      "category",
+                      event.target.value as CustomerCategory
+                    )
+                  }
+                  style={styles.input}
+                >
+                  {customerCategories.map((category) => (
+                    <option key={category.key} value={category.key}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="대표 연락처">
+                <input
+                  value={customerEditForm.phone}
+                  onChange={(event) =>
+                    updateCustomerEdit("phone", event.target.value)
+                  }
+                  placeholder="대표번호"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="주소">
+                <input
+                  value={customerEditForm.address}
+                  onChange={(event) =>
+                    updateCustomerEdit("address", event.target.value)
+                  }
+                  placeholder="주소"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="메모">
+                <textarea
+                  value={customerEditForm.memo}
+                  onChange={(event) =>
+                    updateCustomerEdit("memo", event.target.value)
+                  }
+                  placeholder="거래 특이사항, 방문 참고사항"
+                  style={{ ...styles.input, ...styles.textarea }}
+                />
+              </Field>
+
+              <button style={styles.primaryButton} onClick={updateSelectedCustomer}>
+                정보 저장
               </button>
             </div>
           </div>
