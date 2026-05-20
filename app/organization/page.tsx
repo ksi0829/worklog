@@ -84,6 +84,10 @@ const divisions: Division[] = [
     tone: "blue",
     departments: [
       {
+        name: "전략기획부",
+        members: [],
+      },
+      {
         name: "신사업부",
         members: [
           { name: "권현진", rank: "부장", leader: true, leaderLabel: "팀장" },
@@ -230,7 +234,8 @@ export default function OrganizationPage() {
               <div style={styles.ceoBox}>
                 <PersonNode title={executive.title} name={executive.name} tone="dark" />
               </div>
-              <div style={styles.mainVerticalLine} />
+              <div style={styles.topVerticalLine} />
+              <div style={styles.lowerVerticalLine} />
             </div>
 
             <div style={styles.divisionRailArea}>
@@ -265,12 +270,16 @@ export default function OrganizationPage() {
                         </div>
 
                         <div style={styles.memberList}>
-                          {department.members.map((member) => (
-                            <MemberRow
-                              key={`${division.name}-${department.name}-${member.name}`}
-                              member={member}
-                            />
-                          ))}
+                          {department.members.length > 0 ? (
+                            department.members.map((member) => (
+                              <MemberRow
+                                key={`${division.name}-${department.name}-${member.name}`}
+                                member={member}
+                              />
+                            ))
+                          ) : (
+                            <div style={styles.emptyDepartment}>배정 인원 없음</div>
+                          )}
                         </div>
                       </section>
                     ))}
@@ -420,30 +429,40 @@ const styles: Record<string, CSSProperties> = {
     overflowY: "visible",
   },
   chartInner: {
-    minWidth: "1560px",
+    width: "1380px",
+    maxWidth: "none",
     margin: "0 auto",
   },
 
   topArea: {
     position: "relative",
     width: "620px",
-    height: "220px",
+    height: "236px",
     margin: "0 auto",
   },
   ceoBox: {
     position: "absolute",
     left: "50%",
-    top: "88px",
+    top: "100px",
     width: "220px",
     height: "76px",
     transform: "translateX(-50%)",
   },
-  mainVerticalLine: {
+  topVerticalLine: {
     position: "absolute",
     left: "50%",
     top: "76px",
     width: "1px",
-    height: "144px",
+    height: "24px",
+    background: "#cbd5e1",
+    transform: "translateX(-50%)",
+  },
+  lowerVerticalLine: {
+    position: "absolute",
+    left: "50%",
+    top: "176px",
+    width: "1px",
+    height: "60px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
@@ -464,7 +483,7 @@ const styles: Record<string, CSSProperties> = {
   divisionRailArea: {
     position: "relative",
     height: "28px",
-    margin: "0 calc((100% - 260px) / 10)",
+    margin: "0 calc((100% - 56px) / 10)",
   },
   divisionRail: {
     position: "absolute",
@@ -477,8 +496,8 @@ const styles: Record<string, CSSProperties> = {
 
   divisionGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(5, minmax(260px, 1fr))",
-    gap: "16px",
+    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+    gap: "14px",
     alignItems: "start",
   },
   divisionCard: {
@@ -486,7 +505,7 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #e5e7eb",
     borderRadius: "12px",
     background: "#f8fafc",
-    padding: "12px",
+    padding: "10px",
     minHeight: "250px",
   },
   divisionStem: {
@@ -501,24 +520,24 @@ const styles: Record<string, CSSProperties> = {
   divisionHeader: {
     display: "grid",
     gap: "4px",
-    minHeight: "70px",
+    minHeight: "62px",
     alignContent: "center",
     border: "1px solid #cbd5e1",
     borderRadius: "8px",
-    padding: "10px 12px",
-    marginBottom: "10px",
+    padding: "8px 10px",
+    marginBottom: "9px",
     textAlign: "center",
   },
   divisionTitle: {
     margin: 0,
     color: "#111827",
-    fontSize: "15px",
+    fontSize: "14px",
     fontWeight: 900,
     lineHeight: 1.2,
   },
   divisionEnglish: {
     color: "#334155",
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: 700,
     lineHeight: 1.25,
   },
@@ -534,17 +553,17 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
   },
   compactMemberRow: {
-    minHeight: "38px",
+    minHeight: "34px",
   },
   departmentList: {
     display: "grid",
-    gap: "10px",
+    gap: "8px",
   },
   departmentCard: {
     border: "1px solid #e5e7eb",
     borderRadius: "10px",
     background: "#ffffff",
-    padding: "10px",
+    padding: "8px",
   },
   departmentHeader: {
     display: "flex",
@@ -555,7 +574,7 @@ const styles: Record<string, CSSProperties> = {
   },
   departmentTitle: {
     margin: 0,
-    fontSize: "14px",
+    fontSize: "13px",
     fontWeight: 900,
     whiteSpace: "nowrap",
   },
@@ -567,7 +586,17 @@ const styles: Record<string, CSSProperties> = {
   },
   memberList: {
     display: "grid",
-    gap: "7px",
+    gap: "6px",
+  },
+  emptyDepartment: {
+    minHeight: "32px",
+    display: "grid",
+    placeItems: "center",
+    border: "1px dashed #cbd5e1",
+    borderRadius: "8px",
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: 800,
   },
 
   executiveNode: {
@@ -616,7 +645,7 @@ const styles: Record<string, CSSProperties> = {
 
   memberRow: {
     position: "relative",
-    minHeight: "38px",
+    minHeight: "34px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -624,11 +653,11 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #e5e7eb",
     borderRadius: "8px",
     background: "#ffffff",
-    padding: "0 10px",
+    padding: "0 8px",
   },
   leaderRow: {
     position: "relative",
-    minHeight: "40px",
+    minHeight: "36px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -636,7 +665,7 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #111827",
     borderRadius: "8px",
     background: "#ffffff",
-    padding: "0 10px",
+    padding: "0 8px",
   },
   memberName: {
     minWidth: 0,
