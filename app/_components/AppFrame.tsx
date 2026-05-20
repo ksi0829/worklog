@@ -165,6 +165,7 @@ export function AppFrame({ children }: AppFrameProps) {
   const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
   const title = TITLE_BY_PATH[pathname] || "ZETA";
@@ -228,8 +229,33 @@ export function AppFrame({ children }: AppFrameProps) {
     });
   }, [loadApprovalAlerts, loadAsWorkOrderAlerts, pathname]);
 
+  useEffect(() => {
+    const originalAlert = window.alert;
+    let timeoutId: number | undefined;
+
+    window.alert = (message?: unknown) => {
+      setToastMessage(String(message ?? ""));
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(() => setToastMessage(""), 3200);
+    };
+
+    return () => {
+      window.alert = originalAlert;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
   if (pathname === "/login") {
-    return children;
+    return (
+      <>
+        {children}
+        <SystemToast message={toastMessage} onClose={() => setToastMessage("")} />
+      </>
+    );
   }
 
   async function handleLogout() {
@@ -474,6 +500,31 @@ export function AppFrame({ children }: AppFrameProps) {
           </section>
         </div>
       )}
+      <SystemToast message={toastMessage} onClose={() => setToastMessage("")} />
+    </div>
+  );
+}
+
+function SystemToast({
+  message,
+  onClose,
+}: {
+  message: string;
+  onClose: () => void;
+}) {
+  if (!message) return null;
+
+  return (
+    <div style={styles.toastWrap}>
+      <section style={styles.toast} role="status" aria-live="polite">
+        <div>
+          <span style={styles.toastKicker}>시스템 알림</span>
+          <p style={styles.toastMessage}>{message}</p>
+        </div>
+        <button type="button" style={styles.toastCloseButton} onClick={onClose}>
+          닫기
+        </button>
+      </section>
     </div>
   );
 }
@@ -951,5 +1002,51 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
     fontSize: "13px",
     fontWeight: 750,
+  },
+  toastWrap: {
+    position: "fixed",
+    top: "18px",
+    right: "18px",
+    zIndex: 1000,
+    width: "min(360px, calc(100vw - 32px))",
+    pointerEvents: "none",
+  },
+  toast: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "14px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "12px",
+    background: "#ffffff",
+    boxShadow: "0 18px 48px rgba(15, 23, 42, 0.18)",
+    padding: "14px 14px 14px 16px",
+    pointerEvents: "auto",
+  },
+  toastKicker: {
+    display: "block",
+    marginBottom: "4px",
+    color: "#059669",
+    fontSize: "11px",
+    fontWeight: 850,
+  },
+  toastMessage: {
+    margin: 0,
+    color: "#111827",
+    fontSize: "13px",
+    fontWeight: 750,
+    lineHeight: 1.45,
+    wordBreak: "keep-all",
+  },
+  toastCloseButton: {
+    flex: "0 0 auto",
+    border: "1px solid #d8e0ea",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    color: "#334155",
+    padding: "6px 9px",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
   },
 };
