@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { EXECUTIVE_NAMES, getCurrentOrgTeam } from "@/app/_lib/currentOrg";
+import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
@@ -143,7 +143,7 @@ const stageDefs: StageDef[] = [
 ];
 
 const PURCHASE_LEAD_NAMES = ["권현진"];
-const TECHNICAL_LEAD_NAMES = ["한차현", "이승준", "장동철"];
+const TECHNICAL_1_LEAD_NAMES = ["한차현"];
 
 const sectionDefs: {
   key: OrderCategory;
@@ -241,10 +241,9 @@ function getStageText(status: StageStatus) {
 
 function canConfirmStage(stage: StageDef, currentName: string, currentRole: string) {
   if (!stage.manual) return false;
-  if (currentRole === "admin" || currentRole === "executive") return true;
-  if (EXECUTIVE_NAMES.includes(currentName)) return true;
+  if (currentRole === "admin") return true;
   if (stage.confirmRole === "purchaseLead") return PURCHASE_LEAD_NAMES.includes(currentName);
-  if (stage.confirmRole === "technicalLead") return TECHNICAL_LEAD_NAMES.includes(currentName);
+  if (stage.confirmRole === "technicalLead") return TECHNICAL_1_LEAD_NAMES.includes(currentName);
 
   return false;
 }
@@ -1129,9 +1128,11 @@ const styles: Record<string, CSSProperties> = {
   stageTooltip: {
     position: "absolute",
     left: "50%",
-    bottom: "calc(100% + 8px)",
+    top: "calc(100% + 8px)",
     zIndex: 20,
-    width: "220px",
+    width: "max-content",
+    minWidth: "220px",
+    maxWidth: "320px",
     transform: "translateX(-50%)",
     border: "1px solid #cfd6df",
     borderRadius: "8px",
@@ -1142,6 +1143,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     lineHeight: 1.45,
     whiteSpace: "normal",
+    overflowWrap: "break-word",
     textAlign: "left",
     boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
     pointerEvents: "none",
