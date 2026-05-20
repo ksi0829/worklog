@@ -18,6 +18,7 @@ type FieldType = "text" | "date" | "select" | "textarea";
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "outsourcingRequest" | "qa";
 type InputMode = "modern" | "legacy";
+type DocumentFilter = "mine" | "pending" | "reference" | "history";
 
 type FieldDef = {
   key: string;
@@ -476,6 +477,17 @@ function formatDate(value?: string | null) {
   return value.slice(0, 10);
 }
 
+function formatMonthKey(value?: string | null) {
+  if (!value) return "unknown";
+  return value.slice(0, 7);
+}
+
+function formatMonthLabel(monthKey: string) {
+  if (monthKey === "unknown") return "날짜 미지정";
+  const [year, month] = monthKey.split("-");
+  return `${year}년 ${Number(month)}월`;
+}
+
 function formatShortDate(value?: string | null) {
   if (!value) return "";
   const [, month, day] = value.slice(0, 10).split("-");
@@ -534,6 +546,46 @@ function getReferenceInfos(data: Record<string, unknown>): ApprovalReferenceInfo
       typeof item === "object" &&
       typeof (item as ApprovalReferenceInfo).id === "string"
   );
+}
+
+function collectSearchValues(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) return value.flatMap(collectSearchValues);
+  if (typeof value === "object") return Object.values(value).flatMap(collectSearchValues);
+  return [];
+}
+
+function documentMatchesSearch(document: ApprovalDocumentRow, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("ko");
+  if (!normalizedQuery) return true;
+
+  const searchableText = [
+    document.template_title,
+    document.title,
+    document.requester_name,
+    document.requester_team || "",
+    statusText(document.status),
+    formatDate(document.submitted_at),
+    formatDate(document.completed_at),
+    ...(document.approval_lines || []).flatMap((line) => [
+      line.approver_name,
+      line.approver_team || "",
+      line.role_label,
+      statusText(line.status),
+    ]),
+    ...getReferenceInfos(document.form_data).flatMap((reference) => [
+      reference.name,
+      reference.team,
+    ]),
+    ...collectSearchValues(document.form_data),
+  ]
+    .join(" ")
+    .toLocaleLowerCase("ko");
+
+  return searchableText.includes(normalizedQuery);
 }
 
 function getLinkedEquipmentInfo(document: ApprovalDocumentRow) {
@@ -688,7 +740,9 @@ export default function ApprovalPage() {
   const [currentRole, setCurrentRole] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [detailModalDocumentId, setDetailModalDocumentId] = useState<number | null>(null);
-  const [activeFilter, setActiveFilter] = useState<"mine" | "pending" | "history">("mine");
+  const [activeFilter, setActiveFilter] = useState<DocumentFilter>("mine");
+  const [documentSearchQuery, setDocumentSearchQuery] = useState("");
+  const [expandedHistoryMonths, setExpandedHistoryMonths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -756,7 +810,12 @@ export default function ApprovalPage() {
     [visibleDocuments]
   );
 
-  const filteredDocuments = useMemo(() => {
+  const referenceForMe = useMemo(
+    () => visibleDocuments.filter(isCurrentReference),
+    [isCurrentReference, visibleDocuments]
+  );
+
+  const baseFilteredDocuments = useMemo(() => {
     if (activeFilter === "mine") {
       if (isAdmin) return visibleDocuments;
       return visibleDocuments.filter(isCurrentRequester);
@@ -766,12 +825,50 @@ export default function ApprovalPage() {
       return pendingForMe;
     }
 
+    if (activeFilter === "reference") {
+      return referenceForMe;
+    }
+
     if (activeFilter === "history") {
       return completedForMe;
     }
 
     return [];
-  }, [activeFilter, completedForMe, isAdmin, isCurrentRequester, pendingForMe, visibleDocuments]);
+  }, [
+    activeFilter,
+    completedForMe,
+    isAdmin,
+    isCurrentRequester,
+    pendingForMe,
+    referenceForMe,
+    visibleDocuments,
+  ]);
+
+  const filteredDocuments = useMemo(
+    () =>
+      baseFilteredDocuments.filter((document) =>
+        documentMatchesSearch(document, documentSearchQuery)
+      ),
+    [baseFilteredDocuments, documentSearchQuery]
+  );
+
+  const historyMonthGroups = useMemo(() => {
+    const groupMap = new Map<string, ApprovalDocumentRow[]>();
+
+    filteredDocuments.forEach((document) => {
+      const monthKey = formatMonthKey(document.completed_at || document.submitted_at);
+      groupMap.set(monthKey, [...(groupMap.get(monthKey) || []), document]);
+    });
+
+    return Array.from(groupMap.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([monthKey, rows]) => ({
+        monthKey,
+        rows: rows.sort((a, b) =>
+          (b.completed_at || b.submitted_at).localeCompare(a.completed_at || a.submitted_at)
+        ),
+      }));
+  }, [filteredDocuments]);
 
   const selectedDocument = useMemo(
     () =>
@@ -917,7 +1014,7 @@ export default function ApprovalPage() {
     );
 
     if (!selectedOrder) {
-      setSelectedEquipmentOrderId("");
+      void Promise.resolve().then(() => setSelectedEquipmentOrderId(""));
       return;
     }
 
@@ -928,11 +1025,13 @@ export default function ApprovalPage() {
       ? getStringValue(manufacturingDocument.form_data, "serialNo")
       : "";
 
-    setFormData((prev) =>
-      applyEquipmentOrderFields(prev, {
-        ...selectedOrder,
-        serial_no: selectedOrder.serial_no || serialFromDocument || null,
-      })
+    void Promise.resolve().then(() =>
+      setFormData((prev) =>
+        applyEquipmentOrderFields(prev, {
+          ...selectedOrder,
+          serial_no: selectedOrder.serial_no || serialFromDocument || null,
+        })
+      )
     );
   }, [documents, linkableEquipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
 
@@ -1347,6 +1446,36 @@ export default function ApprovalPage() {
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
     selectedDocument?.status === "pending" && isCurrentApprovalLine(currentPendingLine);
+  const renderDocumentButton = (document: ApprovalDocumentRow) => {
+    const active = selectedDocument?.id === document.id;
+    const pendingLine = getFirstPendingLine(document);
+
+    return (
+      <button
+        key={document.id}
+        type="button"
+        style={{
+          ...styles.documentButton,
+          ...(active ? styles.documentButtonActive : {}),
+        }}
+        onClick={() => {
+          setSelectedDocumentId(document.id);
+          setDetailModalDocumentId(document.id);
+        }}
+      >
+        <span style={styles.documentTopLine}>
+          <strong>{document.title}</strong>
+          <em style={styles.statusBadge}>{statusText(document.status)}</em>
+        </span>
+        <span style={styles.documentMeta}>
+          {document.requester_name} · {formatDate(document.submitted_at)}
+        </span>
+        <span style={styles.documentMeta}>
+          다음 결재: {pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "-"}
+        </span>
+      </button>
+    );
+  };
 
   return (
     <section style={styles.page}>
@@ -1772,6 +1901,7 @@ export default function ApprovalPage() {
             {[
               ["mine", "내 문서"],
               ["pending", "결재 대기"],
+              ["reference", "참조"],
               ["history", "완료"],
             ].map(([key, label]) => (
               <button
@@ -1788,6 +1918,14 @@ export default function ApprovalPage() {
             ))}
           </div>
 
+          <input
+            type="search"
+            value={documentSearchQuery}
+            onChange={(event) => setDocumentSearchQuery(event.target.value)}
+            placeholder="문서명, 작성자, 고객사, 장비명, S/N 검색"
+            style={styles.documentSearchInput}
+          />
+
           <div
             style={{
               ...styles.documentList,
@@ -1796,37 +1934,38 @@ export default function ApprovalPage() {
           >
             {filteredDocuments.length === 0 ? (
               <div style={styles.emptyBox}>표시할 문서가 없습니다.</div>
-            ) : (
-              filteredDocuments.map((document) => {
-                const active = selectedDocument?.id === document.id;
-                const pendingLine = getFirstPendingLine(document);
+            ) : activeFilter === "history" ? (
+              historyMonthGroups.map(({ monthKey, rows }) => {
+                const expanded = expandedHistoryMonths.includes(monthKey);
 
                 return (
-                  <button
-                    key={document.id}
-                    type="button"
-                    style={{
-                      ...styles.documentButton,
-                      ...(active ? styles.documentButtonActive : {}),
-                    }}
-                    onClick={() => {
-                      setSelectedDocumentId(document.id);
-                      setDetailModalDocumentId(document.id);
-                    }}
-                  >
-                    <span style={styles.documentTopLine}>
-                      <strong>{document.title}</strong>
-                      <em style={styles.statusBadge}>{statusText(document.status)}</em>
-                    </span>
-                    <span style={styles.documentMeta}>
-                      {document.requester_name} · {formatDate(document.submitted_at)}
-                    </span>
-                    <span style={styles.documentMeta}>
-                      다음 결재: {pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "-"}
-                    </span>
-                  </button>
+                  <section key={monthKey} style={styles.historyMonthGroup}>
+                    <button
+                      type="button"
+                      style={styles.historyMonthHeader}
+                      onClick={() =>
+                        setExpandedHistoryMonths((prev) =>
+                          prev.includes(monthKey)
+                            ? prev.filter((item) => item !== monthKey)
+                            : [...prev, monthKey]
+                        )
+                      }
+                    >
+                      <span>{formatMonthLabel(monthKey)}</span>
+                      <strong>{rows.length}건</strong>
+                      <em>{expanded ? "접기" : "펼치기"}</em>
+                    </button>
+
+                    {expanded && (
+                      <div style={styles.historyMonthList}>
+                        {rows.map((document) => renderDocumentButton(document))}
+                      </div>
+                    )}
+                  </section>
                 );
               })
+            ) : (
+              filteredDocuments.map((document) => renderDocumentButton(document))
             )}
           </div>
 
@@ -2892,9 +3031,9 @@ const styles: Record<string, CSSProperties> = {
   },
   filterTabs: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
+    gridTemplateColumns: "repeat(4, 1fr)",
     gap: "6px",
-    marginBottom: "12px",
+    marginBottom: "8px",
   },
   filterTabsMobile: {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -2913,6 +3052,19 @@ const styles: Record<string, CSSProperties> = {
     borderColor: "#111820",
     background: "#111820",
     color: "#ffffff",
+  },
+  documentSearchInput: {
+    width: "100%",
+    height: "36px",
+    border: "1px solid #d0d5dd",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: "12px",
+    fontWeight: 700,
+    padding: "0 10px",
+    marginBottom: "12px",
+    outline: "none",
   },
   documentList: {
     display: "flex",
@@ -2940,6 +3092,33 @@ const styles: Record<string, CSSProperties> = {
   documentButtonActive: {
     borderColor: "#0f8a56",
     background: "#f6fbf8",
+  },
+  historyMonthGroup: {
+    display: "grid",
+    gap: "8px",
+  },
+  historyMonthHeader: {
+    width: "100%",
+    minHeight: "38px",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+    alignItems: "center",
+    gap: "8px",
+    border: "1px solid #d0d5dd",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    color: "#111827",
+    padding: "0 10px",
+    textAlign: "left",
+    cursor: "pointer",
+    fontSize: "13px",
+    fontWeight: 900,
+  },
+  historyMonthList: {
+    display: "grid",
+    gap: "8px",
+    paddingLeft: "8px",
+    borderLeft: "2px solid #e5e7eb",
   },
   documentTopLine: {
     display: "flex",
