@@ -232,7 +232,7 @@ export default function OrganizationPage() {
             <div style={styles.topArea}>
               <PersonNode title={chairman.title} name={chairman.name} tone="soft" />
               <div style={styles.ceoBox}>
-                <PersonNode title={executive.title} name={executive.name} tone="dark" />
+                <PersonNode title={executive.title} name={executive.name} tone="soft" />
               </div>
               <div style={styles.topVerticalLine} />
               <div style={styles.lowerVerticalLine} />
@@ -429,7 +429,7 @@ const styles: Record<string, CSSProperties> = {
     overflowY: "visible",
   },
   chartInner: {
-    width: "1380px",
+    width: "1580px",
     maxWidth: "none",
     margin: "0 auto",
   },
@@ -437,7 +437,7 @@ const styles: Record<string, CSSProperties> = {
   topArea: {
     position: "relative",
     width: "620px",
-    height: "236px",
+    height: "246px",
     margin: "0 auto",
   },
   ceoBox: {
@@ -460,9 +460,9 @@ const styles: Record<string, CSSProperties> = {
   lowerVerticalLine: {
     position: "absolute",
     left: "50%",
-    top: "176px",
+    top: "181px",
     width: "1px",
-    height: "60px",
+    height: "65px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
