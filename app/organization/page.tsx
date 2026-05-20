@@ -220,7 +220,13 @@ function PersonNode({
       <span style={styles.nodeTitle}>{title}</span>
       <strong style={styles.nodeName}>{name}</strong>
 
-      <span style={{ ...styles.tooltip, display: open ? "grid" : "none" }}>
+      <span
+        style={{
+          ...styles.tooltip,
+          ...styles.tooltipBelow,
+          display: open ? "grid" : "none",
+        }}
+      >
         <strong>{name}</strong>
         <span>{email}</span>
       </span>
@@ -512,5 +518,9 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "left",
     pointerEvents: "none",
     wordBreak: "break-all",
+  },
+  tooltipBelow: {
+    top: "calc(100% + 8px)",
+    bottom: "auto",
   },
 };
