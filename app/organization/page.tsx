@@ -12,9 +12,17 @@ type Member = {
   leaderLabel?: string;
 };
 
-type Team = {
+type Department = {
   name: string;
   members: Member[];
+};
+
+type Division = {
+  name: string;
+  english: string;
+  tone: "orange" | "yellow" | "blue" | "green" | "sky";
+  head?: Member;
+  departments: Department[];
 };
 
 const chairman = {
@@ -27,91 +35,134 @@ const executive = {
   name: "신영호",
 };
 
-const teams: Team[] = [
+const divisions: Division[] = [
   {
     name: "관리본부",
-    members: [
-      { name: "정대용", rank: "상무", leader: true, leaderLabel: "본부장" },
+    english: "Administration Division",
+    tone: "orange",
+    head: { name: "정대용", rank: "상무", leader: true, leaderLabel: "본부장" },
+    departments: [
+      {
+        name: "재무/인사",
+        members: [
+          { name: "김혜정", rank: "차장", leader: true, leaderLabel: "팀장" },
+          { name: "최인혜", rank: "주임" },
+        ],
+      },
+      {
+        name: "구매/총무",
+        members: [
+          { name: "신훈식", rank: "부장" },
+          { name: "최하영", rank: "대리" },
+        ],
+      },
+      {
+        name: "국내영업부",
+        members: [
+          { name: "김선일", rank: "과장" },
+        ],
+      },
     ],
   },
   {
-    name: "재무/인사",
-    members: [
-      { name: "김혜정", rank: "차장", leader: true, leaderLabel: "팀장" },
-      { name: "최인혜", rank: "주임" },
+    name: "영업본부",
+    english: "Sales & Marketing Division",
+    tone: "yellow",
+    departments: [
+      {
+        name: "해외영업부",
+        members: [
+          { name: "이양로", rank: "과장", leader: true, leaderLabel: "팀장" },
+          { name: "반준영", rank: "주임" },
+        ],
+      },
     ],
   },
   {
-    name: "구매/총무",
-    members: [
-      { name: "신훈식", rank: "부장" },
-      { name: "최하영", rank: "대리" },
-    ],
-  },
-  {
-    name: "국내영업부",
-    members: [
-      { name: "김선일", rank: "과장" },
-    ],
-  },
-  {
-    name: "해외영업부",
-    members: [
-      { name: "이양로", rank: "과장", leader: true, leaderLabel: "팀장" },
-      { name: "반준영", rank: "주임" },
-    ],
-  },
-  {
-    name: "신사업부",
-    members: [
-      { name: "권현진", rank: "부장", leader: true, leaderLabel: "팀장" },
-      { name: "박봉근", rank: "실장" },
-      { name: "최하영", rank: "대리" },
+    name: "기획본부",
+    english: "Planning Division",
+    tone: "blue",
+    departments: [
+      {
+        name: "신사업부",
+        members: [
+          { name: "권현진", rank: "부장", leader: true, leaderLabel: "팀장" },
+          { name: "박봉근", rank: "실장" },
+          { name: "최하영", rank: "대리" },
+        ],
+      },
     ],
   },
   {
     name: "R&D/품질보증본부",
-    members: [
-      { name: "서중석", rank: "상무", leader: true, leaderLabel: "본부장" },
-    ],
-  },
-  {
-    name: "R&D/QA부",
-    members: [
-      { name: "윤지환", rank: "부장" },
+    english: "R&D/QA Division",
+    tone: "green",
+    head: { name: "서중석", rank: "상무", leader: true, leaderLabel: "본부장" },
+    departments: [
+      {
+        name: "R&D/QA부",
+        members: [
+          { name: "윤지환", rank: "부장" },
+        ],
+      },
     ],
   },
   {
     name: "생산본부",
-    members: [
-      { name: "장동철", rank: "이사", leader: true, leaderLabel: "본부장" },
-    ],
-  },
-  {
-    name: "기술 1팀",
-    members: [
-      { name: "한차현", rank: "차장", leader: true, leaderLabel: "팀장" },
-      { name: "한재영", rank: "부장" },
-      { name: "권영일", rank: "부장" },
-      { name: "김학", rank: "대리" },
-      { name: "박상현", rank: "대리" },
-    ],
-  },
-  {
-    name: "기술 2팀",
-    members: [
-      { name: "이승준", rank: "차장", leader: true, leaderLabel: "팀장" },
-      { name: "김종혁", rank: "과장" },
-    ],
-  },
-  {
-    name: "기술 3팀",
-    members: [
-      { name: "양희원", rank: "차장" },
-      { name: "김성종", rank: "과장" },
+    english: "Engineering Division",
+    tone: "sky",
+    head: { name: "장동철", rank: "이사", leader: true, leaderLabel: "본부장" },
+    departments: [
+      {
+        name: "기술 1팀",
+        members: [
+          { name: "한차현", rank: "차장", leader: true, leaderLabel: "팀장" },
+          { name: "한재영", rank: "부장" },
+          { name: "권영일", rank: "부장" },
+          { name: "김학", rank: "대리" },
+          { name: "박상현", rank: "대리" },
+        ],
+      },
+      {
+        name: "기술 2팀",
+        members: [
+          { name: "이승준", rank: "차장", leader: true, leaderLabel: "팀장" },
+          { name: "김종혁", rank: "과장" },
+        ],
+      },
+      {
+        name: "기술 3팀",
+        members: [
+          { name: "양희원", rank: "차장" },
+          { name: "김성종", rank: "과장" },
+        ],
+      },
     ],
   },
 ];
+
+const divisionTone: Record<Division["tone"], CSSProperties> = {
+  orange: {
+    background: "#fff1e7",
+    borderColor: "#f6b17a",
+  },
+  yellow: {
+    background: "#fff8dc",
+    borderColor: "#e8c647",
+  },
+  blue: {
+    background: "#edf4ff",
+    borderColor: "#8eb0dc",
+  },
+  green: {
+    background: "#eef9ea",
+    borderColor: "#99cc85",
+  },
+  sky: {
+    background: "#edf7ff",
+    borderColor: "#82b6df",
+  },
+};
 
 const USER_EMAIL_BY_NAME: Record<string, string> = {
   김선일: "ksi@zetacorporation.com",
@@ -182,26 +233,46 @@ export default function OrganizationPage() {
               <div style={styles.mainVerticalLine} />
             </div>
 
-            <div style={styles.teamRailArea}>
-              <div style={styles.teamRail} />
+            <div style={styles.divisionRailArea}>
+              <div style={styles.divisionRail} />
             </div>
 
-            <div style={styles.teamGrid}>
-              {teams.map((team) => (
-                <section key={team.name} style={styles.teamCard}>
-                  <div style={styles.teamStem} />
+            <div style={styles.divisionGrid}>
+              {divisions.map((division) => (
+                <section key={division.name} style={styles.divisionCard}>
+                  <div style={styles.divisionStem} />
 
-                  <div style={styles.teamHeader}>
-                    <h2 style={styles.teamTitle}>{team.name}</h2>
-                    <span style={styles.teamCount}>{team.members.length}명</span>
+                  <div style={{ ...styles.divisionHeader, ...divisionTone[division.tone] }}>
+                    <h2 style={styles.divisionTitle}>{division.name}</h2>
+                    <span style={styles.divisionEnglish}>{division.english}</span>
                   </div>
 
-                  <div style={styles.memberList}>
-                    {team.members.map((member) => (
-                      <MemberRow
-                        key={`${team.name}-${member.name}`}
-                        member={member}
-                      />
+                  {division.head && (
+                    <div style={styles.divisionHeadBox}>
+                      <span style={styles.divisionHeadLabel}>
+                        {division.head.leaderLabel || "본부장"}
+                      </span>
+                      <MemberRow member={division.head} compact />
+                    </div>
+                  )}
+
+                  <div style={styles.departmentList}>
+                    {division.departments.map((department) => (
+                      <section key={`${division.name}-${department.name}`} style={styles.departmentCard}>
+                        <div style={styles.departmentHeader}>
+                          <h3 style={styles.departmentTitle}>{department.name}</h3>
+                          <span style={styles.teamCount}>{department.members.length}명</span>
+                        </div>
+
+                        <div style={styles.memberList}>
+                          {department.members.map((member) => (
+                            <MemberRow
+                              key={`${division.name}-${department.name}-${member.name}`}
+                              member={member}
+                            />
+                          ))}
+                        </div>
+                      </section>
                     ))}
                   </div>
                 </section>
@@ -254,7 +325,7 @@ function PersonNode({
   );
 }
 
-function MemberRow({ member }: { member: Member }) {
+function MemberRow({ member, compact = false }: { member: Member; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const email = getRegisteredEmail(member.name);
   const tooltip = `${member.name} / ${email}`;
@@ -263,7 +334,10 @@ function MemberRow({ member }: { member: Member }) {
     <div
       title={tooltip}
       tabIndex={0}
-      style={member.leader ? styles.leaderRow : styles.memberRow}
+      style={{
+        ...(member.leader ? styles.leaderRow : styles.memberRow),
+        ...(compact ? styles.compactMemberRow : {}),
+      }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -346,7 +420,7 @@ const styles: Record<string, CSSProperties> = {
     overflowY: "visible",
   },
   chartInner: {
-    minWidth: "1980px",
+    minWidth: "1560px",
     margin: "0 auto",
   },
 
@@ -387,12 +461,12 @@ const styles: Record<string, CSSProperties> = {
     top: "102px",
   },
 
-  teamRailArea: {
+  divisionRailArea: {
     position: "relative",
     height: "28px",
-    margin: "0 calc((100% - 98px) / 16)",
+    margin: "0 calc((100% - 260px) / 10)",
   },
-  teamRail: {
+  divisionRail: {
     position: "absolute",
     left: "0",
     right: "0",
@@ -401,21 +475,21 @@ const styles: Record<string, CSSProperties> = {
     background: "#cbd5e1",
   },
 
-  teamGrid: {
+  divisionGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(12, 1fr)",
-    gap: "14px",
+    gridTemplateColumns: "repeat(5, minmax(260px, 1fr))",
+    gap: "16px",
     alignItems: "start",
   },
-  teamCard: {
+  divisionCard: {
     position: "relative",
     border: "1px solid #e5e7eb",
-    borderRadius: "10px",
+    borderRadius: "12px",
     background: "#f8fafc",
     padding: "12px",
-    minHeight: "126px",
+    minHeight: "250px",
   },
-  teamStem: {
+  divisionStem: {
     position: "absolute",
     left: "50%",
     top: "-29px",
@@ -424,14 +498,62 @@ const styles: Record<string, CSSProperties> = {
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
-  teamHeader: {
+  divisionHeader: {
+    display: "grid",
+    gap: "4px",
+    minHeight: "70px",
+    alignContent: "center",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    padding: "10px 12px",
+    marginBottom: "10px",
+    textAlign: "center",
+  },
+  divisionTitle: {
+    margin: 0,
+    color: "#111827",
+    fontSize: "15px",
+    fontWeight: 900,
+    lineHeight: 1.2,
+  },
+  divisionEnglish: {
+    color: "#334155",
+    fontSize: "11px",
+    fontWeight: 700,
+    lineHeight: 1.25,
+  },
+  divisionHeadBox: {
+    display: "grid",
+    gap: "6px",
+    marginBottom: "10px",
+  },
+  divisionHeadLabel: {
+    color: "#64748b",
+    fontSize: "11px",
+    fontWeight: 900,
+    textAlign: "center",
+  },
+  compactMemberRow: {
+    minHeight: "38px",
+  },
+  departmentList: {
+    display: "grid",
+    gap: "10px",
+  },
+  departmentCard: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
+    padding: "10px",
+  },
+  departmentHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "8px",
     marginBottom: "10px",
   },
-  teamTitle: {
+  departmentTitle: {
     margin: 0,
     fontSize: "14px",
     fontWeight: 900,
