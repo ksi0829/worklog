@@ -100,6 +100,82 @@ export const ORG_MEMBER_MAP = new Map<
   ) as [string, OrgMemberInfo][]
 );
 
+export const WORKLOG_ORG: CurrentOrgTeam[] = [
+  {
+    team: "재무/인사",
+    leader: "김혜정",
+    members: ["최인혜"],
+  },
+  {
+    team: "구매/총무",
+    members: ["신훈식", "최하영"],
+  },
+  {
+    team: "국내영업",
+    members: ["김선일"],
+  },
+  {
+    team: "해외영업",
+    leader: "이양로",
+    members: ["반준영"],
+  },
+  {
+    team: "전략기획",
+    members: [],
+  },
+  {
+    team: "신사업",
+    leader: "권현진",
+    members: ["박봉근"],
+  },
+  {
+    team: "R&D/QA",
+    members: ["윤지환"],
+  },
+  {
+    team: "기술 1팀",
+    leader: "한차현",
+    members: ["한재영", "권영일", "김학", "박상현"],
+  },
+  {
+    team: "기술 2팀",
+    leader: "이승준",
+    members: ["김종혁"],
+  },
+  {
+    team: "기술 3팀",
+    members: ["양희원", "김성종"],
+  },
+];
+
+export const WORKLOG_TEAM_ORDER = WORKLOG_ORG.map(
+  (team) => team.team
+);
+
+export const WORKLOG_MEMBER_MAP = new Map<
+  string,
+  OrgMemberInfo
+>(
+  WORKLOG_ORG.flatMap((team) => {
+    const entries = team.members.map(
+      (name) =>
+        [
+          name,
+          { team: team.team, leader: false },
+        ] as [string, OrgMemberInfo]
+    );
+
+    if (team.leader) {
+      entries.unshift([
+        team.leader,
+        { team: team.team, leader: true },
+      ]);
+    }
+
+    return entries;
+  })
+);
+
 export function getCurrentOrgTeam(
   name: string,
   fallbackTeam = ""

@@ -11,8 +11,8 @@ import {
 import { useRouter } from "next/navigation";
 
 import {
-  ORG_MEMBER_MAP,
-  TEAM_ORDER,
+  WORKLOG_MEMBER_MAP,
+  WORKLOG_TEAM_ORDER,
   canViewAllWorklogs,
 } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
@@ -50,8 +50,8 @@ function sortProfilesByOrg(
   a: Profile,
   b: Profile
 ) {
-  const aInfo = ORG_MEMBER_MAP.get(a.name);
-  const bInfo = ORG_MEMBER_MAP.get(b.name);
+  const aInfo = WORKLOG_MEMBER_MAP.get(a.name);
+  const bInfo = WORKLOG_MEMBER_MAP.get(b.name);
 
   if (aInfo?.leader && !bInfo?.leader)
     return -1;
@@ -109,12 +109,6 @@ export default function ViewPage() {
   const [currentRole, setCurrentRole] =
     useState("");
 
-  const [isMobileViewport, setIsMobileViewport] =
-    useState(false);
-
-  const [mobileInputNotice, setMobileInputNotice] =
-    useState(false);
-
   const fetchProfiles = useCallback(async () => {
     const { data } =
       await supabase
@@ -126,13 +120,13 @@ export default function ViewPage() {
     const currentProfiles =
       (data as Profile[])
         .filter((profile) =>
-          ORG_MEMBER_MAP.has(
+          WORKLOG_MEMBER_MAP.has(
             profile.name
           )
         )
         .map((profile) => {
           const orgInfo =
-            ORG_MEMBER_MAP.get(
+            WORKLOG_MEMBER_MAP.get(
               profile.name
             );
 
@@ -174,7 +168,7 @@ export default function ViewPage() {
       localStorage.getItem("role") ||
       "";
     const orgTeam =
-      ORG_MEMBER_MAP.get(storedName)
+      WORKLOG_MEMBER_MAP.get(storedName)
         ?.team ||
       storedTeam;
 
@@ -194,42 +188,8 @@ export default function ViewPage() {
   }, [fetchProfiles]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(
-      "(max-width: 767px)"
-    );
-
-    const syncViewport = () => {
-      setIsMobileViewport(
-        mediaQuery.matches
-      );
-    };
-
-    syncViewport();
-    mediaQuery.addEventListener(
-      "change",
-      syncViewport
-    );
-
-    return () => {
-      mediaQuery.removeEventListener(
-        "change",
-        syncViewport
-      );
-    };
-  }, []);
-
-  useEffect(() => {
     void Promise.resolve().then(() => fetchWorklogs());
   }, [fetchWorklogs]);
-
-  function handleInputClick() {
-    if (isMobileViewport) {
-      setMobileInputNotice(true);
-      return;
-    }
-
-    router.push("/");
-  }
 
   function isWritten(
     userId: string
@@ -328,8 +288,8 @@ export default function ViewPage() {
 
       const visibleTeams =
         canViewAllWorklogs(currentUser, currentRole)
-          ? TEAM_ORDER
-          : TEAM_ORDER.filter(
+          ? WORKLOG_TEAM_ORDER
+          : WORKLOG_TEAM_ORDER.filter(
               (team) => team === currentTeam
             );
 
@@ -353,8 +313,8 @@ export default function ViewPage() {
   const visibleTeamOrder = useMemo(
     () =>
       canViewAllWorklogs(currentUser, currentRole)
-        ? TEAM_ORDER
-        : TEAM_ORDER.filter((team) => team === currentTeam),
+        ? WORKLOG_TEAM_ORDER
+        : WORKLOG_TEAM_ORDER.filter((team) => team === currentTeam),
     [currentRole, currentTeam, currentUser]
   );
 
@@ -466,7 +426,7 @@ export default function ViewPage() {
                     >
                       {profile.name}
 
-                      {ORG_MEMBER_MAP.get(
+                      {WORKLOG_MEMBER_MAP.get(
                         profile.name
                       )?.leader && (
                         <span
