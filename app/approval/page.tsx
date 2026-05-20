@@ -956,7 +956,27 @@ export default function ApprovalPage() {
 
     const { data: documentRows, error: documentError } = await supabase
       .from("approval_documents")
-      .select("*, approval_lines(*)")
+      .select(
+        [
+          "id",
+          "template_key",
+          "template_title",
+          "title",
+          "status",
+          "requester_id",
+          "requester_name",
+          "requester_team",
+          "current_step",
+          "form_data",
+          "submitted_at",
+          "completed_at",
+          "equipment_order_id",
+          "equipment_stage_key",
+          "created_at",
+          "updated_at",
+          "approval_lines(id,document_id,step_order,role_label,approver_id,approver_name,approver_team,status,acted_at,memo)",
+        ].join(",")
+      )
       .order("created_at", { ascending: false });
 
     if (documentError) {
@@ -969,7 +989,7 @@ export default function ApprovalPage() {
       return;
     }
 
-    const normalizedDocuments = ((documentRows || []) as ApprovalDocumentRow[]).map((document) => ({
+    const normalizedDocuments = (((documentRows || []) as unknown) as ApprovalDocumentRow[]).map((document) => ({
       ...document,
       approval_lines: [...(document.approval_lines || [])].sort(
         (a, b) => a.step_order - b.step_order
@@ -982,7 +1002,7 @@ export default function ApprovalPage() {
     if (user?.id) {
       const { data: notificationRows } = await supabase
         .from("approval_notifications")
-        .select("*")
+        .select("id,user_id,document_id,message,read_at,created_at")
         .eq("user_id", user.id)
         .is("read_at", null)
         .order("created_at", { ascending: false });

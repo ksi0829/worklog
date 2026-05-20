@@ -35,6 +35,7 @@ type ApprovalStatus = "pending" | "approved" | "rejected";
 
 type ApprovalLineRow = {
   id: number;
+  document_id?: number;
   step_order: number;
   role_label: string;
   approver_id?: string | null;
@@ -183,11 +184,47 @@ export function AppFrame({ children }: AppFrameProps) {
 
   const alertCount = approvalAlerts.length + asWorkOrderAlerts.length;
 
-  const loadApprovalAlerts = useCallback(async () => {
+  const loadApprovalAlerts = useCallback(async (storedName: string, userId: string) => {
+    const matchFilters = [
+      userId ? `approver_id.eq.${userId}` : "",
+      storedName ? `approver_name.eq.${storedName}` : "",
+    ].filter(Boolean);
+
+    if (matchFilters.length === 0) {
+      setApprovalDocuments([]);
+      return;
+    }
+
+    const { data: matchingLines, error: lineError } = await supabase
+      .from("approval_lines")
+      .select("id,document_id,step_order,role_label,approver_id,approver_name,status")
+      .eq("status", "pending")
+      .or(matchFilters.join(","))
+      .limit(30);
+
+    if (lineError || !matchingLines?.length) {
+      setApprovalDocuments([]);
+      return;
+    }
+
+    const documentIds = Array.from(
+      new Set(
+        (matchingLines as ApprovalLineRow[])
+          .map((line) => line.document_id)
+          .filter((id): id is number => typeof id === "number")
+      )
+    );
+
+    if (documentIds.length === 0) {
+      setApprovalDocuments([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("approval_documents")
       .select("id,title,status,approval_lines(id,step_order,role_label,approver_id,approver_name,status)")
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .in("id", documentIds);
 
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
@@ -208,7 +245,8 @@ export function AppFrame({ children }: AppFrameProps) {
       .from("as_work_orders")
       .select("id,wo_no,customer,model,title,status")
       .in("status", ["OPEN", "IN_PROGRESS"])
-      .order("updated_at", { ascending: false });
+      .order("updated_at", { ascending: false })
+      .limit(20);
 
     if (!error && data) {
       setAsWorkOrderAlerts(data as AsWorkOrderAlertRow[]);
@@ -222,9 +260,13 @@ export function AppFrame({ children }: AppFrameProps) {
     void Promise.resolve().then(() => {
       setName(storedName);
       setTeam(getCurrentOrgTeam(storedName, storedTeam));
-      setRole(localStorage.getItem("role") || "");
-      void supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || ""));
-      void loadApprovalAlerts();
+      const storedRole = localStorage.getItem("role") || "";
+      setRole(storedRole);
+      void supabase.auth.getUser().then(({ data }) => {
+        const userId = data.user?.id || "";
+        setCurrentUserId(userId);
+        void loadApprovalAlerts(storedName, userId);
+      });
       void loadAsWorkOrderAlerts(storedName, storedTeam);
     });
   }, [loadApprovalAlerts, loadAsWorkOrderAlerts, pathname]);

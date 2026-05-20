@@ -398,9 +398,36 @@ export default function MainPage() {
 
     const { data, error } = await supabase
       .from("equipment_orders")
-      .select("*")
+      .select(
+        [
+          "id",
+          "category",
+          "order_date",
+          "country",
+          "customer",
+          "model",
+          "owner_name",
+          "note",
+          "manufacturing_document_id",
+          "purchase_document_id",
+          "outsourcing_document_id",
+          "qa_document_id",
+          "manufacturing_request_approved_on",
+          "purchase_request_approved_on",
+          "outsourcing_request_approved_on",
+          "inbound_completed_on",
+          "assembly_completed_on",
+          "control_completed_on",
+          "test_completed_on",
+          "qa_approved_on",
+          "shipment_scheduled_on",
+          "created_at",
+          "updated_at",
+        ].join(",")
+      )
       .order("order_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(80);
 
     if (error) {
       setOrders([]);
@@ -411,14 +438,16 @@ export default function MainPage() {
       return;
     }
 
-    setOrders((data || []) as ProductionOrderRow[]);
+    setOrders(((data || []) as unknown) as ProductionOrderRow[]);
     setOrdersLoading(false);
   }, []);
 
   const loadApprovalDocuments = useCallback(async () => {
     const { data, error } = await supabase
       .from("approval_documents")
-      .select("id,template_title,title,status,approval_lines(id,step_order,role_label,approver_name,status)");
+      .select("id,template_title,title,status,approval_lines(id,step_order,role_label,approver_name,status)")
+      .order("created_at", { ascending: false })
+      .limit(160);
 
     if (!error && data) {
       setApprovalDocuments(data as ApprovalDocumentRow[]);
