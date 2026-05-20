@@ -53,6 +53,9 @@ begin
   end if;
 end $$;
 
+create index if not exists idx_equipment_orders_outsourcing_document
+on public.equipment_orders (outsourcing_document_id);
+
 create or replace function public.submit_approval_document(
   document_payload jsonb,
   line_payload jsonb,
@@ -154,32 +157,19 @@ $fn$;
 
 grant execute on function public.submit_approval_document(jsonb, jsonb, jsonb, jsonb) to authenticated;
 
-update equipment_orders eo
-set purchase_document_id = d.id
-from approval_documents d
-where eo.id = coalesce(d.equipment_order_id, case when d.form_data->>'_equipmentOrderId' ~ '^[0-9]+$' then (d.form_data->>'_equipmentOrderId')::bigint end)
-  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'purchaseRequest'
-  and eo.purchase_document_id is distinct from d.id;
-
-update equipment_orders eo
-set manufacturing_document_id = d.id
-from approval_documents d
-where eo.id = coalesce(d.equipment_order_id, case when d.form_data->>'_equipmentOrderId' ~ '^[0-9]+$' then (d.form_data->>'_equipmentOrderId')::bigint end)
-  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'manufacturingRequest'
-  and eo.manufacturing_document_id is distinct from d.id;
-
-update equipment_orders eo
-set qa_document_id = d.id
-from approval_documents d
-where eo.id = coalesce(d.equipment_order_id, case when d.form_data->>'_equipmentOrderId' ~ '^[0-9]+$' then (d.form_data->>'_equipmentOrderId')::bigint end)
-  and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'qa'
-  and eo.qa_document_id is distinct from d.id;
-
-update equipment_orders eo
+update public.equipment_orders eo
 set outsourcing_document_id = d.id
-from approval_documents d
+from public.approval_documents d
 where eo.id = coalesce(d.equipment_order_id, case when d.form_data->>'_equipmentOrderId' ~ '^[0-9]+$' then (d.form_data->>'_equipmentOrderId')::bigint end)
   and coalesce(d.equipment_stage_key::text, d.form_data->>'_equipmentStageKey') = 'outsourcingRequest'
   and eo.outsourcing_document_id is distinct from d.id;
+
+update public.equipment_orders eo
+set outsourcing_request_approved_on = d.completed_at::date
+from public.approval_documents d
+where eo.outsourcing_document_id = d.id
+  and d.status = 'approved'
+  and d.completed_at is not null
+  and eo.outsourcing_request_approved_on is null;
 
 commit;

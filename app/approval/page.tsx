@@ -16,7 +16,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 type FieldType = "text" | "date" | "select" | "textarea";
 type ApprovalStatus = "pending" | "approved" | "rejected";
-type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "qa";
+type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "outsourcingRequest" | "qa";
 type InputMode = "modern" | "legacy";
 
 type FieldDef = {
@@ -123,6 +123,7 @@ type EquipmentOrderRow = {
   delivery_place?: string | null;
   note?: string | null;
   manufacturing_document_id?: number | null;
+  outsourcing_document_id?: number | null;
 };
 
 const supabase = createSupabaseBrowser();
@@ -132,12 +133,14 @@ const DEFAULT_APPROVER_COUNT = 3;
 const equipmentStageByTemplate: Partial<Record<string, EquipmentStageKey>> = {
   manufacturing_request: "manufacturingRequest",
   purchase_request: "purchaseRequest",
+  outsourcing_request: "outsourcingRequest",
   inspection_request: "qa",
 };
 
 const equipmentDateColumnByStage: Record<EquipmentStageKey, string> = {
   manufacturingRequest: "manufacturing_request_approved_on",
   purchaseRequest: "purchase_request_approved_on",
+  outsourcingRequest: "outsourcing_request_approved_on",
   qa: "qa_approved_on",
 };
 
@@ -800,18 +803,10 @@ export default function ApprovalPage() {
   const linkableEquipmentOrders = useMemo(() => {
     if (!shouldSelectEquipmentOrder) return [];
 
-    const existingManufacturingDocumentIds = new Set(
-      documents
-        .filter((document) => document.template_key === "manufacturing_request")
-        .map((document) => document.id)
-    );
-
     return equipmentOrders.filter(
-      (order) =>
-        order.manufacturing_document_id &&
-        existingManufacturingDocumentIds.has(order.manufacturing_document_id)
+      (order) => Boolean(order.manufacturing_document_id)
     );
-  }, [documents, equipmentOrders, shouldSelectEquipmentOrder]);
+  }, [equipmentOrders, shouldSelectEquipmentOrder]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -839,11 +834,26 @@ export default function ApprovalPage() {
 
     setProfiles((profileRows || []) as ProfileRow[]);
 
-    const { data: equipmentRows } = await supabase
+    const primaryEquipmentOrders = await supabase
       .from("equipment_orders")
-      .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note,manufacturing_document_id")
+      .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note,manufacturing_document_id,outsourcing_document_id")
       .order("order_date", { ascending: false })
       .limit(80);
+
+    let equipmentRows = primaryEquipmentOrders.data;
+
+    if (primaryEquipmentOrders.error?.message?.includes("outsourcing")) {
+      const fallbackEquipmentOrders = await supabase
+        .from("equipment_orders")
+        .select("id,category,order_date,country,customer,model,owner_name,serial_no,delivery_place,note,manufacturing_document_id")
+        .order("order_date", { ascending: false })
+        .limit(80);
+
+      equipmentRows = (fallbackEquipmentOrders.data || []).map((order) => ({
+        ...order,
+        outsourcing_document_id: null,
+      }));
+    }
 
     setEquipmentOrders((equipmentRows || []) as EquipmentOrderRow[]);
 
@@ -1285,6 +1295,10 @@ export default function ApprovalPage() {
       .from("equipment_orders")
       .update({ purchase_document_id: null, purchase_request_approved_on: null })
       .eq("purchase_document_id", selectedDocument.id);
+    await supabase
+      .from("equipment_orders")
+      .update({ outsourcing_document_id: null, outsourcing_request_approved_on: null })
+      .eq("outsourcing_document_id", selectedDocument.id);
     await supabase
       .from("equipment_orders")
       .update({ qa_document_id: null, qa_approved_on: null })

@@ -34,6 +34,7 @@ type StageStatus = "done" | "pending" | "planned" | "waiting";
 type StageKey =
   | "manufacturingRequest"
   | "purchaseRequest"
+  | "outsourcingRequest"
   | "inbound"
   | "assembly"
   | "setup"
@@ -60,9 +61,11 @@ type ProductionOrderRow = {
   note: string | null;
   manufacturing_document_id: number | null;
   purchase_document_id: number | null;
+  outsourcing_document_id: number | null;
   qa_document_id: number | null;
   manufacturing_request_approved_on: string | null;
   purchase_request_approved_on: string | null;
+  outsourcing_request_approved_on: string | null;
   inbound_completed_on: string | null;
   assembly_completed_on: string | null;
   control_completed_on: string | null;
@@ -104,6 +107,13 @@ const stageDefs: StageDef[] = [
     label: "구매의뢰",
     column: "purchase_request_approved_on",
     documentColumn: "purchase_document_id",
+    manual: false,
+  },
+  {
+    key: "outsourcingRequest",
+    label: "외주의뢰",
+    column: "outsourcing_request_approved_on",
+    documentColumn: "outsourcing_document_id",
     manual: false,
   },
   {
