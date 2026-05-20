@@ -797,6 +797,21 @@ export default function ApprovalPage() {
   const selectedEquipmentStage = equipmentStageByTemplate[selectedTemplate.key] || null;
   const shouldCreateEquipmentOrder = selectedTemplate.key === "manufacturing_request";
   const shouldSelectEquipmentOrder = Boolean(selectedEquipmentStage && !shouldCreateEquipmentOrder);
+  const linkableEquipmentOrders = useMemo(() => {
+    if (!shouldSelectEquipmentOrder) return [];
+
+    const existingManufacturingDocumentIds = new Set(
+      documents
+        .filter((document) => document.template_key === "manufacturing_request")
+        .map((document) => document.id)
+    );
+
+    return equipmentOrders.filter(
+      (order) =>
+        order.manufacturing_document_id &&
+        existingManufacturingDocumentIds.has(order.manufacturing_document_id)
+    );
+  }, [documents, equipmentOrders, shouldSelectEquipmentOrder]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -887,11 +902,14 @@ export default function ApprovalPage() {
   useEffect(() => {
     if (!shouldSelectEquipmentOrder || !selectedEquipmentOrderId) return;
 
-    const selectedOrder = equipmentOrders.find(
+    const selectedOrder = linkableEquipmentOrders.find(
       (order) => String(order.id) === selectedEquipmentOrderId
     );
 
-    if (!selectedOrder) return;
+    if (!selectedOrder) {
+      setSelectedEquipmentOrderId("");
+      return;
+    }
 
     const manufacturingDocument = documents.find(
       (document) => document.id === selectedOrder.manufacturing_document_id
@@ -906,7 +924,7 @@ export default function ApprovalPage() {
         serial_no: selectedOrder.serial_no || serialFromDocument || null,
       })
     );
-  }, [documents, equipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
+  }, [documents, linkableEquipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
 
   function changeTemplate(templateKey: string) {
     const nextTemplate = templateMap[templateKey] || templates[0];
@@ -1479,7 +1497,7 @@ export default function ApprovalPage() {
                 onChange={(event) => handleEquipmentOrderChange(event.target.value)}
               >
                 <option value="">연결하지 않음</option>
-                {equipmentOrders.map((order) => (
+                {linkableEquipmentOrders.map((order) => (
                   <option key={order.id} value={order.id}>
                     {getEquipmentOrderLabel(order)}
                   </option>
