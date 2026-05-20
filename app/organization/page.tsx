@@ -9,6 +9,7 @@ type Member = {
   name: string;
   rank: string;
   leader?: boolean;
+  leaderLabel?: string;
 };
 
 type Team = {
@@ -16,28 +17,80 @@ type Team = {
   members: Member[];
 };
 
+const chairman = {
+  title: "회장",
+  name: "신상민",
+};
+
 const executive = {
   title: "대표이사",
   name: "신영호",
 };
 
-const advisor = {
-  title: "고문",
-  name: "신상민",
-};
-
 const teams: Team[] = [
   {
-    name: "연구개발",
+    name: "관리본부",
     members: [
-      { name: "서중석", rank: "상무", leader: true },
+      { name: "정대용", rank: "상무", leader: true, leaderLabel: "본부장" },
+    ],
+  },
+  {
+    name: "재무/인사",
+    members: [
+      { name: "김혜정", rank: "차장", leader: true, leaderLabel: "팀장" },
+      { name: "최인혜", rank: "주임" },
+    ],
+  },
+  {
+    name: "구매/총무",
+    members: [
+      { name: "신훈식", rank: "부장" },
+      { name: "최하영", rank: "대리" },
+    ],
+  },
+  {
+    name: "국내영업부",
+    members: [
+      { name: "김선일", rank: "과장" },
+    ],
+  },
+  {
+    name: "해외영업부",
+    members: [
+      { name: "이양로", rank: "과장", leader: true, leaderLabel: "팀장" },
+      { name: "반준영", rank: "주임" },
+    ],
+  },
+  {
+    name: "신사업부",
+    members: [
+      { name: "권현진", rank: "부장", leader: true, leaderLabel: "팀장" },
+      { name: "박봉근", rank: "실장" },
+      { name: "최하영", rank: "대리" },
+    ],
+  },
+  {
+    name: "R&D/품질보증본부",
+    members: [
+      { name: "서중석", rank: "상무", leader: true, leaderLabel: "본부장" },
+    ],
+  },
+  {
+    name: "R&D/QA부",
+    members: [
       { name: "윤지환", rank: "부장" },
+    ],
+  },
+  {
+    name: "생산본부",
+    members: [
+      { name: "장동철", rank: "이사", leader: true, leaderLabel: "본부장" },
     ],
   },
   {
     name: "기술 1팀",
     members: [
-      { name: "한차현", rank: "차장", leader: true },
+      { name: "한차현", rank: "차장", leader: true, leaderLabel: "팀장" },
       { name: "한재영", rank: "부장" },
       { name: "권영일", rank: "부장" },
       { name: "김학", rank: "대리" },
@@ -47,45 +100,15 @@ const teams: Team[] = [
   {
     name: "기술 2팀",
     members: [
-      { name: "이승준", rank: "차장", leader: true },
+      { name: "이승준", rank: "차장", leader: true, leaderLabel: "팀장" },
       { name: "김종혁", rank: "과장" },
     ],
   },
   {
     name: "기술 3팀",
     members: [
-      { name: "장동철", rank: "이사", leader: true },
       { name: "양희원", rank: "차장" },
       { name: "김성종", rank: "과장" },
-    ],
-  },
-  {
-    name: "구매기획총무",
-    members: [
-      { name: "권현진", rank: "부장", leader: true },
-      { name: "신훈식", rank: "부장" },
-      { name: "최하영", rank: "대리" },
-    ],
-  },
-  {
-    name: "재무_인사",
-    members: [
-      { name: "김혜정", rank: "차장", leader: true },
-      { name: "최인혜", rank: "주임" },
-    ],
-  },
-  {
-    name: "국내영업",
-    members: [
-      { name: "정대용", rank: "상무", leader: true },
-      { name: "김선일", rank: "과장" },
-    ],
-  },
-  {
-    name: "해외영업",
-    members: [
-      { name: "이양로", rank: "과장", leader: true },
-      { name: "반준영", rank: "대리" },
     ],
   },
 ];
@@ -152,14 +175,11 @@ export default function OrganizationPage() {
         <section style={styles.tree}>
           <div style={styles.chartInner}>
             <div style={styles.topArea}>
-              <PersonNode title={executive.title} name={executive.name} tone="dark" />
-
-              <div style={styles.mainVerticalLine} />
-              <div style={styles.advisorBranchLine} />
-
-              <div style={styles.advisorBox}>
-                <PersonNode title={advisor.title} name={advisor.name} tone="soft" />
+              <PersonNode title={chairman.title} name={chairman.name} tone="soft" />
+              <div style={styles.ceoBox}>
+                <PersonNode title={executive.title} name={executive.name} tone="dark" />
               </div>
+              <div style={styles.mainVerticalLine} />
             </div>
 
             <div style={styles.teamRailArea}>
@@ -252,7 +272,7 @@ function MemberRow({ member }: { member: Member }) {
       <span style={styles.memberName}>{member.name}</span>
       <span style={styles.memberRank}>
         {member.rank}
-        {member.leader ? " · 팀장" : ""}
+        {member.leader ? ` · ${member.leaderLabel || "팀장"}` : ""}
       </span>
 
       <span style={{ ...styles.tooltip, display: open ? "grid" : "none" }}>
@@ -326,22 +346,30 @@ const styles: Record<string, CSSProperties> = {
     overflowY: "visible",
   },
   chartInner: {
-    minWidth: "1480px",
+    minWidth: "1980px",
     margin: "0 auto",
   },
 
   topArea: {
     position: "relative",
     width: "620px",
-    height: "260px",
+    height: "220px",
     margin: "0 auto",
+  },
+  ceoBox: {
+    position: "absolute",
+    left: "50%",
+    top: "88px",
+    width: "220px",
+    height: "76px",
+    transform: "translateX(-50%)",
   },
   mainVerticalLine: {
     position: "absolute",
     left: "50%",
     top: "76px",
     width: "1px",
-    height: "184px",
+    height: "144px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
@@ -375,7 +403,7 @@ const styles: Record<string, CSSProperties> = {
 
   teamGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(8, 1fr)",
+    gridTemplateColumns: "repeat(12, 1fr)",
     gap: "14px",
     alignItems: "start",
   },
@@ -437,9 +465,11 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 2,
   },
   advisorNode: {
-    position: "relative",
-    width: "190px",
-    minHeight: "70px",
+    position: "absolute",
+    left: "50%",
+    top: 0,
+    width: "220px",
+    minHeight: "76px",
     borderRadius: "10px",
     border: "1px solid #111827",
     background: "#ffffff",
@@ -448,6 +478,7 @@ const styles: Record<string, CSSProperties> = {
     display: "grid",
     gap: "8px",
     textAlign: "center",
+    transform: "translateX(-50%)",
     zIndex: 2,
   },
   nodeTitle: {

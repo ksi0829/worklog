@@ -1,6 +1,6 @@
 export type CurrentOrgTeam = {
   team: string;
-  leader: string;
+  leader?: string;
   members: string[];
 };
 
@@ -11,9 +11,46 @@ export type OrgMemberInfo = {
 
 export const CURRENT_ORG: CurrentOrgTeam[] = [
   {
-    team: "연구개발",
+    team: "관리본부",
+    leader: "정대용",
+    members: [],
+  },
+  {
+    team: "재무/인사",
+    leader: "김혜정",
+    members: ["최인혜"],
+  },
+  {
+    team: "구매/총무",
+    members: ["신훈식", "최하영"],
+  },
+  {
+    team: "국내영업부",
+    members: ["김선일"],
+  },
+  {
+    team: "해외영업부",
+    leader: "이양로",
+    members: ["반준영"],
+  },
+  {
+    team: "신사업부",
+    leader: "권현진",
+    members: ["최하영"],
+  },
+  {
+    team: "R&D/품질보증본부",
     leader: "서중석",
+    members: [],
+  },
+  {
+    team: "R&D/QA부",
     members: ["윤지환"],
+  },
+  {
+    team: "생산본부",
+    leader: "장동철",
+    members: [],
   },
   {
     team: "기술 1팀",
@@ -27,28 +64,7 @@ export const CURRENT_ORG: CurrentOrgTeam[] = [
   },
   {
     team: "기술 3팀",
-    leader: "장동철",
     members: ["양희원", "김성종"],
-  },
-  {
-    team: "구매기획총무",
-    leader: "권현진",
-    members: ["신훈식", "최하영"],
-  },
-  {
-    team: "재무_인사",
-    leader: "김혜정",
-    members: ["최인혜"],
-  },
-  {
-    team: "국내영업",
-    leader: "정대용",
-    members: ["김선일"],
-  },
-  {
-    team: "해외영업",
-    leader: "이양로",
-    members: ["반준영"],
   },
 ];
 
@@ -62,19 +78,26 @@ export const ORG_MEMBER_MAP = new Map<
   string,
   OrgMemberInfo
 >(
-  CURRENT_ORG.flatMap((team) => [
-    [
-      team.leader,
-      { team: team.team, leader: true },
-    ] as [string, OrgMemberInfo],
-    ...team.members.map(
+  CURRENT_ORG.flatMap((team) => {
+    const entries = team.members.map(
       (name) =>
         [
           name,
           { team: team.team, leader: false },
         ] as [string, OrgMemberInfo]
-    ),
-  ])
+    );
+
+    if (team.leader) {
+      entries.unshift([
+        team.leader,
+        { team: team.team, leader: true },
+      ]);
+    }
+
+    return entries;
+  }).map(([name, info]) =>
+    name === "최하영" ? [name, { ...info, team: "구매/총무" }] : [name, info]
+  ) as [string, OrgMemberInfo][]
 );
 
 export function getCurrentOrgTeam(
@@ -92,8 +115,8 @@ export function canAccessSales(
 
   return (
     EXECUTIVE_NAMES.includes(name) ||
-    orgTeam === "국내영업" ||
-    orgTeam === "해외영업"
+    orgTeam === "국내영업부" ||
+    orgTeam === "해외영업부"
   );
 }
 
@@ -101,11 +124,7 @@ export function canViewAllWorklogs(
   name: string,
   role: string
 ) {
-  return (
-    role === "admin" ||
-    EXECUTIVE_NAMES.includes(name) ||
-    ORG_MEMBER_MAP.get(name)?.leader === true
-  );
+  return Boolean(name || role);
 }
 
 export function canManageProductionOrders(

@@ -141,13 +141,15 @@ const statusLabel: Record<Status, string> = {
 
 const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
 const TEAM_LEAD_NAMES = [
+  "신상민",
+  "신영호",
+  "정대용",
   "서중석",
   "한차현",
   "이승준",
   "장동철",
   "권현진",
   "김혜정",
-  "정대용",
   "이양로",
 ];
 
