@@ -108,27 +108,70 @@ textarea {
   }
 
   .app-topbar {
-    position: static !important;
-    align-items: flex-start !important;
+    position: sticky !important;
+    align-items: stretch !important;
     flex-direction: column !important;
-    padding: 16px !important;
+    gap: 12px !important;
+    padding: 12px 14px !important;
   }
 
   .app-shell-content {
-    padding: 16px !important;
+    padding: 12px !important;
+  }
+
+  .app-topbar-actions {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 42px repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    align-items: center !important;
+    overflow: visible !important;
+  }
+
+  .app-topbar-identity {
+    grid-column: 1 / -1 !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .app-topbar-identity img {
+    width: 70px !important;
+  }
+
+  .app-alert-button {
+    width: 38px !important;
+    min-width: 38px !important;
+  }
+
+  .app-topbar-action-button {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+  }
+
+  .app-worklog-input-button {
+    grid-column: 1 / -1 !important;
   }
 }
 
 @media (max-width: 520px) {
-  .app-topbar button {
-    width: auto !important;
-    min-width: 74px !important;
-    padding: 0 10px !important;
-  }
-
   .app-topbar .app-mobile-menu-button {
     width: 40px !important;
     min-width: 40px !important;
     padding: 0 !important;
+  }
+
+  .app-topbar-actions {
+    grid-template-columns: 40px repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .app-topbar-action-button {
+    font-size: 11px !important;
+  }
+
+  .app-topbar-identity img {
+    width: 58px !important;
   }
 }

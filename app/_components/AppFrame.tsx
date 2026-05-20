@@ -340,14 +340,20 @@ export function AppFrame({ children }: AppFrameProps) {
             )}
           </div>
 
-          <div style={styles.actions}>
+          <div className="app-topbar-actions" style={styles.actions}>
             {pathname === "/view" && (
-              <button type="button" style={styles.primaryButton} onClick={handleWorklogInput}>
+              <button
+                type="button"
+                className="app-topbar-action-button app-worklog-input-button"
+                style={styles.primaryButton}
+                onClick={handleWorklogInput}
+              >
                 입력
               </button>
             )}
             <button
               type="button"
+              className="app-topbar-identity"
               style={styles.topbarIdentity}
               onClick={() => navigateTo("/main")}
               aria-label="메인으로 이동"
@@ -362,6 +368,7 @@ export function AppFrame({ children }: AppFrameProps) {
             </button>
             <button
               type="button"
+              className="app-alert-button"
               style={{
                 ...styles.alertButton,
                 ...(alertCount > 0 ? styles.alertButtonActive : {}),
@@ -379,13 +386,14 @@ export function AppFrame({ children }: AppFrameProps) {
               <button
                 key={item.path}
                 type="button"
+                className="app-topbar-action-button"
                 style={styles.actionButton}
                 onClick={() => navigateTo(item.path)}
               >
                 {item.title}
               </button>
             ))}
-            <button type="button" style={styles.actionButton} onClick={handleLogout}>
+            <button type="button" className="app-topbar-action-button" style={styles.actionButton} onClick={handleLogout}>
               로그아웃
             </button>
           </div>

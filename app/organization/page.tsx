@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/app/_components/BrandLogo";
 
@@ -200,6 +200,7 @@ function getRegisteredEmail(name: string) {
 
 export default function OrganizationPage() {
   const router = useRouter();
+  const [isMobile, setIsMobile] = useState(false);
 
   const currentName =
     typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
@@ -207,6 +208,15 @@ export default function OrganizationPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 760px)");
+    const update = () => setIsMobile(mediaQuery.matches);
+
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
 
   return (
     <main style={styles.page}>
@@ -227,48 +237,46 @@ export default function OrganizationPage() {
           </div>
         </header>
 
-        <section style={styles.tree}>
-          <div style={styles.chartInner}>
-            <div style={styles.topArea}>
-              <PersonNode title={chairman.title} name={chairman.name} tone="soft" />
-              <div style={styles.ceoBox}>
-                <PersonNode title={executive.title} name={executive.name} tone="soft" />
-              </div>
-              <div style={styles.topVerticalLine} />
-              <div style={styles.lowerVerticalLine} />
+        {isMobile ? (
+          <section style={styles.mobileTree}>
+            <div style={styles.mobileExecutiveStack}>
+              <PersonCard title={chairman.title} name={chairman.name} />
+              <PersonCard title={executive.title} name={executive.name} />
             </div>
 
-            <div style={styles.divisionRailArea}>
-              <div style={styles.divisionRail} />
-            </div>
+            <div style={styles.mobileDivisionList}>
+              {divisions.map((division, index) => (
+                <details key={division.name} open={index === 0} style={styles.mobileDivision}>
+                  <summary style={styles.mobileDivisionSummary}>
+                    <span style={styles.mobileDivisionName}>
+                      <strong>{division.name}</strong>
+                      <em style={styles.mobileDivisionEnglish}>{division.english}</em>
+                    </span>
+                    <span style={styles.mobileDivisionCount}>
+                      {division.departments.reduce(
+                        (total, department) => total + department.members.length,
+                        division.head ? 1 : 0
+                      )}
+                      명
+                    </span>
+                  </summary>
 
-            <div style={styles.divisionGrid}>
-              {divisions.map((division) => (
-                <section key={division.name} style={styles.divisionCard}>
-                  <div style={styles.divisionStem} />
-
-                  <div style={{ ...styles.divisionHeader, ...divisionTone[division.tone] }}>
-                    <h2 style={styles.divisionTitle}>{division.name}</h2>
-                    <span style={styles.divisionEnglish}>{division.english}</span>
-                  </div>
-
-                  {division.head && (
-                    <div style={styles.divisionHeadBox}>
-                      <span style={styles.divisionHeadLabel}>
-                        {division.head.leaderLabel || "본부장"}
-                      </span>
-                      <MemberRow member={division.head} compact />
-                    </div>
-                  )}
-
-                  <div style={styles.departmentList}>
-                    {division.departments.map((department) => (
-                      <section key={`${division.name}-${department.name}`} style={styles.departmentCard}>
-                        <div style={styles.departmentHeader}>
-                          <h3 style={styles.departmentTitle}>{department.name}</h3>
-                          <span style={styles.teamCount}>{department.members.length}명</span>
+                  <div style={styles.mobileDivisionBody}>
+                    {division.head && (
+                      <section style={styles.mobileDepartmentCard}>
+                        <div style={styles.mobileDepartmentHeader}>
+                          <strong>본부장</strong>
                         </div>
+                        <MemberRow member={division.head} compact />
+                      </section>
+                    )}
 
+                    {division.departments.map((department) => (
+                      <section key={`${division.name}-${department.name}`} style={styles.mobileDepartmentCard}>
+                        <div style={styles.mobileDepartmentHeader}>
+                          <strong>{department.name}</strong>
+                          <span>{department.members.length}명</span>
+                        </div>
                         <div style={styles.memberList}>
                           {department.members.length > 0 ? (
                             department.members.map((member) => (
@@ -284,13 +292,85 @@ export default function OrganizationPage() {
                       </section>
                     ))}
                   </div>
-                </section>
+                </details>
               ))}
             </div>
-          </div>
-        </section>
+          </section>
+        ) : (
+          <section style={styles.tree}>
+            <div style={styles.chartInner}>
+              <div style={styles.topArea}>
+                <PersonNode title={chairman.title} name={chairman.name} tone="soft" />
+                <div style={styles.ceoBox}>
+                  <PersonNode title={executive.title} name={executive.name} tone="soft" />
+                </div>
+                <div style={styles.topVerticalLine} />
+                <div style={styles.lowerVerticalLine} />
+              </div>
+
+              <div style={styles.divisionRailArea}>
+                <div style={styles.divisionRail} />
+              </div>
+
+              <div style={styles.divisionGrid}>
+                {divisions.map((division) => (
+                  <section key={division.name} style={styles.divisionCard}>
+                    <div style={styles.divisionStem} />
+
+                    <div style={{ ...styles.divisionHeader, ...divisionTone[division.tone] }}>
+                      <h2 style={styles.divisionTitle}>{division.name}</h2>
+                      <span style={styles.divisionEnglish}>{division.english}</span>
+                    </div>
+
+                    {division.head && (
+                      <div style={styles.divisionHeadBox}>
+                        <span style={styles.divisionHeadLabel}>
+                          {division.head.leaderLabel || "본부장"}
+                        </span>
+                        <MemberRow member={division.head} compact />
+                      </div>
+                    )}
+
+                    <div style={styles.departmentList}>
+                      {division.departments.map((department) => (
+                        <section key={`${division.name}-${department.name}`} style={styles.departmentCard}>
+                          <div style={styles.departmentHeader}>
+                            <h3 style={styles.departmentTitle}>{department.name}</h3>
+                            <span style={styles.teamCount}>{department.members.length}명</span>
+                          </div>
+
+                          <div style={styles.memberList}>
+                            {department.members.length > 0 ? (
+                              department.members.map((member) => (
+                                <MemberRow
+                                  key={`${division.name}-${department.name}-${member.name}`}
+                                  member={member}
+                                />
+                              ))
+                            ) : (
+                              <div style={styles.emptyDepartment}>배정 인원 없음</div>
+                            )}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
       </section>
     </main>
+  );
+}
+
+function PersonCard({ title, name }: { title: string; name: string }) {
+  return (
+    <div style={styles.mobileExecutiveCard}>
+      <span>{title}</span>
+      <strong>{name}</strong>
+    </div>
   );
 }
 
@@ -427,6 +507,87 @@ const styles: Record<string, CSSProperties> = {
     padding: "28px 24px 34px",
     overflowX: "auto",
     overflowY: "visible",
+  },
+  mobileTree: {
+    display: "grid",
+    gap: "14px",
+  },
+  mobileExecutiveStack: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+  },
+  mobileExecutiveCard: {
+    minHeight: "74px",
+    display: "grid",
+    placeItems: "center",
+    gap: "6px",
+    border: "1px solid #111827",
+    borderRadius: "12px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "12px",
+    textAlign: "center",
+  },
+  mobileDivisionList: {
+    display: "grid",
+    gap: "10px",
+  },
+  mobileDivision: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    background: "#ffffff",
+    overflow: "hidden",
+  },
+  mobileDivisionSummary: {
+    minHeight: "58px",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px 14px",
+    cursor: "pointer",
+    listStyle: "none",
+  },
+  mobileDivisionCount: {
+    color: "#475569",
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+  mobileDivisionName: {
+    display: "grid",
+    gap: "3px",
+    minWidth: 0,
+  },
+  mobileDivisionEnglish: {
+    color: "#64748b",
+    fontSize: "11px",
+    fontStyle: "normal",
+    fontWeight: 750,
+  },
+  mobileDivisionBody: {
+    display: "grid",
+    gap: "10px",
+    borderTop: "1px solid #e5e7eb",
+    background: "#f8fafc",
+    padding: "10px",
+  },
+  mobileDepartmentCard: {
+    display: "grid",
+    gap: "8px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
+    padding: "10px",
+  },
+  mobileDepartmentHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    color: "#111827",
+    fontSize: "13px",
+    fontWeight: 900,
   },
   chartInner: {
     width: "1580px",
