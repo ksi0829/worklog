@@ -6,10 +6,16 @@ export const styles: Record<string, CSSProperties> = {
     background: "#f5f6f8",
     color: "#111827",
   },
+  pageMobile: {
+    background: "#f3f5f7",
+  },
   container: {
     maxWidth: "1120px",
     margin: "0 auto",
     padding: "24px clamp(14px, 4vw, 22px) 48px",
+  },
+  containerMobile: {
+    padding: "0 0 20px",
   },
   header: {
     display: "flex",
@@ -65,6 +71,11 @@ export const styles: Record<string, CSSProperties> = {
     gap: "10px",
     marginBottom: "14px",
   },
+  summaryGridMobile: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "7px",
+    marginBottom: "10px",
+  },
   summaryCard: {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
@@ -87,6 +98,10 @@ export const styles: Record<string, CSSProperties> = {
     gap: "14px",
     alignItems: "start",
   },
+  layoutMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "10px",
+  },
   leftColumn: {
     display: "flex",
     flexDirection: "column",
@@ -98,12 +113,19 @@ export const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     padding: "18px",
   },
+  panelMobile: {
+    borderRadius: "10px",
+    padding: "13px",
+  },
   panelHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
     marginBottom: "14px",
+  },
+  panelHeaderMobile: {
+    alignItems: "stretch",
   },
   panelTitle: {
     margin: 0,
@@ -118,6 +140,10 @@ export const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
     gap: "10px",
+  },
+  formGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "8px",
   },
   field: {
     display: "flex",
@@ -262,12 +288,19 @@ export const styles: Record<string, CSSProperties> = {
     gap: "12px",
     flexWrap: "wrap",
   },
+  detailHeaderMobile: {
+    flexDirection: "column",
+  },
   detailActions: {
     display: "flex",
     alignItems: "center",
     gap: "8px",
     flexWrap: "wrap",
     justifyContent: "flex-end",
+  },
+  detailActionsMobile: {
+    width: "100%",
+    justifyContent: "flex-start",
   },
   detailMeta: {
     color: "#64748b",
@@ -375,6 +408,12 @@ export const styles: Record<string, CSSProperties> = {
     color: "#0f172a",
     cursor: "pointer",
   },
+  contactRowMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    alignItems: "start",
+    gap: "4px",
+    padding: "10px 12px",
+  },
   contactRowName: {
     minWidth: 0,
     fontSize: "13px",
@@ -401,6 +440,9 @@ export const styles: Record<string, CSSProperties> = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     textAlign: "right",
+  },
+  contactRowPhoneMobile: {
+    textAlign: "left",
   },
   contactCard: {
     border: "1px solid #e5e7eb",
@@ -488,6 +530,12 @@ export const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     padding: "18px",
     boxShadow: "0 20px 60px rgba(15, 23, 42, 0.24)",
+  },
+  modalMobile: {
+    maxWidth: "none",
+    maxHeight: "calc(100dvh - 24px)",
+    borderRadius: "12px",
+    padding: "14px",
   },
   modalHeader: {
     display: "flex",

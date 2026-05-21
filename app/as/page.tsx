@@ -231,6 +231,7 @@ export default function AsPage() {
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [contactOptions, setContactOptions] = useState<CustomerContactOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -401,7 +402,15 @@ export default function AsPage() {
   }
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobile(mediaQuery.matches);
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+
     void Promise.resolve().then(() => loadOrders());
+
+    return () => mediaQuery.removeEventListener("change", updateViewport);
   }, []);
 
   function updateOrder<K extends keyof WorkOrderForm>(
@@ -644,8 +653,8 @@ export default function AsPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.container}>
+    <main style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
+      <section style={{ ...styles.container, ...(isMobile ? styles.containerMobile : {}) }}>
         <header style={styles.header}>
           <BrandLogo
             subtitle="A/S 관리"
@@ -666,7 +675,7 @@ export default function AsPage() {
         {loadError && <div style={styles.errorBox}>{loadError}</div>}
         {loading && <div style={styles.empty}>A/S 작업지시를 불러오는 중입니다.</div>}
 
-        <section style={styles.summaryGrid}>
+        <section style={{ ...styles.summaryGrid, ...(isMobile ? styles.summaryGridMobile : {}) }}>
           <SummaryCard label="진행중" value={activeOrders.length} />
           <SummaryCard
             label="긴급"
@@ -678,12 +687,12 @@ export default function AsPage() {
           />
         </section>
 
-        <section style={styles.layout}>
-          <div style={styles.panel}>
+        <section style={{ ...styles.layout, ...(isMobile ? styles.layoutMobile : {}) }}>
+          <div style={{ ...styles.panel, ...(isMobile ? styles.panelMobile : {}) }}>
             <h2 style={styles.panelTitle}>작업지시 등록</h2>
             <p style={styles.panelHint}>기존 A/S 앱의 필수 항목 기준입니다.</p>
 
-            <div style={styles.formGrid}>
+            <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
               <Field label="작업지시서 번호">
                 <input
                   value={orderForm.woNo}
@@ -798,7 +807,7 @@ export default function AsPage() {
             </button>
           </div>
 
-          <div style={styles.panel}>
+          <div style={{ ...styles.panel, ...(isMobile ? styles.panelMobile : {}) }}>
             <div style={styles.panelTopRow}>
               <h2 style={styles.panelTitle}>A/S 목록</h2>
               <button style={styles.exportButton} onClick={exportVisibleOrders}>
@@ -863,12 +872,12 @@ export default function AsPage() {
           </div>
         </section>
 
-        <section style={styles.detailPanel}>
+        <section style={{ ...styles.detailPanel, ...(isMobile ? styles.detailPanelMobile : {}) }}>
           {!selectedOrder ? (
             <div style={styles.empty}>작업지시를 선택하세요.</div>
           ) : (
             <>
-              <div style={styles.detailHeader}>
+              <div style={{ ...styles.detailHeader, ...(isMobile ? styles.detailHeaderMobile : {}) }}>
                 <div>
                   <div style={styles.detailMeta}>
                     {selectedOrder.woNo} / {selectedOrder.customer} / {selectedOrder.model}
@@ -882,7 +891,7 @@ export default function AsPage() {
                   <h2 style={styles.detailTitle}>{selectedOrder.title}</h2>
                 </div>
 
-                <div style={styles.detailActions}>
+                <div style={{ ...styles.detailActions, ...(isMobile ? styles.detailActionsMobile : {}) }}>
                   <PriorityBadge priority={selectedOrder.priority} />
                   <StatusBadge status={selectedOrder.status} />
                   {canHandleSelectedOrder && (
@@ -913,7 +922,7 @@ export default function AsPage() {
                     />
                   </Field>
 
-                  <div style={styles.formGrid}>
+                  <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
                     <Field label="부품">
                       <input
                         value={logForm.part}
@@ -946,7 +955,7 @@ export default function AsPage() {
                 ) : (
                   selectedOrder.logs.map((log) => (
                     <div key={log.id} style={styles.logItem}>
-                      <div style={styles.logTop}>
+                      <div style={{ ...styles.logTop, ...(isMobile ? styles.logTopMobile : {}) }}>
                         <span style={styles.logSeq}>#{log.seq}차</span>
                         <span style={styles.logDate}>
                           {[

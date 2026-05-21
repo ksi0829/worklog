@@ -6,10 +6,16 @@ export const styles: Record<string, CSSProperties> = {
     background: "#f5f6f8",
     color: "#111827",
   },
+  pageMobile: {
+    background: "#f3f5f7",
+  },
   container: {
     maxWidth: "1120px",
     margin: "0 auto",
     padding: "24px clamp(14px, 4vw, 22px) 48px",
+  },
+  containerMobile: {
+    padding: "0 0 20px",
   },
   header: {
     display: "flex",
@@ -65,6 +71,11 @@ export const styles: Record<string, CSSProperties> = {
     gap: "10px",
     marginBottom: "14px",
   },
+  summaryGridMobile: {
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "7px",
+    marginBottom: "10px",
+  },
   summaryCard: {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
@@ -87,11 +98,19 @@ export const styles: Record<string, CSSProperties> = {
     gap: "14px",
     alignItems: "start",
   },
+  layoutMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "10px",
+  },
   panel: {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
     borderRadius: "12px",
     padding: "18px",
+  },
+  panelMobile: {
+    borderRadius: "10px",
+    padding: "13px",
   },
   panelTitle: {
     margin: 0,
@@ -113,6 +132,10 @@ export const styles: Record<string, CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
     gap: "10px",
+  },
+  formGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "8px",
   },
   field: {
     display: "flex",
@@ -273,11 +296,19 @@ export const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     padding: "18px",
   },
+  detailPanelMobile: {
+    marginTop: "10px",
+    borderRadius: "10px",
+    padding: "13px",
+  },
   detailHeader: {
     display: "flex",
     justifyContent: "space-between",
     gap: "12px",
     alignItems: "flex-start",
+  },
+  detailHeaderMobile: {
+    flexDirection: "column",
   },
   detailMeta: {
     color: "#64748b",
@@ -294,6 +325,10 @@ export const styles: Record<string, CSSProperties> = {
     justifyContent: "flex-end",
     gap: "8px",
     flexWrap: "wrap",
+  },
+  detailActionsMobile: {
+    width: "100%",
+    justifyContent: "flex-start",
   },
   description: {
     marginTop: "14px",
@@ -328,6 +363,10 @@ export const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: "8px",
     marginBottom: "8px",
+  },
+  logTopMobile: {
+    flexDirection: "column",
+    gap: "4px",
   },
   logSeq: {
     color: "#111827",

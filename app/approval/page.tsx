@@ -2109,7 +2109,7 @@ export default function ApprovalPage() {
               </button>
             </div>
 
-            <div style={styles.modalMetaGrid}>
+            <div style={{ ...styles.modalMetaGrid, ...(isMobile ? styles.modalMetaGridMobile : {}) }}>
               <div>
                 <span>작성자</span>
                 <strong>{detailModalDocument.requester_name}</strong>
@@ -2134,7 +2134,7 @@ export default function ApprovalPage() {
               ))}
             </div>
 
-            <div style={styles.documentFieldGrid}>
+            <div style={{ ...styles.documentFieldGrid, ...(isMobile ? styles.documentFieldGridMobile : {}) }}>
               {(templateMap[detailModalDocument.template_key]?.fields || []).map((field) => (
                 <div
                   key={field.key}
@@ -2392,9 +2392,10 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: "14px",
   },
   summaryGridMobile: {
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(86px, 1fr))",
     gap: "8px",
     marginBottom: "12px",
+    overflowX: "auto",
   },
   summaryCard: {
     minHeight: "72px",
@@ -2527,6 +2528,7 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: "nowrap",
     gap: "7px",
     overflowX: "auto",
+    scrollSnapType: "x proximity",
   },
   templateButton: {
     flex: "0 0 128px",
@@ -2552,6 +2554,7 @@ const styles: Record<string, CSSProperties> = {
     minHeight: "50px",
     padding: "8px 10px",
     fontSize: "12px",
+    scrollSnapAlign: "start",
   },
   templateGroupBreak: {
     marginRight: "18px",
@@ -3293,11 +3296,17 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
     marginBottom: "12px",
   },
+  modalMetaGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
+  },
   documentFieldGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: "8px",
     marginTop: "14px",
+  },
+  documentFieldGridMobile: {
+    gridTemplateColumns: "minmax(0, 1fr)",
   },
   documentFieldItem: {
     minHeight: "58px",

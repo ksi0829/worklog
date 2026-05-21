@@ -131,6 +131,7 @@ export default function CustomerPage() {
   const [customerEditForm, setCustomerEditForm] =
     useState<CustomerForm>(emptyCustomerForm);
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
+  const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
@@ -300,7 +301,15 @@ export default function CustomerPage() {
   }
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 760px)");
+    const updateViewport = () => setIsMobile(mediaQuery.matches);
+
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+
     void Promise.resolve().then(() => loadCustomerData());
+
+    return () => mediaQuery.removeEventListener("change", updateViewport);
   }, []);
 
   function updateCustomer<K extends keyof CustomerForm>(
@@ -582,8 +591,8 @@ export default function CustomerPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.container}>
+    <main style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
+      <section style={{ ...styles.container, ...(isMobile ? styles.containerMobile : {}) }}>
         <header style={styles.header}>
           <BrandLogo
             subtitle="고객사 DB"
@@ -603,7 +612,7 @@ export default function CustomerPage() {
         {loadError && <div style={styles.errorBox}>{loadError}</div>}
         {loading && <div style={styles.empty}>고객사 목록을 불러오는 중입니다.</div>}
 
-        <section style={styles.summaryGrid}>
+        <section style={{ ...styles.summaryGrid, ...(isMobile ? styles.summaryGridMobile : {}) }}>
           <SummaryCard label="등록 업체" value={`${customers.length}개`} />
           <SummaryCard label="담당자" value={`${contacts.length}명`} />
           <SummaryCard
@@ -612,10 +621,10 @@ export default function CustomerPage() {
           />
         </section>
 
-        <section style={styles.layout}>
+        <section style={{ ...styles.layout, ...(isMobile ? styles.layoutMobile : {}) }}>
           <div style={styles.leftColumn}>
-            <div style={styles.panel}>
-              <div style={styles.panelHeader}>
+            <div style={{ ...styles.panel, ...(isMobile ? styles.panelMobile : {}) }}>
+              <div style={{ ...styles.panelHeader, ...(isMobile ? styles.panelHeaderMobile : {}) }}>
                 <h2 style={styles.panelTitle}>업체 목록</h2>
                 <button
                   style={styles.smallPrimaryButton}
@@ -701,14 +710,14 @@ export default function CustomerPage() {
             </div>
           </div>
 
-          <div style={styles.panel}>
+          <div style={{ ...styles.panel, ...(isMobile ? styles.panelMobile : {}) }}>
             {!selectedCustomer ? (
               <div style={styles.empty}>
                 업체를 선택하면 담당자 목록과 등록 폼이 열립니다.
               </div>
             ) : (
               <>
-                <div style={styles.detailHeader}>
+                <div style={{ ...styles.detailHeader, ...(isMobile ? styles.detailHeaderMobile : {}) }}>
                   <div>
                     <div style={styles.detailMeta}>선택 업체</div>
                     <h2 style={styles.detailTitle}>{selectedCustomer.name}</h2>
@@ -717,7 +726,7 @@ export default function CustomerPage() {
                     </div>
                   </div>
                   {(canEditSelectedCustomer || canManageSelectedCustomer) && (
-                    <div style={styles.detailActions}>
+                    <div style={{ ...styles.detailActions, ...(isMobile ? styles.detailActionsMobile : {}) }}>
                       {canEditSelectedCustomer && (
                         <button style={styles.editButton} onClick={openCustomerEdit}>
                           정보 수정
@@ -761,14 +770,14 @@ export default function CustomerPage() {
                       <button
                         key={contact.id}
                         type="button"
-                        style={styles.contactRow}
+                        style={{ ...styles.contactRow, ...(isMobile ? styles.contactRowMobile : {}) }}
                         onClick={() => setSelectedContactId(contact.id)}
                       >
                         <span style={styles.contactRowName}>{contact.name}</span>
                         <span style={styles.contactRowMeta}>
                           {contact.position || "-"}
                         </span>
-                        <span style={styles.contactRowPhone}>
+                        <span style={{ ...styles.contactRowPhone, ...(isMobile ? styles.contactRowPhoneMobile : {}) }}>
                           {contact.phone || "연락처 없음"}
                         </span>
                       </button>
@@ -782,7 +791,7 @@ export default function CustomerPage() {
 
         {customerModalOpen && (
           <div style={styles.modalBackdrop}>
-            <div style={styles.modal}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
                 <h2 style={styles.panelTitle}>업체 등록</h2>
                 <button
@@ -857,7 +866,7 @@ export default function CustomerPage() {
 
         {customerEditModalOpen && selectedCustomer && (
           <div style={styles.modalBackdrop}>
-            <div style={styles.modal}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
                 <div>
                   <div style={styles.detailMeta}>선택 업체</div>
@@ -946,7 +955,7 @@ export default function CustomerPage() {
 
         {contactModalOpen && selectedCustomer && (
           <div style={styles.modalBackdrop}>
-            <div style={styles.modal}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
                 <div>
                   <div style={styles.detailMeta}>{selectedCustomer.name}</div>
@@ -963,7 +972,7 @@ export default function CustomerPage() {
                 </button>
               </div>
 
-              <div style={styles.formGrid}>
+              <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
                 <Field label="담당자">
                   <input
                     value={contactForm.name}
@@ -985,7 +994,7 @@ export default function CustomerPage() {
                 </Field>
               </div>
 
-              <div style={styles.formGrid}>
+              <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
                 <Field label="직함">
                   <input
                     value={contactForm.position}
@@ -1034,7 +1043,7 @@ export default function CustomerPage() {
 
         {selectedContact && (
           <div style={styles.modalBackdrop}>
-            <div style={styles.modal}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
                 <div>
                   <div style={styles.detailMeta}>담당자 상세</div>
