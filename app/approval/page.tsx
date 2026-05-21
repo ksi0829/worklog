@@ -352,6 +352,7 @@ const templates: TemplateDef[] = [
 ];
 
 const templateMap = Object.fromEntries(templates.map((template) => [template.key, template]));
+const legacyTemplateKeys = ["manufacturing_request", "purchase_request", "outsourcing_request"];
 const manufacturingTemplateKeys = [
   "manufacturing_request",
   "purchase_request",
@@ -1055,10 +1056,10 @@ export default function ApprovalPage() {
     );
   }, [documents, linkableEquipmentOrders, selectedEquipmentOrderId, shouldSelectEquipmentOrder]);
 
-  function changeTemplate(templateKey: string) {
+  function changeTemplate(templateKey: string, mode: InputMode = "modern") {
     const nextTemplate = templateMap[templateKey] || templates[0];
     setSelectedTemplateKey(templateKey);
-    setInputMode("modern");
+    setInputMode(legacyTemplateKeys.includes(templateKey) ? mode : "modern");
     setFormData(applyCurrentUserFields(createEmptyFormData(nextTemplate), currentName, currentTeam, true));
     setApproverSlots(createDefaultApproverSlots());
     setReferenceIds([]);
@@ -1610,12 +1611,16 @@ export default function ApprovalPage() {
             </div>
           </section>
 
-          {selectedTemplate.key === "manufacturing_request" && (
+          {legacyTemplateKeys.includes(selectedTemplate.key) && (
             <section style={styles.inputModeBox}>
               <div>
-                <h3 style={styles.sectionTitle}>현황판 자동 등록</h3>
+                <h3 style={styles.sectionTitle}>
+                  {selectedTemplate.key === "manufacturing_request" ? "현황판 자동 등록" : "입력 방식"}
+                </h3>
                 <p style={styles.panelSubText}>
-                  제조요구서를 상신하면 입력한 수주 정보로 메인 현황판에 새 건이 자동 생성됩니다.
+                  {selectedTemplate.key === "manufacturing_request"
+                    ? "제조요구서를 상신하면 입력한 수주 정보로 메인 현황판에 새 건이 자동 생성됩니다."
+                    : "기존 엑셀 양식에 가까운 구형양식과 웹 입력 중심의 신규양식 중 선택합니다."}
                 </p>
               </div>
               <div style={styles.inputModeActions}>
@@ -1771,6 +1776,20 @@ export default function ApprovalPage() {
               data={formData}
               isMobile={isMobile}
               onFieldChange={updateField}
+            />
+          ) : (selectedTemplate.key === "purchase_request" || selectedTemplate.key === "outsourcing_request") &&
+            inputMode === "legacy" &&
+            selectedTemplate.tables[0] ? (
+            <LegacyPurchaseOutsourcingForm
+              templateKey={selectedTemplate.key}
+              data={formData}
+              table={selectedTemplate.tables[0]}
+              isMobile={isMobile}
+              onFieldChange={updateField}
+              onTableCellChange={updateTableCell}
+              onAddRow={addTableRow}
+              onRemoveRow={removeTableRow}
+              onTemplateChange={(templateKey) => changeTemplate(templateKey, "legacy")}
             />
           ) : (
             <>
@@ -2236,7 +2255,7 @@ function LegacyManufacturingForm({
       </div>
 
       <div style={{ ...styles.legacyPaper, ...(isMobile ? styles.legacyPaperMobile : {}) }}>
-        <div style={styles.legacyHeaderGrid}>
+        <div style={styles.legacyHeaderSingle}>
           <div style={styles.legacyDocTitle}>
             {[
               ["제조", "제조"],
@@ -2259,14 +2278,6 @@ function LegacyManufacturingForm({
               </button>
             ))}
             <span>요구서</span>
-          </div>
-          <div style={styles.legacyApprovalBox}>
-            <div style={styles.legacyApprovalTitle}>결 재</div>
-            {["담당", "팀장", "이사", "부사장", "사장"].map((label) => (
-              <div key={label} style={styles.legacyApprovalCell}>
-                {label}
-              </div>
-            ))}
           </div>
         </div>
 
@@ -2376,6 +2387,216 @@ function LegacyManufacturingForm({
             />
           </label>
         </div>
+      </div>
+    </section>
+  );
+}
+
+type LegacyPurchaseOutsourcingFormProps = {
+  templateKey: string;
+  data: Record<string, unknown>;
+  table: TableDef;
+  isMobile: boolean;
+  onFieldChange: (key: string, value: string) => void;
+  onTableCellChange: (table: TableDef, rowIndex: number, columnKey: string, value: string) => void;
+  onAddRow: (table: TableDef) => void;
+  onRemoveRow: (table: TableDef, rowIndex: number) => void;
+  onTemplateChange: (templateKey: string) => void;
+};
+
+function LegacyPurchaseOutsourcingForm({
+  templateKey,
+  data,
+  table,
+  isMobile,
+  onFieldChange,
+  onTableCellChange,
+  onAddRow,
+  onRemoveRow,
+  onTemplateChange,
+}: LegacyPurchaseOutsourcingFormProps) {
+  const value = (key: string) => String(data[key] || "");
+  const isOutsourcing = templateKey === "outsourcing_request";
+  const specColumn = isOutsourcing ? "drawingNo" : "spec";
+  const specLabel = isOutsourcing ? "도면번호" : "규격";
+  const rows = getRows(data[table.key]);
+  const columns = [
+    { key: "name", label: "품명" },
+    { key: specColumn, label: specLabel },
+    { key: "unit", label: "단위" },
+    { key: "qty", label: "수량" },
+    { key: "memo", label: "비고" },
+  ];
+
+  return (
+    <section style={styles.legacySheet}>
+      <div style={{ ...styles.legacyPaper, ...(isMobile ? styles.legacyPaperMobile : {}) }}>
+        <div style={styles.legacyHeaderSingle}>
+          <div style={styles.legacyDocTitle}>
+            {[
+              ["purchase_request", "구매"],
+              ["outsourcing_request", "외주"],
+            ].map(([nextTemplateKey, label]) => (
+              <button
+                key={nextTemplateKey}
+                type="button"
+                style={styles.legacyCheckButton}
+                onClick={() => onTemplateChange(nextTemplateKey)}
+                aria-pressed={templateKey === nextTemplateKey}
+              >
+                <span
+                  style={{
+                    ...styles.legacyCheckBox,
+                    ...(templateKey === nextTemplateKey ? styles.legacyCheckBoxActive : {}),
+                  }}
+                />
+                {label}
+              </button>
+            ))}
+            <span>의뢰서</span>
+          </div>
+        </div>
+
+        <div style={styles.legacyGrid}>
+          <label style={styles.legacyCell}>
+            <span>부서 관리 번호</span>
+            <input
+              style={styles.legacyInput}
+              value={value("controlNo")}
+              onChange={(event) => onFieldChange("controlNo", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>수주처</span>
+            <input
+              style={styles.legacyInput}
+              value={value("client")}
+              onChange={(event) => onFieldChange("client", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>의뢰인</span>
+            <input
+              style={styles.legacyInput}
+              value={value("requester")}
+              onChange={(event) => onFieldChange("requester", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>장비명</span>
+            <input
+              style={styles.legacyInput}
+              value={value("equipment")}
+              onChange={(event) => onFieldChange("equipment", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>S/N</span>
+            <input
+              style={styles.legacyInput}
+              value={value("serialNo")}
+              onChange={(event) => onFieldChange("serialNo", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>입고장소</span>
+            <input
+              style={styles.legacyInput}
+              value={value("deliveryPlace")}
+              onChange={(event) => onFieldChange("deliveryPlace", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>의뢰일</span>
+            <input
+              type="date"
+              style={styles.legacyInput}
+              value={value("requestDate")}
+              onChange={(event) => onFieldChange("requestDate", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>입고요청일</span>
+            <input
+              type="date"
+              style={styles.legacyInput}
+              value={value("dueDate")}
+              onChange={(event) => onFieldChange("dueDate", event.target.value)}
+            />
+          </label>
+          <label style={styles.legacyCell}>
+            <span>사용구분</span>
+            <select
+              style={styles.legacyInput}
+              value={value("usageType")}
+              onChange={(event) => onFieldChange("usageType", event.target.value)}
+            >
+              <option value="">선택</option>
+              {["원자재", "재공품", "공용품", "판매", "무상", "사무용품", "기타"].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div style={styles.legacySpecTitle}>{isOutsourcing ? "OUTSOURCING ITEM" : "PURCHASE ITEM"}</div>
+        <table style={styles.legacyItemTable}>
+          <thead>
+            <tr>
+              <th style={{ ...styles.legacyItemTh, width: "52px" }}>No</th>
+              {columns.map((column) => (
+                <th key={column.key} style={styles.legacyItemTh}>
+                  {column.label}
+                </th>
+              ))}
+              <th style={{ ...styles.legacyItemTh, width: "64px" }} />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                <td style={styles.legacyItemTd}>{rowIndex + 1}</td>
+                {columns.map((column) => (
+                  <td key={column.key} style={styles.legacyItemTd}>
+                    <input
+                      style={styles.legacyItemInput}
+                      value={row[column.key] || ""}
+                      onChange={(event) =>
+                        onTableCellChange(table, rowIndex, column.key, event.target.value)
+                      }
+                    />
+                  </td>
+                ))}
+                <td style={styles.legacyItemTd}>
+                  <button
+                    type="button"
+                    style={styles.smallDangerButton}
+                    onClick={() => onRemoveRow(table, rowIndex)}
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={styles.legacyItemActions}>
+          <button type="button" style={styles.ghostButton} onClick={() => onAddRow(table)}>
+            행 추가
+          </button>
+        </div>
+
+        <label style={styles.legacyWideRow}>
+          <span>비교자료</span>
+          <textarea
+            style={styles.legacyTextarea}
+            value={value("reference")}
+            onChange={(event) => onFieldChange("reference", event.target.value)}
+          />
+        </label>
       </div>
     </section>
   );
@@ -2755,6 +2976,11 @@ const styles: Record<string, CSSProperties> = {
     gap: "12px",
     marginBottom: "8px",
   },
+  legacyHeaderSingle: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    marginBottom: "8px",
+  },
   legacyDocTitle: {
     minHeight: "56px",
     display: "flex",
@@ -2904,6 +3130,54 @@ const styles: Record<string, CSSProperties> = {
   },
   legacyProductSpecTextarea: {
     minHeight: "180px",
+  },
+  legacyItemTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    borderLeft: "1px solid #2d3748",
+    borderRight: "1px solid #2d3748",
+    color: "#0f172a",
+  },
+  legacyItemTh: {
+    height: "38px",
+    borderBottom: "1px solid #2d3748",
+    borderRight: "1px solid #2d3748",
+    background: "#f8fafc",
+    color: "#0f172a",
+    padding: "7px",
+    fontSize: "13px",
+    fontWeight: 850,
+    textAlign: "center",
+  },
+  legacyItemTd: {
+    borderBottom: "1px solid #2d3748",
+    borderRight: "1px solid #2d3748",
+    padding: "6px",
+    fontSize: "13px",
+    fontWeight: 750,
+    textAlign: "center",
+  },
+  legacyItemInput: {
+    width: "100%",
+    minWidth: 0,
+    height: "34px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "4px",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 9px",
+    fontSize: "14px",
+    fontWeight: 600,
+    boxSizing: "border-box",
+  },
+  legacyItemActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    borderLeft: "1px solid #2d3748",
+    borderRight: "1px solid #2d3748",
+    borderBottom: "1px solid #2d3748",
+    padding: "8px",
+    marginBottom: "0",
   },
   approvalLineBox: {
     marginTop: "20px",
