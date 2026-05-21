@@ -168,6 +168,7 @@ const emptyOrderForm: WorkOrderForm = {
   description: "",
   priority: "MID",
 };
+const MANUAL_EQUIPMENT_VALUE = "__manual__";
 
 const emptyLogForm: LogForm = {
   action: "",
@@ -626,12 +627,10 @@ export default function AsPage() {
   }
 
   function handleEquipmentOrderChange(value: string) {
-    if (!value) {
+    if (value === MANUAL_EQUIPMENT_VALUE) {
       setOrderForm((current) => ({
         ...current,
         equipmentOrderId: "",
-        model: "",
-        serialNo: "",
       }));
       return;
     }
@@ -953,12 +952,12 @@ export default function AsPage() {
 
               <Field label="관련 장비">
                 <select
-                  value={orderForm.equipmentOrderId}
+                  value={orderForm.equipmentOrderId || MANUAL_EQUIPMENT_VALUE}
                   onChange={(event) => handleEquipmentOrderChange(event.target.value)}
                   style={styles.input}
                   disabled={!selectedCustomerOption}
                 >
-                  <option value="">직접 입력</option>
+                  <option value={MANUAL_EQUIPMENT_VALUE}>직접 입력</option>
                   {filteredEquipmentOptions.map((equipment) => (
                     <option key={equipment.id} value={equipment.id}>
                       {getEquipmentLabel(equipment)}
@@ -996,7 +995,11 @@ export default function AsPage() {
                 <input
                   value={orderForm.model}
                   onChange={(event) => updateOrder("model", event.target.value)}
-                  placeholder="장비명 또는 모델명"
+                  placeholder={
+                    orderForm.equipmentOrderId
+                      ? "선택 장비명"
+                      : "직접 입력: 장비명 또는 모델명"
+                  }
                   style={styles.input}
                 />
               </Field>
@@ -1005,7 +1008,11 @@ export default function AsPage() {
                 <input
                   value={orderForm.serialNo}
                   onChange={(event) => updateOrder("serialNo", event.target.value)}
-                  placeholder="시리얼 번호"
+                  placeholder={
+                    orderForm.equipmentOrderId
+                      ? "선택 장비 Serial No"
+                      : "직접 입력: 시리얼 번호"
+                  }
                   style={styles.input}
                 />
               </Field>
