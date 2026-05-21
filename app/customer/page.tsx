@@ -31,6 +31,43 @@ type Contact = {
   createdBy: string | null;
 };
 
+type EquipmentOrder = {
+  id: number;
+  category: string;
+  orderDate: string;
+  country: string;
+  customer: string;
+  model: string;
+  ownerName: string;
+  serialNo: string;
+  deliveryPlace: string;
+  note: string;
+  shipmentScheduledOn: string;
+};
+
+type AsHistoryLog = {
+  id: number;
+  workOrderId: number;
+  seq: number;
+  action: string;
+  part: string;
+  memo: string;
+  createdAt: string;
+};
+
+type AsHistoryOrder = {
+  id: number;
+  woNo: string;
+  equipmentOrderId: number | null;
+  serialNo: string;
+  customer: string;
+  model: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  logs: AsHistoryLog[];
+};
+
 type CustomerForm = {
   name: string;
   category: CustomerCategory;
@@ -71,6 +108,42 @@ type ContactRow = {
   created_by: string | null;
 };
 
+type EquipmentOrderRow = {
+  id: number;
+  category: string | null;
+  order_date: string | null;
+  country: string | null;
+  customer: string | null;
+  model: string | null;
+  owner_name: string | null;
+  serial_no?: string | null;
+  delivery_place?: string | null;
+  note: string | null;
+  shipment_scheduled_on: string | null;
+};
+
+type AsWorkOrderRow = {
+  id: number;
+  wo_no: string;
+  equipment_order_id?: number | null;
+  serial_no?: string | null;
+  customer: string | null;
+  model: string | null;
+  title: string;
+  status: string;
+  created_at: string | null;
+};
+
+type AsServiceLogRow = {
+  id: number;
+  work_order_id: number;
+  seq: number;
+  action: string;
+  part: string | null;
+  memo: string | null;
+  created_at: string | null;
+};
+
 const today = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
 const customerCategories: { key: CustomerCategory; label: string }[] = [
@@ -81,6 +154,11 @@ const customerCategories: { key: CustomerCategory; label: string }[] = [
 const categoryLabel = Object.fromEntries(
   customerCategories.map((item) => [item.key, item.label])
 ) as Record<CustomerCategory, string>;
+const equipmentCategoryLabel: Record<string, string> = {
+  domestic: "국내 장비",
+  overseas: "해외 장비",
+  parts: "부품",
+};
 
 function normalizeCustomerCategory(value?: string | null): CustomerCategory {
   if (value === "customer") return "customer";
@@ -113,7 +191,10 @@ export default function CustomerPage() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrder[]>([]);
+  const [asHistoryOrders, setAsHistoryOrders] = useState<AsHistoryOrder[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerEditModalOpen, setCustomerEditModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -204,6 +285,24 @@ export default function CustomerPage() {
 
   const selectedContact =
     selectedContacts.find((contact) => contact.id === selectedContactId) || null;
+  const selectedCustomerEquipment = useMemo(() => {
+    if (!selectedCustomer) return [];
+
+    return equipmentOrders.filter((equipment) => equipment.customer === selectedCustomer.name);
+  }, [equipmentOrders, selectedCustomer]);
+  const selectedEquipment =
+    equipmentOrders.find((equipment) => equipment.id === selectedEquipmentId) || null;
+  const selectedEquipmentHistory = selectedEquipment
+    ? asHistoryOrders.filter((order) => {
+        const orderSerial = order.serialNo.trim().toLowerCase();
+        const equipmentSerial = selectedEquipment.serialNo.trim().toLowerCase();
+
+        return (
+          order.equipmentOrderId === selectedEquipment.id ||
+          Boolean(orderSerial && equipmentSerial && orderSerial === equipmentSerial)
+        );
+      })
+    : [];
   const canManageSelectedCustomer = Boolean(
     selectedCustomer && (isAdmin || selectedCustomer.createdBy === currentUserId)
   );
@@ -264,6 +363,66 @@ export default function CustomerPage() {
       return;
     }
 
+    const { data: equipmentRows } = await supabase
+      .from("equipment_orders")
+      .select(
+        [
+          "id",
+          "category",
+          "order_date",
+          "country",
+          "customer",
+          "model",
+          "owner_name",
+          "serial_no",
+          "delivery_place",
+          "note",
+          "shipment_scheduled_on",
+        ].join(",")
+      )
+      .order("order_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    const asSelectBase =
+      "id,wo_no,customer,model,title,status,created_at";
+    const asSelectWithEquipment = `${asSelectBase},equipment_order_id,serial_no`;
+    const primaryAsOrders = await supabase
+      .from("as_work_orders")
+      .select(asSelectWithEquipment)
+      .order("created_at", { ascending: false });
+    let asRows = primaryAsOrders.data as AsWorkOrderRow[] | null;
+
+    if (primaryAsOrders.error) {
+      const fallbackAsOrders = await supabase
+        .from("as_work_orders")
+        .select(asSelectBase)
+        .order("created_at", { ascending: false });
+      asRows = fallbackAsOrders.data as AsWorkOrderRow[] | null;
+    }
+
+    const { data: serviceLogRows } = await supabase
+      .from("as_service_logs")
+      .select("id,work_order_id,seq,action,part,memo,created_at")
+      .order("seq", { ascending: false });
+
+    const logsByOrder = new Map<number, AsHistoryLog[]>();
+    ((serviceLogRows || []) as AsServiceLogRow[]).forEach((log) => {
+      const nextLog: AsHistoryLog = {
+        id: log.id,
+        workOrderId: log.work_order_id,
+        seq: log.seq,
+        action: log.action,
+        part: log.part || "",
+        memo: log.memo || "",
+        createdAt: (log.created_at || today).slice(0, 10),
+      };
+      logsByOrder.set(log.work_order_id, [
+        nextLog,
+        ...(logsByOrder.get(log.work_order_id) || []),
+      ]);
+    });
+
     const mappedCustomers = ((customerRows || []) as CustomerRow[]).map(
       (customer) => ({
         id: customer.id,
@@ -276,8 +435,37 @@ export default function CustomerPage() {
         createdBy: customer.created_by,
       })
     );
+    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as EquipmentOrderRow[]).map(
+      (order) => ({
+        id: order.id,
+        category: order.category || "",
+        orderDate: (order.order_date || today).slice(0, 10),
+        country: order.country || "",
+        customer: order.customer || "",
+        model: order.model || "",
+        ownerName: order.owner_name || "",
+        serialNo: order.serial_no || "",
+        deliveryPlace: order.delivery_place || "",
+        note: order.note || "",
+        shipmentScheduledOn: (order.shipment_scheduled_on || "").slice(0, 10),
+      })
+    );
+    const mappedAsOrders = ((asRows || []) as AsWorkOrderRow[]).map((order) => ({
+      id: order.id,
+      woNo: order.wo_no,
+      equipmentOrderId: order.equipment_order_id || null,
+      serialNo: order.serial_no || "",
+      customer: order.customer || "",
+      model: order.model || "",
+      title: order.title,
+      status: order.status,
+      createdAt: (order.created_at || today).slice(0, 10),
+      logs: logsByOrder.get(order.id) || [],
+    }));
 
     setCustomers(mappedCustomers);
+    setEquipmentOrders(mappedEquipmentOrders);
+    setAsHistoryOrders(mappedAsOrders);
     setContacts(
       ((contactRows || []) as ContactRow[]).map((contact) => ({
         id: contact.id,
@@ -296,6 +484,12 @@ export default function CustomerPage() {
         return current;
       }
       return mappedCustomers[0]?.id || null;
+    });
+    setSelectedEquipmentId((current) => {
+      if (current && mappedEquipmentOrders.some((order) => order.id === current)) {
+        return current;
+      }
+      return null;
     });
     setLoading(false);
   }
@@ -784,6 +978,46 @@ export default function CustomerPage() {
                     ))
                   )}
                 </div>
+
+                <div style={styles.equipmentSection}>
+                  <div style={styles.sectionHeader}>
+                    <h3 style={styles.sectionTitle}>납품/진행 장비</h3>
+                    <span style={styles.customerMeta}>
+                      {selectedCustomerEquipment.length}건
+                    </span>
+                  </div>
+
+                  {selectedCustomerEquipment.length === 0 ? (
+                    <div style={styles.empty}>
+                      연결된 납품 또는 진행 장비가 없습니다.
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentList}>
+                      {selectedCustomerEquipment.map((equipment) => (
+                        <button
+                          key={equipment.id}
+                          type="button"
+                          style={styles.equipmentCard}
+                          onClick={() => setSelectedEquipmentId(equipment.id)}
+                        >
+                          <span style={styles.equipmentCardTitle}>
+                            {equipment.model || "모델 미입력"}
+                          </span>
+                          <span style={styles.equipmentCardMeta}>
+                            {[equipment.serialNo, equipment.ownerName]
+                              .filter(Boolean)
+                              .join(" · ") || "-"}
+                          </span>
+                          <span style={styles.equipmentCardBadge}>
+                            {equipmentCategoryLabel[equipment.category] ||
+                              equipment.category ||
+                              "장비"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1037,6 +1271,87 @@ export default function CustomerPage() {
               <button style={styles.primaryButton} onClick={addContact}>
                 담당자 등록
               </button>
+            </div>
+          </div>
+        )}
+
+        {selectedEquipment && (
+          <div style={styles.modalBackdrop}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
+              <div style={styles.modalHeader}>
+                <div>
+                  <div style={styles.detailMeta}>
+                    {equipmentCategoryLabel[selectedEquipment.category] ||
+                      selectedEquipment.category ||
+                      "장비"}
+                  </div>
+                  <h2 style={styles.panelTitle}>
+                    {selectedEquipment.customer} /{" "}
+                    {selectedEquipment.model || "모델 미입력"}
+                  </h2>
+                </div>
+                <button
+                  style={styles.closeButton}
+                  onClick={() => setSelectedEquipmentId(null)}
+                >
+                  닫기
+                </button>
+              </div>
+
+              <div style={styles.detailGrid}>
+                <InfoBox label="Serial No" value={selectedEquipment.serialNo || "-"} />
+                <InfoBox label="담당" value={selectedEquipment.ownerName || "-"} />
+                <InfoBox label="수주일" value={selectedEquipment.orderDate || "-"} />
+                <InfoBox
+                  label="출고 예정"
+                  value={selectedEquipment.shipmentScheduledOn || "-"}
+                />
+              </div>
+
+              {(selectedEquipment.deliveryPlace || selectedEquipment.note) && (
+                <div style={styles.modalMemo}>
+                  {[selectedEquipment.deliveryPlace, selectedEquipment.note]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              )}
+
+              <div style={styles.equipmentHistory}>
+                <h3 style={styles.sectionTitle}>A/S 이력</h3>
+                {selectedEquipmentHistory.length === 0 ? (
+                  <div style={styles.empty}>이 장비에 연결된 A/S 이력이 없습니다.</div>
+                ) : (
+                  selectedEquipmentHistory.map((order) => (
+                    <div key={order.id} style={styles.historyBlock}>
+                      <div style={styles.historyTitle}>
+                        {order.woNo} · {order.title}
+                      </div>
+                      <div style={styles.equipmentCardMeta}>
+                        {order.createdAt} · {order.status}
+                      </div>
+                      {order.logs.length === 0 ? (
+                        <div style={styles.historyEmpty}>처리내역 없음</div>
+                      ) : (
+                        <div style={styles.historyList}>
+                          {order.logs.map((log) => (
+                            <div key={log.id} style={styles.historyItem}>
+                              <strong>{log.createdAt}</strong>
+                              <span>{log.action}</span>
+                              {(log.part || log.memo) && (
+                                <em>
+                                  {[log.part && `부품 ${log.part}`, log.memo]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </em>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -14,7 +14,7 @@ import { styles } from "@/app/_modules/as/styles";
 
 type Priority = "LOW" | "MID" | "HIGH";
 type Status = "OPEN" | "IN_PROGRESS" | "CLOSED";
-type Tab = "active" | "history";
+type Tab = "active" | "history" | "equipment";
 
 type ServiceLog = {
   id: number;
@@ -31,6 +31,8 @@ type ServiceLog = {
 type WorkOrder = {
   id: number;
   woNo: string;
+  equipmentOrderId: number | null;
+  serialNo: string;
   customer: string;
   contactName: string;
   contactPhone: string;
@@ -47,6 +49,8 @@ type WorkOrder = {
 
 type WorkOrderForm = {
   woNo: string;
+  equipmentOrderId: string;
+  serialNo: string;
   customer: string;
   contactName: string;
   contactPhone: string;
@@ -65,6 +69,8 @@ type LogForm = {
 type WorkOrderRow = {
   id: number;
   wo_no: string;
+  equipment_order_id?: number | null;
+  serial_no?: string | null;
   customer: string | null;
   contact_name?: string | null;
   contact_phone?: string | null;
@@ -107,11 +113,54 @@ type CustomerContactOption = {
   phone: string | null;
 };
 
+type EquipmentOrder = {
+  id: number;
+  category: string;
+  orderDate: string;
+  country: string;
+  customer: string;
+  model: string;
+  ownerName: string;
+  serialNo: string;
+  deliveryPlace: string;
+  note: string;
+  shipmentScheduledOn: string;
+};
+
+type EquipmentOrderRow = {
+  id: number;
+  category: string | null;
+  order_date: string | null;
+  country: string | null;
+  customer: string | null;
+  model: string | null;
+  owner_name: string | null;
+  serial_no?: string | null;
+  delivery_place?: string | null;
+  note: string | null;
+  shipment_scheduled_on: string | null;
+};
+
+type InsertResult = {
+  data: unknown;
+  error: { message: string } | null;
+};
+
+type InsertTable = {
+  insert: (payload: Record<string, unknown>) => {
+    select: (columns: string) => {
+      single: () => Promise<InsertResult>;
+    };
+  };
+};
+
 const todayLabel = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
 
 const emptyOrderForm: WorkOrderForm = {
   woNo: "",
+  equipmentOrderId: "",
+  serialNo: "",
   customer: "",
   contactName: "",
   contactPhone: "",
@@ -139,6 +188,12 @@ const statusLabel: Record<Status, string> = {
   CLOSED: "완료",
 };
 
+const equipmentCategoryLabel: Record<string, string> = {
+  domestic: "국내 장비",
+  overseas: "해외 장비",
+  parts: "부품",
+};
+
 const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
 const TEAM_LEAD_NAMES = [
   "신상민",
@@ -152,6 +207,28 @@ const TEAM_LEAD_NAMES = [
   "김혜정",
   "이양로",
 ];
+
+function getEquipmentLabel(order: EquipmentOrder) {
+  return [
+    order.orderDate.slice(5),
+    equipmentCategoryLabel[order.category] || order.category,
+    order.customer,
+    order.model,
+    order.serialNo,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function orderMatchesEquipment(order: WorkOrder, equipment: EquipmentOrder) {
+  const workOrderSerial = order.serialNo.trim().toLowerCase();
+  const equipmentSerial = equipment.serialNo.trim().toLowerCase();
+
+  return (
+    order.equipmentOrderId === equipment.id ||
+    Boolean(workOrderSerial && equipmentSerial && workOrderSerial === equipmentSerial)
+  );
+}
 
 function createAsSummarySheet(orders: WorkOrder[]): ExcelSheet {
   return {
@@ -199,6 +276,7 @@ function createAsDetailSheet(order: WorkOrder): ExcelSheet {
       ["작업번호", order.woNo],
       ["업체명", order.customer],
       ["장비/모델", order.model],
+      ["Serial No", order.serialNo],
       ["제목", order.title],
       ["우선순위", priorityLabel[order.priority]],
       ["상태", statusLabel[order.status]],
@@ -224,8 +302,11 @@ export default function AsPage() {
 
   const [tab, setTab] = useState<Tab>("active");
   const [orders, setOrders] = useState<WorkOrder[]>([]);
+  const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrder[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
+  const [equipmentQuery, setEquipmentQuery] = useState("");
   const [orderForm, setOrderForm] = useState<WorkOrderForm>(emptyOrderForm);
   const [logForm, setLogForm] = useState<LogForm>(emptyLogForm);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
@@ -234,6 +315,7 @@ export default function AsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [asEquipmentLinkReady, setAsEquipmentLinkReady] = useState(true);
 
   const activeOrders = useMemo(
     () => orders.filter((order) => order.status !== "CLOSED"),
@@ -251,6 +333,7 @@ export default function AsPage() {
         order.woNo,
         order.customer,
         order.model,
+        order.serialNo,
         order.title,
         order.description,
         ...order.logs.flatMap((log) => [log.action, log.part, log.memo]),
@@ -265,6 +348,47 @@ export default function AsPage() {
     orders.find((order) => order.id === selectedId) || activeOrders[0] || null;
 
   const visibleOrders = tab === "active" ? activeOrders : historyOrders;
+
+  const visibleEquipmentOrders = useMemo(() => {
+    const text = equipmentQuery.trim().toLowerCase();
+
+    return equipmentOrders.filter((equipment) => {
+      if (!text) return true;
+
+      const relatedOrders = orders.filter((order) =>
+        orderMatchesEquipment(order, equipment)
+      );
+      return [
+        equipmentCategoryLabel[equipment.category] || equipment.category,
+        equipment.orderDate,
+        equipment.country,
+        equipment.customer,
+        equipment.model,
+        equipment.ownerName,
+        equipment.serialNo,
+        equipment.deliveryPlace,
+        equipment.note,
+        ...relatedOrders.flatMap((order) => [
+          order.woNo,
+          order.title,
+          order.description,
+          ...order.logs.flatMap((log) => [log.action, log.part, log.memo]),
+        ]),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(text);
+    });
+  }, [equipmentOrders, equipmentQuery, orders]);
+
+  const selectedEquipment =
+    visibleEquipmentOrders.find((equipment) => equipment.id === selectedEquipmentId) ||
+    visibleEquipmentOrders[0] ||
+    null;
+
+  const selectedEquipmentOrders = selectedEquipment
+    ? orders.filter((order) => orderMatchesEquipment(order, selectedEquipment))
+    : [];
 
   const currentName =
     typeof window !== "undefined" ? localStorage.getItem("name") || "" : "";
@@ -305,15 +429,31 @@ export default function AsPage() {
     } = await supabase.auth.getUser();
     setCurrentUserId(user?.id || "");
 
-    const { data: orderRows, error: orderError } = await supabase
+    const orderSelectBase =
+      "id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by";
+    const orderSelectWithEquipment = `${orderSelectBase},equipment_order_id,serial_no`;
+    const primaryOrderResult = await supabase
       .from("as_work_orders")
-      .select("id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by")
+      .select(orderSelectWithEquipment)
       .order("updated_at", { ascending: false });
 
-    if (orderError) {
-      setLoadError("A/S 저장 테이블을 불러오지 못했습니다.");
-      setLoading(false);
-      return;
+    let orderRows = primaryOrderResult.data as WorkOrderRow[] | null;
+    if (primaryOrderResult.error) {
+      const fallbackOrderResult = await supabase
+        .from("as_work_orders")
+        .select(orderSelectBase)
+        .order("updated_at", { ascending: false });
+
+      if (fallbackOrderResult.error) {
+        setLoadError("A/S 저장 테이블을 불러오지 못했습니다.");
+        setLoading(false);
+        return;
+      }
+
+      setAsEquipmentLinkReady(false);
+      orderRows = fallbackOrderResult.data as WorkOrderRow[] | null;
+    } else {
+      setAsEquipmentLinkReady(true);
     }
 
     const { data: logRows, error: logError } = await supabase
@@ -336,6 +476,27 @@ export default function AsPage() {
       .from("customer_contacts")
       .select("id,customer_id,name,phone")
       .order("name", { ascending: true });
+
+    const { data: equipmentRows } = await supabase
+      .from("equipment_orders")
+      .select(
+        [
+          "id",
+          "category",
+          "order_date",
+          "country",
+          "customer",
+          "model",
+          "owner_name",
+          "serial_no",
+          "delivery_place",
+          "note",
+          "shipment_scheduled_on",
+        ].join(",")
+      )
+      .order("order_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     const logUserIds = Array.from(
       new Set(
@@ -372,9 +533,27 @@ export default function AsPage() {
       ]);
     });
 
+    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as EquipmentOrderRow[]).map(
+      (order) => ({
+        id: order.id,
+        category: order.category || "",
+        orderDate: (order.order_date || todayLabel).slice(0, 10),
+        country: order.country || "",
+        customer: order.customer || "",
+        model: order.model || "",
+        ownerName: order.owner_name || "",
+        serialNo: order.serial_no || "",
+        deliveryPlace: order.delivery_place || "",
+        note: order.note || "",
+        shipmentScheduledOn: (order.shipment_scheduled_on || "").slice(0, 10),
+      })
+    );
+
     const mappedOrders = ((orderRows || []) as WorkOrderRow[]).map((order) => ({
       id: order.id,
       woNo: order.wo_no,
+      equipmentOrderId: order.equipment_order_id || null,
+      serialNo: order.serial_no || "",
       customer: order.customer || "",
       contactName: order.contact_name || "",
       contactPhone: order.contact_phone || "",
@@ -390,6 +569,7 @@ export default function AsPage() {
     }));
 
     setOrders(mappedOrders);
+    setEquipmentOrders(mappedEquipmentOrders);
     setCustomerOptions((customerRows || []) as CustomerOption[]);
     setContactOptions((contactRows || []) as CustomerContactOption[]);
     setSelectedId((current) => {
@@ -397,6 +577,12 @@ export default function AsPage() {
         return current;
       }
       return mappedOrders[0]?.id || null;
+    });
+    setSelectedEquipmentId((current) => {
+      if (current && mappedEquipmentOrders.some((order) => order.id === current)) {
+        return current;
+      }
+      return mappedEquipmentOrders[0]?.id || null;
     });
     setLoading(false);
   }
@@ -439,6 +625,24 @@ export default function AsPage() {
     }));
   }
 
+  function handleEquipmentOrderChange(value: string) {
+    const matchedEquipment = equipmentOrders.find(
+      (equipment) => String(equipment.id) === value
+    );
+
+    setOrderForm((current) => ({
+      ...current,
+      equipmentOrderId: value,
+      customer: matchedEquipment?.customer || current.customer,
+      model: matchedEquipment?.model || current.model,
+      serialNo: matchedEquipment?.serialNo || current.serialNo,
+      title:
+        matchedEquipment && !current.title
+          ? `${matchedEquipment.model || matchedEquipment.customer} A/S 요청`
+          : current.title,
+    }));
+  }
+
   function updateLog<K extends keyof LogForm>(key: K, value: LogForm[K]) {
     setLogForm((current) => ({ ...current, [key]: value }));
   }
@@ -454,6 +658,7 @@ export default function AsPage() {
     const contactName = orderForm.contactName.trim();
     const contactPhone = orderForm.contactPhone.trim();
     const model = orderForm.model.trim();
+    const serialNo = orderForm.serialNo.trim();
     const title = orderForm.title.trim();
 
     if (!woNo || !customer || !model || !title) {
@@ -461,31 +666,48 @@ export default function AsPage() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("as_work_orders")
-      .insert({
-        wo_no: woNo,
-        customer,
-        contact_name: contactName,
-        contact_phone: contactPhone,
-        model,
-        title,
-        description: orderForm.description.trim(),
-        priority: orderForm.priority,
-        status: "OPEN",
-      })
-      .select("id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by")
+    const insertPayload: Record<string, unknown> = {
+      wo_no: woNo,
+      customer,
+      contact_name: contactName,
+      contact_phone: contactPhone,
+      model,
+      title,
+      description: orderForm.description.trim(),
+      priority: orderForm.priority,
+      status: "OPEN",
+    };
+
+    if (asEquipmentLinkReady) {
+      insertPayload.equipment_order_id = orderForm.equipmentOrderId
+        ? Number(orderForm.equipmentOrderId)
+        : null;
+      insertPayload.serial_no = serialNo || null;
+    }
+
+    const selectColumns = asEquipmentLinkReady
+      ? "id,wo_no,equipment_order_id,serial_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by"
+      : "id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by";
+
+    const asWorkOrdersTable = supabase.from("as_work_orders") as unknown as InsertTable;
+    const insertResult = await asWorkOrdersTable
+      .insert(insertPayload)
+      .select(selectColumns)
       .single();
+    const data = insertResult.data as WorkOrderRow | null;
+    const error = insertResult.error;
 
     if (error || !data) {
       alert(error?.message || "작업지시 등록에 실패했습니다.");
       return;
     }
 
-    const row = data as WorkOrderRow;
+    const row = data;
     const nextOrder: WorkOrder = {
       id: row.id,
       woNo: row.wo_no,
+      equipmentOrderId: row.equipment_order_id || null,
+      serialNo: row.serial_no || serialNo,
       customer: row.customer || "",
       contactName: row.contact_name || "",
       contactPhone: row.contact_phone || "",
@@ -693,6 +915,21 @@ export default function AsPage() {
             <p style={styles.panelHint}>기존 A/S 앱의 필수 항목 기준입니다.</p>
 
             <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+              <Field label="관련 장비">
+                <select
+                  value={orderForm.equipmentOrderId}
+                  onChange={(event) => handleEquipmentOrderChange(event.target.value)}
+                  style={styles.input}
+                >
+                  <option value="">직접 입력</option>
+                  {equipmentOrders.map((equipment) => (
+                    <option key={equipment.id} value={equipment.id}>
+                      {getEquipmentLabel(equipment)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               <Field label="작업지시서 번호">
                 <input
                   value={orderForm.woNo}
@@ -736,6 +973,15 @@ export default function AsPage() {
                   value={orderForm.model}
                   onChange={(event) => updateOrder("model", event.target.value)}
                   placeholder="장비명 또는 모델명"
+                  style={styles.input}
+                />
+              </Field>
+
+              <Field label="Serial No">
+                <input
+                  value={orderForm.serialNo}
+                  onChange={(event) => updateOrder("serialNo", event.target.value)}
+                  placeholder="시리얼 번호"
                   style={styles.input}
                 />
               </Field>
@@ -828,6 +1074,12 @@ export default function AsPage() {
               >
                 히스토리
               </button>
+              <button
+                style={tab === "equipment" ? styles.activeTab : styles.tab}
+                onClick={() => setTab("equipment")}
+              >
+                장비이력
+              </button>
             </div>
 
             {tab === "history" && (
@@ -838,9 +1090,56 @@ export default function AsPage() {
                 style={{ ...styles.input, marginBottom: 12 }}
               />
             )}
+            {tab === "equipment" && (
+              <input
+                value={equipmentQuery}
+                onChange={(event) => setEquipmentQuery(event.target.value)}
+                placeholder="업체명, 장비명, Serial No 검색"
+                style={{ ...styles.input, marginBottom: 12 }}
+              />
+            )}
 
             <div style={styles.orderList}>
-              {visibleOrders.length === 0 ? (
+              {tab === "equipment" ? (
+                visibleEquipmentOrders.length === 0 ? (
+                  <div style={styles.empty}>표시할 장비 이력이 없습니다.</div>
+                ) : (
+                  visibleEquipmentOrders.map((equipment) => {
+                    const relatedCount = orders.filter((order) =>
+                      orderMatchesEquipment(order, equipment)
+                    ).length;
+
+                    return (
+                      <button
+                        key={equipment.id}
+                        style={
+                          selectedEquipment?.id === equipment.id
+                            ? styles.selectedOrderCard
+                            : styles.orderCard
+                        }
+                        onClick={() => setSelectedEquipmentId(equipment.id)}
+                      >
+                        <div style={styles.orderTop}>
+                          <span style={styles.woNo}>
+                            {equipmentCategoryLabel[equipment.category] ||
+                              equipment.category ||
+                              "장비"}
+                          </span>
+                          <span style={styles.historyCount}>{relatedCount}건</span>
+                        </div>
+                        <div style={styles.orderTitle}>
+                          {equipment.customer} / {equipment.model || "모델 미입력"}
+                        </div>
+                        <div style={styles.orderMeta}>
+                          {[equipment.serialNo, equipment.ownerName, equipment.country]
+                            .filter(Boolean)
+                            .join(" · ") || "-"}
+                        </div>
+                      </button>
+                    );
+                  })
+                )
+              ) : visibleOrders.length === 0 ? (
                 <div style={styles.empty}>표시할 작업지시가 없습니다.</div>
               ) : (
                 visibleOrders.map((order) => (
@@ -859,7 +1158,9 @@ export default function AsPage() {
                     </div>
                     <div style={styles.orderTitle}>{order.title}</div>
                     <div style={styles.orderMeta}>
-                      {order.customer} / {order.model}
+                      {[order.customer, order.model, order.serialNo]
+                        .filter(Boolean)
+                        .join(" / ")}
                     </div>
                     <div style={styles.orderBottom}>
                       <PriorityBadge priority={order.priority} />
@@ -873,7 +1174,91 @@ export default function AsPage() {
         </section>
 
         <section style={{ ...styles.detailPanel, ...(isMobile ? styles.detailPanelMobile : {}) }}>
-          {!selectedOrder ? (
+          {tab === "equipment" ? (
+            !selectedEquipment ? (
+              <div style={styles.empty}>장비를 선택하세요.</div>
+            ) : (
+              <>
+                <div style={{ ...styles.detailHeader, ...(isMobile ? styles.detailHeaderMobile : {}) }}>
+                  <div>
+                    <div style={styles.detailMeta}>
+                      {equipmentCategoryLabel[selectedEquipment.category] ||
+                        selectedEquipment.category ||
+                        "장비"}{" "}
+                      / {selectedEquipment.orderDate}
+                    </div>
+                    <h2 style={styles.detailTitle}>
+                      {selectedEquipment.customer} /{" "}
+                      {selectedEquipment.model || "모델 미입력"}
+                    </h2>
+                  </div>
+                  <div style={styles.detailActions}>
+                    <span style={styles.equipmentPill}>
+                      Serial {selectedEquipment.serialNo || "-"}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={styles.equipmentInfoGrid}>
+                  <InfoBox label="담당" value={selectedEquipment.ownerName || "-"} />
+                  <InfoBox label="납품/설치장소" value={selectedEquipment.deliveryPlace || "-"} />
+                  <InfoBox
+                    label="출고 예정"
+                    value={selectedEquipment.shipmentScheduledOn || "-"}
+                  />
+                </div>
+
+                {selectedEquipment.note && (
+                  <div style={styles.description}>{selectedEquipment.note}</div>
+                )}
+
+                <div style={styles.logList}>
+                  <h3 style={styles.sectionTitle}>장비 A/S 이력</h3>
+                  {selectedEquipmentOrders.length === 0 ? (
+                    <div style={styles.empty}>이 장비에 연결된 A/S 이력이 없습니다.</div>
+                  ) : (
+                    selectedEquipmentOrders.map((order) => (
+                      <div key={order.id} style={styles.historyBlock}>
+                        <div style={styles.orderTop}>
+                          <div>
+                            <div style={styles.woNo}>{order.woNo}</div>
+                            <div style={styles.orderTitle}>{order.title}</div>
+                            <div style={styles.orderMeta}>
+                              {order.createdAt} · {statusLabel[order.status]} ·{" "}
+                              {priorityLabel[order.priority]}
+                            </div>
+                          </div>
+                          <StatusBadge status={order.status} />
+                        </div>
+
+                        {order.logs.length === 0 ? (
+                          <div style={{ ...styles.empty, marginTop: 10 }}>
+                            처리내역이 없습니다.
+                          </div>
+                        ) : (
+                          <div style={styles.compactTimeline}>
+                            {order.logs.map((log) => (
+                              <div key={log.id} style={styles.compactTimelineItem}>
+                                <strong>{log.createdAt}</strong>
+                                <span>{log.action}</span>
+                                {(log.part || log.memo) && (
+                                  <em>
+                                    {[log.part && `부품 ${log.part}`, log.memo]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </em>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )
+          ) : !selectedOrder ? (
             <div style={styles.empty}>작업지시를 선택하세요.</div>
           ) : (
             <>
@@ -882,6 +1267,9 @@ export default function AsPage() {
                   <div style={styles.detailMeta}>
                     {selectedOrder.woNo} / {selectedOrder.customer} / {selectedOrder.model}
                   </div>
+                  {selectedOrder.serialNo && (
+                    <div style={styles.detailMeta}>Serial No {selectedOrder.serialNo}</div>
+                  )}
                   {(selectedOrder.contactName || selectedOrder.contactPhone) && (
                     <div style={styles.detailMeta}>
                       담당자 {selectedOrder.contactName || "-"} / 연락처{" "}
@@ -991,6 +1379,15 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
     <div style={styles.summaryCard}>
       <div style={styles.summaryLabel}>{label}</div>
       <div style={styles.summaryValue}>{value}</div>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={styles.equipmentInfoBox}>
+      <span style={styles.equipmentInfoLabel}>{label}</span>
+      <strong style={styles.equipmentInfoValue}>{value}</strong>
     </div>
   );
 }
