@@ -69,7 +69,7 @@ type LogForm = {
 type WorkOrderRow = {
   id: number;
   wo_no: string;
-  equipment_order_id?: number | null;
+  customer_equipment_id?: number | null;
   serial_no?: string | null;
   customer: string | null;
   contact_name?: string | null;
@@ -113,32 +113,30 @@ type CustomerContactOption = {
   phone: string | null;
 };
 
-type EquipmentOrder = {
+type CustomerEquipment = {
   id: number;
-  category: string;
-  orderDate: string;
-  country: string;
+  customerId: number | null;
   customer: string;
   model: string;
-  ownerName: string;
   serialNo: string;
-  deliveryPlace: string;
+  deliveredOn: string;
+  location: string;
+  contactName: string;
+  contactPhone: string;
   note: string;
-  shipmentScheduledOn: string;
 };
 
-type EquipmentOrderRow = {
+type CustomerEquipmentRow = {
   id: number;
-  category: string | null;
-  order_date: string | null;
-  country: string | null;
-  customer: string | null;
+  customer_id: number | null;
+  customer_name: string | null;
   model: string | null;
-  owner_name: string | null;
   serial_no?: string | null;
-  delivery_place?: string | null;
+  delivered_on: string | null;
+  location: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
   note: string | null;
-  shipment_scheduled_on: string | null;
 };
 
 type InsertResult = {
@@ -188,11 +186,6 @@ const statusLabel: Record<Status, string> = {
   CLOSED: "완료",
 };
 
-const equipmentCategoryLabel: Record<string, string> = {
-  domestic: "국내 장비",
-  overseas: "해외 장비",
-  parts: "부품",
-};
 
 const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
 const TEAM_LEAD_NAMES = [
@@ -208,10 +201,8 @@ const TEAM_LEAD_NAMES = [
   "이양로",
 ];
 
-function getEquipmentLabel(order: EquipmentOrder) {
+function getEquipmentLabel(order: CustomerEquipment) {
   return [
-    order.orderDate.slice(5),
-    equipmentCategoryLabel[order.category] || order.category,
     order.customer,
     order.model,
     order.serialNo,
@@ -220,7 +211,7 @@ function getEquipmentLabel(order: EquipmentOrder) {
     .join(" · ");
 }
 
-function orderMatchesEquipment(order: WorkOrder, equipment: EquipmentOrder) {
+function orderMatchesEquipment(order: WorkOrder, equipment: CustomerEquipment) {
   const workOrderSerial = order.serialNo.trim().toLowerCase();
   const equipmentSerial = equipment.serialNo.trim().toLowerCase();
 
@@ -302,7 +293,7 @@ export default function AsPage() {
 
   const [tab, setTab] = useState<Tab>("active");
   const [orders, setOrders] = useState<WorkOrder[]>([]);
-  const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrder[]>([]);
+  const [equipmentOrders, setEquipmentOrders] = useState<CustomerEquipment[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -359,14 +350,13 @@ export default function AsPage() {
         orderMatchesEquipment(order, equipment)
       );
       return [
-        equipmentCategoryLabel[equipment.category] || equipment.category,
-        equipment.orderDate,
-        equipment.country,
         equipment.customer,
         equipment.model,
-        equipment.ownerName,
         equipment.serialNo,
-        equipment.deliveryPlace,
+        equipment.deliveredOn,
+        equipment.location,
+        equipment.contactName,
+        equipment.contactPhone,
         equipment.note,
         ...relatedOrders.flatMap((order) => [
           order.woNo,
@@ -431,7 +421,7 @@ export default function AsPage() {
 
     const orderSelectBase =
       "id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by";
-    const orderSelectWithEquipment = `${orderSelectBase},equipment_order_id,serial_no`;
+    const orderSelectWithEquipment = `${orderSelectBase},customer_equipment_id,serial_no`;
     const primaryOrderResult = await supabase
       .from("as_work_orders")
       .select(orderSelectWithEquipment)
@@ -478,24 +468,23 @@ export default function AsPage() {
       .order("name", { ascending: true });
 
     const { data: equipmentRows } = await supabase
-      .from("equipment_orders")
+      .from("customer_equipments")
       .select(
         [
           "id",
-          "category",
-          "order_date",
-          "country",
-          "customer",
+          "customer_id",
+          "customer_name",
           "model",
-          "owner_name",
           "serial_no",
-          "delivery_place",
+          "delivered_on",
+          "location",
+          "contact_name",
+          "contact_phone",
           "note",
-          "shipment_scheduled_on",
         ].join(",")
       )
-      .order("order_date", { ascending: false })
-      .order("created_at", { ascending: false })
+      .order("customer_name", { ascending: true })
+      .order("model", { ascending: true })
       .limit(200);
 
     const logUserIds = Array.from(
@@ -533,26 +522,25 @@ export default function AsPage() {
       ]);
     });
 
-    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as EquipmentOrderRow[]).map(
+    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as CustomerEquipmentRow[]).map(
       (order) => ({
         id: order.id,
-        category: order.category || "",
-        orderDate: (order.order_date || todayLabel).slice(0, 10),
-        country: order.country || "",
-        customer: order.customer || "",
+        customerId: order.customer_id || null,
+        customer: order.customer_name || "",
         model: order.model || "",
-        ownerName: order.owner_name || "",
         serialNo: order.serial_no || "",
-        deliveryPlace: order.delivery_place || "",
+        deliveredOn: (order.delivered_on || "").slice(0, 10),
+        location: order.location || "",
+        contactName: order.contact_name || "",
+        contactPhone: order.contact_phone || "",
         note: order.note || "",
-        shipmentScheduledOn: (order.shipment_scheduled_on || "").slice(0, 10),
       })
     );
 
     const mappedOrders = ((orderRows || []) as WorkOrderRow[]).map((order) => ({
       id: order.id,
       woNo: order.wo_no,
-      equipmentOrderId: order.equipment_order_id || null,
+      equipmentOrderId: order.customer_equipment_id || null,
       serialNo: order.serial_no || "",
       customer: order.customer || "",
       contactName: order.contact_name || "",
@@ -636,6 +624,8 @@ export default function AsPage() {
       customer: matchedEquipment?.customer || current.customer,
       model: matchedEquipment?.model || current.model,
       serialNo: matchedEquipment?.serialNo || current.serialNo,
+      contactName: matchedEquipment?.contactName || current.contactName,
+      contactPhone: matchedEquipment?.contactPhone || current.contactPhone,
       title:
         matchedEquipment && !current.title
           ? `${matchedEquipment.model || matchedEquipment.customer} A/S 요청`
@@ -679,14 +669,14 @@ export default function AsPage() {
     };
 
     if (asEquipmentLinkReady) {
-      insertPayload.equipment_order_id = orderForm.equipmentOrderId
+      insertPayload.customer_equipment_id = orderForm.equipmentOrderId
         ? Number(orderForm.equipmentOrderId)
         : null;
       insertPayload.serial_no = serialNo || null;
     }
 
     const selectColumns = asEquipmentLinkReady
-      ? "id,wo_no,equipment_order_id,serial_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by"
+      ? "id,wo_no,customer_equipment_id,serial_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by"
       : "id,wo_no,customer,contact_name,contact_phone,model,title,description,priority,status,created_at,updated_at,created_by";
 
     const asWorkOrdersTable = supabase.from("as_work_orders") as unknown as InsertTable;
@@ -706,7 +696,7 @@ export default function AsPage() {
     const nextOrder: WorkOrder = {
       id: row.id,
       woNo: row.wo_no,
-      equipmentOrderId: row.equipment_order_id || null,
+      equipmentOrderId: row.customer_equipment_id || null,
       serialNo: row.serial_no || serialNo,
       customer: row.customer || "",
       contactName: row.contact_name || "",
@@ -1121,9 +1111,7 @@ export default function AsPage() {
                       >
                         <div style={styles.orderTop}>
                           <span style={styles.woNo}>
-                            {equipmentCategoryLabel[equipment.category] ||
-                              equipment.category ||
-                              "장비"}
+                            납품 장비
                           </span>
                           <span style={styles.historyCount}>{relatedCount}건</span>
                         </div>
@@ -1131,7 +1119,7 @@ export default function AsPage() {
                           {equipment.customer} / {equipment.model || "모델 미입력"}
                         </div>
                         <div style={styles.orderMeta}>
-                          {[equipment.serialNo, equipment.ownerName, equipment.country]
+                          {[equipment.serialNo, equipment.location, equipment.deliveredOn]
                             .filter(Boolean)
                             .join(" · ") || "-"}
                         </div>
@@ -1182,10 +1170,7 @@ export default function AsPage() {
                 <div style={{ ...styles.detailHeader, ...(isMobile ? styles.detailHeaderMobile : {}) }}>
                   <div>
                     <div style={styles.detailMeta}>
-                      {equipmentCategoryLabel[selectedEquipment.category] ||
-                        selectedEquipment.category ||
-                        "장비"}{" "}
-                      / {selectedEquipment.orderDate}
+                      납품 장비 {selectedEquipment.deliveredOn ? `/ ${selectedEquipment.deliveredOn}` : ""}
                     </div>
                     <h2 style={styles.detailTitle}>
                       {selectedEquipment.customer} /{" "}
@@ -1200,12 +1185,9 @@ export default function AsPage() {
                 </div>
 
                 <div style={styles.equipmentInfoGrid}>
-                  <InfoBox label="담당" value={selectedEquipment.ownerName || "-"} />
-                  <InfoBox label="납품/설치장소" value={selectedEquipment.deliveryPlace || "-"} />
-                  <InfoBox
-                    label="출고 예정"
-                    value={selectedEquipment.shipmentScheduledOn || "-"}
-                  />
+                  <InfoBox label="담당자" value={selectedEquipment.contactName || "-"} />
+                  <InfoBox label="연락처" value={selectedEquipment.contactPhone || "-"} />
+                  <InfoBox label="설치/사용 위치" value={selectedEquipment.location || "-"} />
                 </div>
 
                 {selectedEquipment.note && (

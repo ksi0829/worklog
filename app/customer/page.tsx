@@ -31,18 +31,17 @@ type Contact = {
   createdBy: string | null;
 };
 
-type EquipmentOrder = {
+type CustomerEquipment = {
   id: number;
-  category: string;
-  orderDate: string;
-  country: string;
+  customerId: number | null;
   customer: string;
   model: string;
-  ownerName: string;
   serialNo: string;
-  deliveryPlace: string;
+  deliveredOn: string;
+  location: string;
+  contactName: string;
+  contactPhone: string;
   note: string;
-  shipmentScheduledOn: string;
 };
 
 type AsHistoryLog = {
@@ -85,6 +84,16 @@ type ContactForm = {
   memo: string;
 };
 
+type EquipmentForm = {
+  model: string;
+  serialNo: string;
+  deliveredOn: string;
+  location: string;
+  contactName: string;
+  contactPhone: string;
+  memo: string;
+};
+
 type CustomerRow = {
   id: number;
   name: string;
@@ -108,24 +117,24 @@ type ContactRow = {
   created_by: string | null;
 };
 
-type EquipmentOrderRow = {
+type CustomerEquipmentRow = {
   id: number;
-  category: string | null;
-  order_date: string | null;
-  country: string | null;
-  customer: string | null;
+  customer_id: number | null;
+  customer_name: string | null;
   model: string | null;
-  owner_name: string | null;
   serial_no?: string | null;
-  delivery_place?: string | null;
+  delivered_on: string | null;
+  location: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
   note: string | null;
-  shipment_scheduled_on: string | null;
+  created_by: string | null;
 };
 
 type AsWorkOrderRow = {
   id: number;
   wo_no: string;
-  equipment_order_id?: number | null;
+  customer_equipment_id?: number | null;
   serial_no?: string | null;
   customer: string | null;
   model: string | null;
@@ -154,11 +163,6 @@ const customerCategories: { key: CustomerCategory; label: string }[] = [
 const categoryLabel = Object.fromEntries(
   customerCategories.map((item) => [item.key, item.label])
 ) as Record<CustomerCategory, string>;
-const equipmentCategoryLabel: Record<string, string> = {
-  domestic: "국내 장비",
-  overseas: "해외 장비",
-  parts: "부품",
-};
 
 function normalizeCustomerCategory(value?: string | null): CustomerCategory {
   if (value === "customer") return "customer";
@@ -186,17 +190,29 @@ const emptyContactForm: ContactForm = {
   memo: "",
 };
 
+const emptyEquipmentForm: EquipmentForm = {
+  model: "",
+  serialNo: "",
+  deliveredOn: "",
+  location: "",
+  contactName: "",
+  contactPhone: "",
+  memo: "",
+};
+
 export default function CustomerPage() {
   const router = useRouter();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrder[]>([]);
+  const [equipmentOrders, setEquipmentOrders] = useState<CustomerEquipment[]>([]);
   const [asHistoryOrders, setAsHistoryOrders] = useState<AsHistoryOrder[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [customerEditModalOpen, setCustomerEditModalOpen] = useState(false);
+  const [equipmentModalOpen, setEquipmentModalOpen] = useState(false);
+  const [equipmentEditModalOpen, setEquipmentEditModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -212,6 +228,10 @@ export default function CustomerPage() {
   const [customerEditForm, setCustomerEditForm] =
     useState<CustomerForm>(emptyCustomerForm);
   const [contactForm, setContactForm] = useState<ContactForm>(emptyContactForm);
+  const [equipmentForm, setEquipmentForm] =
+    useState<EquipmentForm>(emptyEquipmentForm);
+  const [equipmentEditForm, setEquipmentEditForm] =
+    useState<EquipmentForm>(emptyEquipmentForm);
   const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -238,6 +258,10 @@ export default function CustomerPage() {
         const customerContacts = contacts.filter(
           (contact) => contact.customerId === customer.id
         );
+        const customerEquipment = equipmentOrders.filter(
+          (equipment) =>
+            equipment.customerId === customer.id || equipment.customer === customer.name
+        );
         const text = [
           customer.name,
           categoryLabel[customer.category],
@@ -252,6 +276,14 @@ export default function CustomerPage() {
             contact.email,
             contact.memo,
           ]),
+          ...customerEquipment.flatMap((equipment) => [
+            equipment.model,
+            equipment.serialNo,
+            equipment.location,
+            equipment.contactName,
+            equipment.contactPhone,
+            equipment.note,
+          ]),
         ]
           .join(" ")
           .toLowerCase();
@@ -259,7 +291,7 @@ export default function CustomerPage() {
         return text.includes(normalized);
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  }, [contacts, customers, query]);
+  }, [contacts, customers, equipmentOrders, query]);
 
   const groupedCustomers = useMemo(() => {
     const groups: Record<CustomerCategory, Customer[]> = {
@@ -288,7 +320,11 @@ export default function CustomerPage() {
   const selectedCustomerEquipment = useMemo(() => {
     if (!selectedCustomer) return [];
 
-    return equipmentOrders.filter((equipment) => equipment.customer === selectedCustomer.name);
+    return equipmentOrders.filter(
+      (equipment) =>
+        equipment.customerId === selectedCustomer.id ||
+        equipment.customer === selectedCustomer.name
+    );
   }, [equipmentOrders, selectedCustomer]);
   const selectedEquipment =
     equipmentOrders.find((equipment) => equipment.id === selectedEquipmentId) || null;
@@ -364,29 +400,29 @@ export default function CustomerPage() {
     }
 
     const { data: equipmentRows } = await supabase
-      .from("equipment_orders")
+      .from("customer_equipments")
       .select(
         [
           "id",
-          "category",
-          "order_date",
-          "country",
-          "customer",
+          "customer_id",
+          "customer_name",
           "model",
-          "owner_name",
           "serial_no",
-          "delivery_place",
+          "delivered_on",
+          "location",
+          "contact_name",
+          "contact_phone",
           "note",
-          "shipment_scheduled_on",
+          "created_by",
         ].join(",")
       )
-      .order("order_date", { ascending: false })
-      .order("created_at", { ascending: false })
+      .order("customer_name", { ascending: true })
+      .order("model", { ascending: true })
       .limit(300);
 
     const asSelectBase =
       "id,wo_no,customer,model,title,status,created_at";
-    const asSelectWithEquipment = `${asSelectBase},equipment_order_id,serial_no`;
+    const asSelectWithEquipment = `${asSelectBase},customer_equipment_id,serial_no`;
     const primaryAsOrders = await supabase
       .from("as_work_orders")
       .select(asSelectWithEquipment)
@@ -435,25 +471,24 @@ export default function CustomerPage() {
         createdBy: customer.created_by,
       })
     );
-    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as EquipmentOrderRow[]).map(
+    const mappedEquipmentOrders = ((equipmentRows || []) as unknown as CustomerEquipmentRow[]).map(
       (order) => ({
         id: order.id,
-        category: order.category || "",
-        orderDate: (order.order_date || today).slice(0, 10),
-        country: order.country || "",
-        customer: order.customer || "",
+        customerId: order.customer_id || null,
+        customer: order.customer_name || "",
         model: order.model || "",
-        ownerName: order.owner_name || "",
         serialNo: order.serial_no || "",
-        deliveryPlace: order.delivery_place || "",
+        deliveredOn: (order.delivered_on || "").slice(0, 10),
+        location: order.location || "",
+        contactName: order.contact_name || "",
+        contactPhone: order.contact_phone || "",
         note: order.note || "",
-        shipmentScheduledOn: (order.shipment_scheduled_on || "").slice(0, 10),
       })
     );
     const mappedAsOrders = ((asRows || []) as AsWorkOrderRow[]).map((order) => ({
       id: order.id,
       woNo: order.wo_no,
-      equipmentOrderId: order.equipment_order_id || null,
+      equipmentOrderId: order.customer_equipment_id || null,
       serialNo: order.serial_no || "",
       customer: order.customer || "",
       model: order.model || "",
@@ -542,6 +577,39 @@ export default function CustomerPage() {
     value: ContactForm[K]
   ) {
     setContactForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateEquipment<K extends keyof EquipmentForm>(
+    key: K,
+    value: EquipmentForm[K]
+  ) {
+    setEquipmentForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateEquipmentEdit<K extends keyof EquipmentForm>(
+    key: K,
+    value: EquipmentForm[K]
+  ) {
+    setEquipmentEditForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function openEquipmentEdit() {
+    if (!selectedEquipment) return;
+    if (!isAdmin) {
+      alert("관리자만 장비 정보를 수정할 수 있습니다.");
+      return;
+    }
+
+    setEquipmentEditForm({
+      model: selectedEquipment.model,
+      serialNo: selectedEquipment.serialNo,
+      deliveredOn: selectedEquipment.deliveredOn,
+      location: selectedEquipment.location,
+      contactName: selectedEquipment.contactName,
+      contactPhone: selectedEquipment.contactPhone,
+      memo: selectedEquipment.note,
+    });
+    setEquipmentEditModalOpen(true);
   }
 
   async function addCustomer() {
@@ -733,6 +801,145 @@ export default function CustomerPage() {
     setContactModalOpen(false);
   }
 
+  async function addEquipment() {
+    if (!selectedCustomer) {
+      alert("먼저 업체를 선택해주세요.");
+      return;
+    }
+    if (!isAdmin) {
+      alert("관리자만 납품 장비를 등록할 수 있습니다.");
+      return;
+    }
+
+    const model = equipmentForm.model.trim();
+
+    if (!model) {
+      alert("장비명/모델은 필수입니다.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("customer_equipments")
+      .insert({
+        customer_id: selectedCustomer.id,
+        customer_name: selectedCustomer.name,
+        model,
+        serial_no: equipmentForm.serialNo.trim(),
+        delivered_on: equipmentForm.deliveredOn || null,
+        location: equipmentForm.location.trim(),
+        contact_name: equipmentForm.contactName.trim(),
+        contact_phone: equipmentForm.contactPhone.trim(),
+        note: equipmentForm.memo.trim(),
+      })
+      .select("id,customer_id,customer_name,model,serial_no,delivered_on,location,contact_name,contact_phone,note,created_by")
+      .single();
+
+    if (error || !data) {
+      alert(error?.message || "납품 장비 등록에 실패했습니다.");
+      return;
+    }
+
+    const row = data as CustomerEquipmentRow;
+    const nextEquipment: CustomerEquipment = {
+      id: row.id,
+      customerId: row.customer_id || selectedCustomer.id,
+      customer: row.customer_name || selectedCustomer.name,
+      model: row.model || "",
+      serialNo: row.serial_no || "",
+      deliveredOn: (row.delivered_on || "").slice(0, 10),
+      location: row.location || "",
+      contactName: row.contact_name || "",
+      contactPhone: row.contact_phone || "",
+      note: row.note || "",
+    };
+
+    setEquipmentOrders((current) => [...current, nextEquipment]);
+    setSelectedEquipmentId(nextEquipment.id);
+    setEquipmentForm(emptyEquipmentForm);
+    setEquipmentModalOpen(false);
+  }
+
+  async function updateSelectedEquipment() {
+    if (!selectedEquipment) return;
+    if (!isAdmin) {
+      alert("관리자만 장비 정보를 수정할 수 있습니다.");
+      return;
+    }
+
+    const model = equipmentEditForm.model.trim();
+    if (!model) {
+      alert("장비명/모델은 필수입니다.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("customer_equipments")
+      .update({
+        model,
+        serial_no: equipmentEditForm.serialNo.trim(),
+        delivered_on: equipmentEditForm.deliveredOn || null,
+        location: equipmentEditForm.location.trim(),
+        contact_name: equipmentEditForm.contactName.trim(),
+        contact_phone: equipmentEditForm.contactPhone.trim(),
+        note: equipmentEditForm.memo.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", selectedEquipment.id)
+      .select("id,customer_id,customer_name,model,serial_no,delivered_on,location,contact_name,contact_phone,note,created_by")
+      .single();
+
+    if (error || !data) {
+      alert(error?.message || "납품 장비 수정에 실패했습니다.");
+      return;
+    }
+
+    const row = data as CustomerEquipmentRow;
+    const nextEquipment: CustomerEquipment = {
+      id: row.id,
+      customerId: row.customer_id || selectedEquipment.customerId,
+      customer: row.customer_name || selectedEquipment.customer,
+      model: row.model || "",
+      serialNo: row.serial_no || "",
+      deliveredOn: (row.delivered_on || "").slice(0, 10),
+      location: row.location || "",
+      contactName: row.contact_name || "",
+      contactPhone: row.contact_phone || "",
+      note: row.note || "",
+    };
+
+    setEquipmentOrders((current) =>
+      current.map((equipment) =>
+        equipment.id === nextEquipment.id ? nextEquipment : equipment
+      )
+    );
+    setEquipmentEditModalOpen(false);
+  }
+
+  async function deleteEquipment() {
+    if (!selectedEquipment) return;
+    if (!isAdmin) {
+      alert("관리자만 납품 장비를 삭제할 수 있습니다.");
+      return;
+    }
+    if (!confirm("선택한 납품 장비를 삭제할까요?")) return;
+
+    const { error } = await supabase
+      .from("customer_equipments")
+      .delete()
+      .eq("id", selectedEquipment.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setEquipmentOrders((current) =>
+      current.filter((equipment) => equipment.id !== selectedEquipment.id)
+    );
+    setSelectedEquipmentId(null);
+    setEquipmentEditModalOpen(false);
+  }
+
   async function deleteCustomer() {
     if (!selectedCustomer) return;
     if (!canManageSelectedCustomer) {
@@ -757,10 +964,16 @@ export default function CustomerPage() {
     setContacts((current) =>
       current.filter((contact) => contact.customerId !== selectedCustomer.id)
     );
+    setEquipmentOrders((current) =>
+      current.filter((equipment) => equipment.customerId !== selectedCustomer.id)
+    );
     setSelectedCustomerId(null);
     setContactModalOpen(false);
     setCustomerEditModalOpen(false);
+    setEquipmentModalOpen(false);
+    setEquipmentEditModalOpen(false);
     setSelectedContactId(null);
+    setSelectedEquipmentId(null);
   }
 
   async function deleteContact(contactId: number) {
@@ -981,10 +1194,25 @@ export default function CustomerPage() {
 
                 <div style={styles.equipmentSection}>
                   <div style={styles.sectionHeader}>
-                    <h3 style={styles.sectionTitle}>납품/진행 장비</h3>
-                    <span style={styles.customerMeta}>
-                      {selectedCustomerEquipment.length}건
-                    </span>
+                    <div>
+                      <h3 style={styles.sectionTitle}>납품 장비</h3>
+                      <div style={styles.detailMeta}>
+                        고객사에 실제 납품된 장비 원장입니다.
+                      </div>
+                    </div>
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        style={styles.smallPrimaryButton}
+                        onClick={() => setEquipmentModalOpen(true)}
+                      >
+                        장비 등록
+                      </button>
+                    ) : (
+                      <span style={styles.customerMeta}>
+                        {selectedCustomerEquipment.length}건
+                      </span>
+                    )}
                   </div>
 
                   {selectedCustomerEquipment.length === 0 ? (
@@ -1004,14 +1232,12 @@ export default function CustomerPage() {
                             {equipment.model || "모델 미입력"}
                           </span>
                           <span style={styles.equipmentCardMeta}>
-                            {[equipment.serialNo, equipment.ownerName]
+                            {[equipment.serialNo, equipment.location]
                               .filter(Boolean)
                               .join(" · ") || "-"}
                           </span>
                           <span style={styles.equipmentCardBadge}>
-                            {equipmentCategoryLabel[equipment.category] ||
-                              equipment.category ||
-                              "장비"}
+                            A/S {asHistoryOrders.filter((order) => order.equipmentOrderId === equipment.id).length}건
                           </span>
                         </button>
                       ))}
@@ -1187,6 +1413,70 @@ export default function CustomerPage() {
           </div>
         )}
 
+        {equipmentModalOpen && selectedCustomer && (
+          <div style={styles.modalBackdrop}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
+              <div style={styles.modalHeader}>
+                <div>
+                  <div style={styles.detailMeta}>{selectedCustomer.name}</div>
+                  <h2 style={styles.panelTitle}>납품 장비 등록</h2>
+                </div>
+                <button
+                  style={styles.closeButton}
+                  onClick={() => {
+                    setEquipmentModalOpen(false);
+                    setEquipmentForm(emptyEquipmentForm);
+                  }}
+                >
+                  닫기
+                </button>
+              </div>
+
+              <EquipmentFields
+                form={equipmentForm}
+                isMobile={isMobile}
+                onChange={updateEquipment}
+              />
+
+              <button style={styles.primaryButton} onClick={addEquipment}>
+                장비 등록
+              </button>
+            </div>
+          </div>
+        )}
+
+        {equipmentEditModalOpen && selectedEquipment && (
+          <div style={styles.modalBackdrop}>
+            <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
+              <div style={styles.modalHeader}>
+                <div>
+                  <div style={styles.detailMeta}>{selectedEquipment.customer}</div>
+                  <h2 style={styles.panelTitle}>납품 장비 수정</h2>
+                </div>
+                <button
+                  style={styles.closeButton}
+                  onClick={() => {
+                    setEquipmentEditModalOpen(false);
+                    setEquipmentEditForm(emptyEquipmentForm);
+                  }}
+                >
+                  닫기
+                </button>
+              </div>
+
+              <EquipmentFields
+                form={equipmentEditForm}
+                isMobile={isMobile}
+                onChange={updateEquipmentEdit}
+              />
+
+              <button style={styles.primaryButton} onClick={updateSelectedEquipment}>
+                정보 저장
+              </button>
+            </div>
+          </div>
+        )}
+
         {contactModalOpen && selectedCustomer && (
           <div style={styles.modalBackdrop}>
             <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
@@ -1280,37 +1570,42 @@ export default function CustomerPage() {
             <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
                 <div>
-                  <div style={styles.detailMeta}>
-                    {equipmentCategoryLabel[selectedEquipment.category] ||
-                      selectedEquipment.category ||
-                      "장비"}
-                  </div>
+                  <div style={styles.detailMeta}>납품 장비 상세</div>
                   <h2 style={styles.panelTitle}>
                     {selectedEquipment.customer} /{" "}
                     {selectedEquipment.model || "모델 미입력"}
                   </h2>
                 </div>
-                <button
-                  style={styles.closeButton}
-                  onClick={() => setSelectedEquipmentId(null)}
-                >
-                  닫기
-                </button>
+                <div style={styles.modalHeaderActions}>
+                  {isAdmin && (
+                    <>
+                      <button style={styles.editButton} onClick={openEquipmentEdit}>
+                        수정
+                      </button>
+                      <button style={styles.modalDeleteButton} onClick={deleteEquipment}>
+                        삭제
+                      </button>
+                    </>
+                  )}
+                  <button
+                    style={styles.closeButton}
+                    onClick={() => setSelectedEquipmentId(null)}
+                  >
+                    닫기
+                  </button>
+                </div>
               </div>
 
               <div style={styles.detailGrid}>
                 <InfoBox label="Serial No" value={selectedEquipment.serialNo || "-"} />
-                <InfoBox label="담당" value={selectedEquipment.ownerName || "-"} />
-                <InfoBox label="수주일" value={selectedEquipment.orderDate || "-"} />
-                <InfoBox
-                  label="출고 예정"
-                  value={selectedEquipment.shipmentScheduledOn || "-"}
-                />
+                <InfoBox label="납품일" value={selectedEquipment.deliveredOn || "-"} />
+                <InfoBox label="담당자" value={selectedEquipment.contactName || "-"} />
+                <InfoBox label="연락처" value={selectedEquipment.contactPhone || "-"} />
               </div>
 
-              {(selectedEquipment.deliveryPlace || selectedEquipment.note) && (
+              {(selectedEquipment.location || selectedEquipment.note) && (
                 <div style={styles.modalMemo}>
-                  {[selectedEquipment.deliveryPlace, selectedEquipment.note]
+                  {[selectedEquipment.location, selectedEquipment.note]
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
@@ -1407,6 +1702,89 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <div style={styles.summaryLabel}>{label}</div>
       <div style={styles.summaryValue}>{value}</div>
     </div>
+  );
+}
+
+function EquipmentFields({
+  form,
+  isMobile,
+  onChange,
+}: {
+  form: EquipmentForm;
+  isMobile: boolean;
+  onChange: <K extends keyof EquipmentForm>(key: K, value: EquipmentForm[K]) => void;
+}) {
+  return (
+    <>
+      <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+        <Field label="장비명/모델">
+          <input
+            value={form.model}
+            onChange={(event) => onChange("model", event.target.value)}
+            placeholder="예: RCI-300"
+            style={styles.input}
+          />
+        </Field>
+
+        <Field label="Serial No">
+          <input
+            value={form.serialNo}
+            onChange={(event) => onChange("serialNo", event.target.value)}
+            placeholder="시리얼 번호"
+            style={styles.input}
+          />
+        </Field>
+      </div>
+
+      <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+        <Field label="납품일">
+          <input
+            type="date"
+            value={form.deliveredOn}
+            onChange={(event) => onChange("deliveredOn", event.target.value)}
+            style={styles.input}
+          />
+        </Field>
+
+        <Field label="설치/사용 위치">
+          <input
+            value={form.location}
+            onChange={(event) => onChange("location", event.target.value)}
+            placeholder="설치 장소 또는 사용 위치"
+            style={styles.input}
+          />
+        </Field>
+      </div>
+
+      <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
+        <Field label="담당자">
+          <input
+            value={form.contactName}
+            onChange={(event) => onChange("contactName", event.target.value)}
+            placeholder="장비 담당자"
+            style={styles.input}
+          />
+        </Field>
+
+        <Field label="연락처">
+          <input
+            value={form.contactPhone}
+            onChange={(event) => onChange("contactPhone", event.target.value)}
+            placeholder="휴대폰 또는 내선"
+            style={styles.input}
+          />
+        </Field>
+      </div>
+
+      <Field label="메모">
+        <textarea
+          value={form.memo}
+          onChange={(event) => onChange("memo", event.target.value)}
+          placeholder="장비 특이사항, 계약/설치 참고사항"
+          style={{ ...styles.input, ...styles.textarea }}
+        />
+      </Field>
+    </>
   );
 }
 
