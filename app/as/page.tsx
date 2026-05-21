@@ -58,6 +58,7 @@ type WorkOrderForm = {
   title: string;
   description: string;
   priority: Priority;
+  autoRegisterEquipment: boolean;
 };
 
 type LogForm = {
@@ -167,6 +168,7 @@ const emptyOrderForm: WorkOrderForm = {
   title: "",
   description: "",
   priority: "MID",
+  autoRegisterEquipment: true,
 };
 
 const emptyLogForm: LogForm = {
@@ -676,6 +678,70 @@ export default function AsPage() {
       return;
     }
 
+    let linkedEquipmentId = orderForm.equipmentOrderId
+      ? Number(orderForm.equipmentOrderId)
+      : null;
+
+    if (asEquipmentLinkReady && !linkedEquipmentId && orderForm.autoRegisterEquipment) {
+      if (!selectedCustomerOption) {
+        alert("납품 장비 자동 등록을 하려면 고객사 DB에 등록된 업체를 선택해야 합니다.");
+        return;
+      }
+
+      const matchedExistingEquipment = filteredEquipmentOptions.find((equipment) => {
+        const sameSerial =
+          serialNo &&
+          equipment.serialNo.trim().toLowerCase() === serialNo.toLowerCase();
+        const sameModel = equipment.model.trim().toLowerCase() === model.toLowerCase();
+        return Boolean(sameSerial || sameModel);
+      });
+
+      if (matchedExistingEquipment) {
+        linkedEquipmentId = matchedExistingEquipment.id;
+      } else {
+        const { data: equipmentRow, error: equipmentError } = await supabase
+          .from("customer_equipments")
+          .insert({
+            customer_id: selectedCustomerOption.id,
+            customer_name: customer,
+            model,
+            serial_no: serialNo || "",
+            contact_name: contactName,
+            contact_phone: contactPhone,
+            note: "A/S 작업지시 직접입력으로 자동 등록",
+          })
+          .select(
+            "id,customer_id,customer_name,model,serial_no,delivered_on,location,contact_name,contact_phone,note"
+          )
+          .single();
+
+        if (equipmentError || !equipmentRow) {
+          alert(
+            equipmentError?.message ||
+              "납품 장비 자동 등록에 실패했습니다. 자동 등록 체크를 해제하거나 권한 정책을 확인해 주세요."
+          );
+          return;
+        }
+
+        const row = equipmentRow as CustomerEquipmentRow;
+        const nextEquipment: CustomerEquipment = {
+          id: row.id,
+          customerId: row.customer_id || selectedCustomerOption.id,
+          customer: row.customer_name || customer,
+          model: row.model || model,
+          serialNo: row.serial_no || serialNo,
+          deliveredOn: (row.delivered_on || "").slice(0, 10),
+          location: row.location || "",
+          contactName: row.contact_name || contactName,
+          contactPhone: row.contact_phone || contactPhone,
+          note: row.note || "",
+        };
+
+        linkedEquipmentId = nextEquipment.id;
+        setEquipmentOrders((current) => [...current, nextEquipment]);
+      }
+    }
+
     const insertPayload: Record<string, unknown> = {
       wo_no: woNo,
       customer,
@@ -689,9 +755,7 @@ export default function AsPage() {
     };
 
     if (asEquipmentLinkReady) {
-      insertPayload.customer_equipment_id = orderForm.equipmentOrderId
-        ? Number(orderForm.equipmentOrderId)
-        : null;
+      insertPayload.customer_equipment_id = linkedEquipmentId;
       insertPayload.serial_no = serialNo || null;
     }
 
@@ -1026,6 +1090,30 @@ export default function AsPage() {
                 />
               ))}
             </datalist>
+
+            {!orderForm.equipmentOrderId && orderForm.model.trim() && (
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 12,
+                  marginBottom: 12,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#334155",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={orderForm.autoRegisterEquipment}
+                  onChange={(event) =>
+                    updateOrder("autoRegisterEquipment", event.target.checked)
+                  }
+                />
+                고객사 DB 납품 장비에도 등록
+              </label>
+            )}
 
             <Field label="제목">
               <input
