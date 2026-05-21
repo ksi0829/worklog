@@ -168,7 +168,6 @@ const emptyOrderForm: WorkOrderForm = {
   description: "",
   priority: "MID",
 };
-const MANUAL_EQUIPMENT_VALUE = "__manual__";
 
 const emptyLogForm: LogForm = {
   action: "",
@@ -211,6 +210,10 @@ function getEquipmentLabel(order: CustomerEquipment) {
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function getEquipmentOptionValue(order: CustomerEquipment) {
+  return [order.model, order.serialNo].filter(Boolean).join(" / ");
 }
 
 function orderMatchesEquipment(order: WorkOrder, equipment: CustomerEquipment) {
@@ -626,24 +629,20 @@ export default function AsPage() {
     }));
   }
 
-  function handleEquipmentOrderChange(value: string) {
-    if (value === MANUAL_EQUIPMENT_VALUE) {
-      setOrderForm((current) => ({
-        ...current,
-        equipmentOrderId: "",
-      }));
-      return;
-    }
-
+  function handleEquipmentInputChange(value: string) {
+    const normalized = value.trim();
     const matchedEquipment = filteredEquipmentOptions.find(
-      (equipment) => String(equipment.id) === value
+      (equipment) =>
+        getEquipmentOptionValue(equipment) === value ||
+        equipment.model === normalized ||
+        equipment.serialNo === normalized
     );
 
     setOrderForm((current) => ({
       ...current,
-      equipmentOrderId: value,
+      equipmentOrderId: matchedEquipment ? String(matchedEquipment.id) : "",
       customer: matchedEquipment?.customer || current.customer,
-      model: matchedEquipment?.model || current.model,
+      model: matchedEquipment?.model || value,
       serialNo: matchedEquipment?.serialNo || current.serialNo,
       contactName: matchedEquipment?.contactName || current.contactName,
       contactPhone: matchedEquipment?.contactPhone || current.contactPhone,
@@ -951,19 +950,18 @@ export default function AsPage() {
               </Field>
 
               <Field label="관련 장비">
-                <select
-                  value={orderForm.equipmentOrderId || MANUAL_EQUIPMENT_VALUE}
-                  onChange={(event) => handleEquipmentOrderChange(event.target.value)}
+                <input
+                  value={orderForm.model}
+                  onChange={(event) => handleEquipmentInputChange(event.target.value)}
+                  placeholder={
+                    selectedCustomerOption
+                      ? "장비명/모델명 입력 또는 선택"
+                      : "업체를 먼저 선택"
+                  }
+                  list="as-equipment-options"
                   style={styles.input}
                   disabled={!selectedCustomerOption}
-                >
-                  <option value={MANUAL_EQUIPMENT_VALUE}>직접 입력</option>
-                  {filteredEquipmentOptions.map((equipment) => (
-                    <option key={equipment.id} value={equipment.id}>
-                      {getEquipmentLabel(equipment)}
-                    </option>
-                  ))}
-                </select>
+                />
               </Field>
 
               <Field label="담당자">
@@ -987,19 +985,6 @@ export default function AsPage() {
                   value={orderForm.contactPhone}
                   onChange={(event) => updateOrder("contactPhone", event.target.value)}
                   placeholder="휴대폰 또는 내선"
-                  style={styles.input}
-                />
-              </Field>
-
-              <Field label="장비/모델">
-                <input
-                  value={orderForm.model}
-                  onChange={(event) => updateOrder("model", event.target.value)}
-                  placeholder={
-                    orderForm.equipmentOrderId
-                      ? "선택 장비명"
-                      : "직접 입력: 장비명 또는 모델명"
-                  }
                   style={styles.input}
                 />
               </Field>
@@ -1031,6 +1016,16 @@ export default function AsPage() {
                 </select>
               </Field>
             </div>
+
+            <datalist id="as-equipment-options">
+              {filteredEquipmentOptions.map((equipment) => (
+                <option
+                  key={equipment.id}
+                  value={getEquipmentOptionValue(equipment)}
+                  label={getEquipmentLabel(equipment)}
+                />
+              ))}
+            </datalist>
 
             <Field label="제목">
               <input
