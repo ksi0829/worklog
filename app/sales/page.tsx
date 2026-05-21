@@ -86,6 +86,7 @@ type ActivityRow = {
 type CustomerOption = {
   id: number;
   name: string;
+  category?: string | null;
 };
 
 type ContactOption = {
@@ -323,7 +324,8 @@ export default function SalesPage() {
 
     const { data: customerRows } = await supabase
       .from("customers")
-      .select("id,name")
+      .select("id,name,category")
+      .eq("category", "customer")
       .order("name", { ascending: true });
 
     const { data: contactRows } = await supabase

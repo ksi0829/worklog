@@ -104,6 +104,7 @@ type ProfileRow = {
 type CustomerOption = {
   id: number;
   name: string;
+  category?: string | null;
 };
 
 type CustomerContactOption = {
@@ -406,8 +407,15 @@ export default function AsPage() {
     (customer) => customer.name === orderForm.customer
   );
   const filteredContactOptions = contactOptions.filter((contact) => {
-    if (!selectedCustomerOption) return true;
+    if (!selectedCustomerOption) return false;
     return contact.customer_id === selectedCustomerOption.id;
+  });
+  const filteredEquipmentOptions = equipmentOrders.filter((equipment) => {
+    if (!selectedCustomerOption) return false;
+    return (
+      equipment.customerId === selectedCustomerOption.id ||
+      equipment.customer === selectedCustomerOption.name
+    );
   });
 
   async function loadOrders() {
@@ -459,7 +467,8 @@ export default function AsPage() {
 
     const { data: customerRows } = await supabase
       .from("customers")
-      .select("id,name")
+      .select("id,name,category")
+      .eq("category", "customer")
       .order("name", { ascending: true });
 
     const { data: contactRows } = await supabase
@@ -598,6 +607,9 @@ export default function AsPage() {
     setOrderForm((current) => ({
       ...current,
       customer: value,
+      equipmentOrderId: "",
+      model: "",
+      serialNo: "",
       contactName: "",
       contactPhone: "",
     }));
@@ -614,7 +626,17 @@ export default function AsPage() {
   }
 
   function handleEquipmentOrderChange(value: string) {
-    const matchedEquipment = equipmentOrders.find(
+    if (!value) {
+      setOrderForm((current) => ({
+        ...current,
+        equipmentOrderId: "",
+        model: "",
+        serialNo: "",
+      }));
+      return;
+    }
+
+    const matchedEquipment = filteredEquipmentOptions.find(
       (equipment) => String(equipment.id) === value
     );
 
@@ -905,21 +927,6 @@ export default function AsPage() {
             <p style={styles.panelHint}>기존 A/S 앱의 필수 항목 기준입니다.</p>
 
             <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
-              <Field label="관련 장비">
-                <select
-                  value={orderForm.equipmentOrderId}
-                  onChange={(event) => handleEquipmentOrderChange(event.target.value)}
-                  style={styles.input}
-                >
-                  <option value="">직접 입력</option>
-                  {equipmentOrders.map((equipment) => (
-                    <option key={equipment.id} value={equipment.id}>
-                      {getEquipmentLabel(equipment)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
               <Field label="작업지시서 번호">
                 <input
                   value={orderForm.woNo}
@@ -930,23 +937,50 @@ export default function AsPage() {
               </Field>
 
               <Field label="업체명">
-                <input
+                <select
                   value={orderForm.customer}
                   onChange={(event) => handleCustomerChange(event.target.value)}
-                  placeholder="업체명 입력"
-                  list="as-customer-options"
                   style={styles.input}
-                />
+                >
+                  <option value="">업체 선택</option>
+                  {customerOptions.map((customer) => (
+                    <option key={customer.id} value={customer.name}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="관련 장비">
+                <select
+                  value={orderForm.equipmentOrderId}
+                  onChange={(event) => handleEquipmentOrderChange(event.target.value)}
+                  style={styles.input}
+                  disabled={!selectedCustomerOption}
+                >
+                  <option value="">직접 입력</option>
+                  {filteredEquipmentOptions.map((equipment) => (
+                    <option key={equipment.id} value={equipment.id}>
+                      {getEquipmentLabel(equipment)}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="담당자">
-                <input
+                <select
                   value={orderForm.contactName}
                   onChange={(event) => handleContactNameChange(event.target.value)}
-                  placeholder="담당자명"
-                  list="as-contact-options"
                   style={styles.input}
-                />
+                  disabled={!selectedCustomerOption}
+                >
+                  <option value="">담당자 선택</option>
+                  {filteredContactOptions.map((contact) => (
+                    <option key={contact.id} value={contact.name}>
+                      {[contact.name, contact.phone].filter(Boolean).join(" / ")}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="연락처">
@@ -990,21 +1024,6 @@ export default function AsPage() {
                 </select>
               </Field>
             </div>
-
-            <datalist id="as-customer-options">
-              {customerOptions.map((customer) => (
-                <option key={customer.id} value={customer.name} />
-              ))}
-            </datalist>
-            <datalist id="as-contact-options">
-              {filteredContactOptions.map((contact) => (
-                <option
-                  key={contact.id}
-                  value={contact.name}
-                  label={contact.phone || undefined}
-                />
-              ))}
-            </datalist>
 
             <Field label="제목">
               <input

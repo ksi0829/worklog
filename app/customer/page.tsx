@@ -1435,6 +1435,7 @@ export default function CustomerPage() {
               <EquipmentFields
                 form={equipmentForm}
                 isMobile={isMobile}
+                contacts={selectedContacts}
                 onChange={updateEquipment}
               />
 
@@ -1467,6 +1468,7 @@ export default function CustomerPage() {
               <EquipmentFields
                 form={equipmentEditForm}
                 isMobile={isMobile}
+                contacts={selectedContacts}
                 onChange={updateEquipmentEdit}
               />
 
@@ -1708,12 +1710,20 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
 function EquipmentFields({
   form,
   isMobile,
+  contacts,
   onChange,
 }: {
   form: EquipmentForm;
   isMobile: boolean;
+  contacts: Contact[];
   onChange: <K extends keyof EquipmentForm>(key: K, value: EquipmentForm[K]) => void;
 }) {
+  function handleContactSelect(value: string) {
+    const contact = contacts.find((item) => String(item.id) === value);
+    onChange("contactName", contact?.name || "");
+    onChange("contactPhone", contact?.phone || "");
+  }
+
   return (
     <>
       <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
@@ -1739,32 +1749,38 @@ function EquipmentFields({
       <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
         <Field label="납품일">
           <input
-            type="date"
             value={form.deliveredOn}
             onChange={(event) => onChange("deliveredOn", event.target.value)}
+            placeholder=""
             style={styles.input}
           />
         </Field>
 
-        <Field label="설치/사용 위치">
-          <input
-            value={form.location}
-            onChange={(event) => onChange("location", event.target.value)}
-            placeholder="설치 장소 또는 사용 위치"
+        <Field label="담당자">
+          <select
+            value={
+              contacts.find(
+                (contact) =>
+                  contact.name === form.contactName &&
+                  (contact.phone || "") === (form.contactPhone || "")
+              )?.id || ""
+            }
+            onChange={(event) => handleContactSelect(event.target.value)}
             style={styles.input}
-          />
+          >
+            <option value="">담당자 선택</option>
+            {contacts.map((contact) => (
+              <option key={contact.id} value={contact.id}>
+                {[contact.name, contact.position, contact.phone]
+                  .filter(Boolean)
+                  .join(" / ")}
+              </option>
+            ))}
+          </select>
         </Field>
       </div>
 
       <div style={{ ...styles.formGrid, ...(isMobile ? styles.formGridMobile : {}) }}>
-        <Field label="담당자">
-          <input
-            value={form.contactName}
-            onChange={(event) => onChange("contactName", event.target.value)}
-            placeholder="장비 담당자"
-            style={styles.input}
-          />
-        </Field>
 
         <Field label="연락처">
           <input
