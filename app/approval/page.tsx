@@ -127,6 +127,11 @@ type EquipmentOrderRow = {
   outsourcing_document_id?: number | null;
 };
 
+type CustomerOption = {
+  id: number;
+  name: string;
+};
+
 const supabase = createSupabaseBrowser();
 const today = new Date().toISOString().slice(0, 10);
 const DEFAULT_APPROVER_COUNT = 3;
@@ -736,6 +741,7 @@ export default function ApprovalPage() {
   );
   const [referenceIds, setReferenceIds] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrderRow[]>([]);
   const [selectedEquipmentOrderId, setSelectedEquipmentOrderId] = useState("");
   const [documents, setDocuments] = useState<ApprovalDocumentRow[]>([]);
@@ -936,6 +942,14 @@ export default function ApprovalPage() {
       .order("name", { ascending: true });
 
     setProfiles((profileRows || []) as ProfileRow[]);
+
+    const { data: customerRows } = await supabase
+      .from("customers")
+      .select("id,name")
+      .eq("category", "customer")
+      .order("name", { ascending: true });
+
+    setCustomerOptions((customerRows || []) as CustomerOption[]);
 
     const primaryEquipmentOrders = await supabase
       .from("equipment_orders")
@@ -1854,6 +1868,7 @@ export default function ApprovalPage() {
                           type={field.type}
                           value={String(formData[field.key] || "")}
                           placeholder={field.placeholder}
+                          list={field.key === "client" ? "approval-customer-options" : undefined}
                           readOnly={readOnlyField}
                           onChange={(event) => updateField(field.key, event.target.value)}
                         />
@@ -1862,6 +1877,12 @@ export default function ApprovalPage() {
                   );
                 })}
               </div>
+
+              <datalist id="approval-customer-options">
+                {customerOptions.map((customer) => (
+                  <option key={customer.id} value={customer.name} />
+                ))}
+              </datalist>
 
               {selectedTemplate.tables.map((table) => (
                 <section key={table.key} style={styles.tableSection}>
