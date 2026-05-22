@@ -44,6 +44,8 @@ on public.chat_threads
 for select
 to authenticated
 using (
+  created_by = auth.uid()
+  or
   exists (
     select 1
     from public.chat_participants p
@@ -62,21 +64,21 @@ create policy "chat_participants_select_participant"
 on public.chat_participants
 for select
 to authenticated
-using (
-  user_id = auth.uid()
-  or exists (
-    select 1
-    from public.chat_participants p
-    where p.thread_id = chat_participants.thread_id
-      and p.user_id = auth.uid()
-  )
-);
+using (true);
 
 create policy "chat_participants_insert_authenticated"
 on public.chat_participants
 for insert
 to authenticated
-with check (true);
+with check (
+  user_id = auth.uid()
+  or exists (
+    select 1
+    from public.chat_threads t
+    where t.id = chat_participants.thread_id
+      and t.created_by = auth.uid()
+  )
+);
 
 create policy "chat_participants_update_own"
 on public.chat_participants
