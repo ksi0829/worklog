@@ -1662,13 +1662,13 @@ export default function CustomerPage() {
                               <div key={log.id} style={styles.historyItem}>
                                 <strong>{log.createdAt}</strong>
                                 <span>{log.action}</span>
-                                <small>
+                                <span style={styles.historyHandler}>
                                   {[log.handlerName && `처리자 ${log.handlerName}`, log.handlerTeam]
                                     .filter(Boolean)
                                     .join(" · ")}
-                                </small>
+                                </span>
                                 {(log.part || log.memo) && (
-                                  <em>
+                                  <em style={styles.historyNote}>
                                     {[log.part && `부품 ${log.part}`, log.memo]
                                       .filter(Boolean)
                                       .join(" · ")}
