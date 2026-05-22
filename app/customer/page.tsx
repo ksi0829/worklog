@@ -1567,7 +1567,7 @@ export default function CustomerPage() {
           </div>
         )}
 
-        {selectedEquipment && (
+        {selectedEquipment && !equipmentEditModalOpen && (
           <div style={styles.modalBackdrop}>
             <div style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}>
               <div style={styles.modalHeader}>
