@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import {
+  type CSSProperties,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -31,7 +33,7 @@ type ScheduleItem = {
 const supabase =
   createSupabaseBrowser();
 
-const TYPE_STYLE: any = {
+const TYPE_STYLE: Record<string, CSSProperties> = {
   출장: {
     background: "#dbeafe",
     color: "#2563eb",
@@ -60,9 +62,6 @@ const TYPE_STYLE: any = {
 
 export default function SchedulePage() {
   const today = new Date();
-
-  const [loading, setLoading] =
-    useState(true);
 
   const [schedules, setSchedules] =
     useState<ScheduleItem[]>([]);
@@ -136,9 +135,29 @@ export default function SchedulePage() {
     0
   ).getDate();
 
-  useEffect(() => {
-    fetchSchedules();
+  const fetchSchedules = useCallback(async () => {
+    const { data, error } =
+      await supabase
+        .from("schedules")
+        .select("*")
+        .order("date", {
+          ascending: true,
+        });
+
+    if (!error && data) {
+      setSchedules(data);
+    }
   }, []);
+
+  useEffect(() => {
+    const timer =
+      window.setTimeout(() => {
+        void fetchSchedules();
+      }, 0);
+
+    return () =>
+      window.clearTimeout(timer);
+  }, [fetchSchedules]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(
@@ -164,24 +183,6 @@ export default function SchedulePage() {
       );
     };
   }, []);
-
-  async function fetchSchedules() {
-    setLoading(true);
-
-    const { data, error } =
-      await supabase
-        .from("schedules")
-        .select("*")
-        .order("date", {
-          ascending: true,
-        });
-
-    if (!error && data) {
-      setSchedules(data);
-    }
-
-    setLoading(false);
-  }
 
   const days = useMemo(() => {
     const result = [];
@@ -873,7 +874,12 @@ export default function SchedulePage() {
   );
 }
 
-const styles: any = {
+type StyleValue =
+  | CSSProperties
+  | ((value: boolean) => CSSProperties)
+  | ((value: string) => CSSProperties);
+
+const styles = {
   page: {
     minHeight: "100vh",
     background: "#f5f6f8",
@@ -1335,4 +1341,4 @@ const styles: any = {
     fontWeight: 700,
     cursor: "pointer",
   },
-};
+} satisfies Record<string, StyleValue>;
