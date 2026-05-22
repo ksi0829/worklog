@@ -71,6 +71,7 @@ grant usage, select on sequence public.user_activity_logs_id_seq to authenticate
 
 drop policy if exists "user_activity_logs_insert_own" on public.user_activity_logs;
 drop policy if exists "user_activity_logs_select_admin_or_own" on public.user_activity_logs;
+drop policy if exists "user_activity_logs_select_authenticated_all" on public.user_activity_logs;
 drop policy if exists "user_activity_logs_delete_admin" on public.user_activity_logs;
 
 create policy "user_activity_logs_insert_own"
@@ -79,11 +80,11 @@ for insert
 to authenticated
 with check (user_id = auth.uid());
 
-create policy "user_activity_logs_select_admin_or_own"
+create policy "user_activity_logs_select_authenticated_all"
 on public.user_activity_logs
 for select
 to authenticated
-using (user_id = auth.uid() or public.is_system_admin());
+using (true);
 
 create policy "user_activity_logs_delete_admin"
 on public.user_activity_logs

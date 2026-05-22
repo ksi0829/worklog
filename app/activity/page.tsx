@@ -99,14 +99,7 @@ export default function ActivityPage() {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "admin") {
-      setIsAdmin(false);
-      setMessage("관리자 계정에서만 접속 현황을 볼 수 있습니다.");
-      setLoading(false);
-      return;
-    }
-
-    setIsAdmin(true);
+    setIsAdmin(profile?.role === "admin");
 
     const { data, error } = await supabase
       .from("user_activity_logs")
@@ -178,6 +171,11 @@ export default function ActivityPage() {
     );
   }, [logs]);
 
+  const activeSummaries = useMemo(
+    () => summaries.filter(isActive),
+    [summaries]
+  );
+
   return (
     <main style={styles.page}>
       <section style={styles.headerCard}>
@@ -194,6 +192,26 @@ export default function ActivityPage() {
 
       {message && <div style={styles.messageBox}>{message}</div>}
 
+      <section style={styles.card}>
+        <div style={styles.cardHeader}>
+          <h3>현재 접속 인원</h3>
+          <span>{loading ? "불러오는 중" : `${activeSummaries.length}명`}</span>
+        </div>
+        {activeSummaries.length === 0 ? (
+          <div style={styles.emptyBox}>현재 접속 중으로 확인되는 인원이 없습니다.</div>
+        ) : (
+          <div style={styles.onlineGrid}>
+            {activeSummaries.map((summary) => (
+              <div key={summary.userId} style={styles.onlineCard}>
+                <span style={styles.onlineLamp} />
+                <strong>{summary.name}</strong>
+                <em>{summary.team}</em>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {isAdmin && (
         <>
           <section style={styles.summaryGrid}>
@@ -203,7 +221,7 @@ export default function ActivityPage() {
             </div>
             <div style={styles.statCard}>
               <span>접속 추정</span>
-              <strong>{summaries.filter(isActive).length}명</strong>
+              <strong>{activeSummaries.length}명</strong>
             </div>
             <div style={styles.statCard}>
               <span>저장 로그</span>
@@ -343,6 +361,41 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: "12px",
+  },
+  onlineGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: "10px",
+  },
+  onlineCard: {
+    minHeight: "54px",
+    display: "grid",
+    gridTemplateColumns: "12px minmax(0, 1fr)",
+    columnGap: "9px",
+    rowGap: "2px",
+    alignItems: "center",
+    border: "1px solid #e5eaf0",
+    borderRadius: "11px",
+    background: "#fbfcfd",
+    padding: "10px 12px",
+  },
+  onlineLamp: {
+    gridRow: "1 / span 2",
+    width: "10px",
+    height: "10px",
+    borderRadius: "999px",
+    background: "#22c55e",
+    boxShadow: "0 0 0 4px rgba(34, 197, 94, 0.12)",
+  },
+  emptyBox: {
+    border: "1px dashed #cbd5e1",
+    borderRadius: "10px",
+    background: "#fbfcfd",
+    color: "#64748b",
+    padding: "18px",
+    textAlign: "center",
+    fontSize: "13px",
+    fontWeight: 750,
   },
   tableWrap: {
     overflowX: "auto",

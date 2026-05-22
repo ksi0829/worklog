@@ -86,6 +86,7 @@ export function ChatPanel({
   const [messageBody, setMessageBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
+  const [unreadByUserId, setUnreadByUserId] = useState<Record<string, number>>({});
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedUser = useMemo(
@@ -128,6 +129,7 @@ export function ChatPanel({
 
     if (participantError) {
       onUnreadChange(0);
+      setUnreadByUserId({});
       return;
     }
 
@@ -136,6 +138,7 @@ export function ChatPanel({
 
     if (threadIds.length === 0) {
       onUnreadChange(0);
+      setUnreadByUserId({});
       return;
     }
 
@@ -153,18 +156,22 @@ export function ChatPanel({
 
     if (messageError) {
       onUnreadChange(0);
+      setUnreadByUserId({});
       return;
     }
 
     const unreadThreadIds = new Set<number>();
+    const unreadUserMap: Record<string, number> = {};
 
     ((messageRows || []) as ChatMessageRow[]).forEach((message) => {
       const lastRead = readMap.get(message.thread_id);
       if (!lastRead || message.created_at > lastRead) {
         unreadThreadIds.add(message.thread_id);
+        unreadUserMap[message.sender_id] = (unreadUserMap[message.sender_id] || 0) + 1;
       }
     });
 
+    setUnreadByUserId(unreadUserMap);
     onUnreadChange(unreadThreadIds.size);
   }, [currentUserId, onUnreadChange]);
 
@@ -394,7 +401,12 @@ export function ChatPanel({
                 }}
                 onClick={() => void selectUser(user)}
               >
-                <strong>{user.name}</strong>
+                <span style={styles.userNameRow}>
+                  <strong>{user.name}</strong>
+                  {unreadByUserId[user.id] > 0 && (
+                    <em style={styles.userUnreadBadge}>{unreadByUserId[user.id]}</em>
+                  )}
+                </span>
                 <span>{user.team}</span>
               </button>
             ))}
@@ -569,6 +581,26 @@ const styles: Record<string, CSSProperties> = {
     borderColor: "#b7e4c7",
     background: "#eef8f2",
     color: "#0f8a56",
+  },
+  userNameRow: {
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+  },
+  userUnreadBadge: {
+    minWidth: "18px",
+    height: "18px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "999px",
+    background: "#ef4444",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontStyle: "normal",
+    fontWeight: 900,
   },
   chatArea: {
     minHeight: 0,

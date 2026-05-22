@@ -185,14 +185,7 @@ export function AppFrame({ children }: AppFrameProps) {
   const lastActivityLogRef = useRef(0);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
-  const utilityItems = useMemo(
-    () =>
-      UTILITY_ITEMS.filter((item) => {
-        if (item.path !== "/activity") return true;
-        return role === "admin";
-      }),
-    [role]
-  );
+  const utilityItems = useMemo(() => UTILITY_ITEMS, []);
   const title = TITLE_BY_PATH[pathname] || "ZETA";
 
   const approvalAlerts = useMemo(() => {
