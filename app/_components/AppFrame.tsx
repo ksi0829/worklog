@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
+import { ChatPanel } from "@/app/_components/ChatPanel";
 
 const supabase = createSupabaseBrowser();
 
@@ -19,6 +20,7 @@ type IconName =
   | "sales"
   | "schedule"
   | "customer"
+  | "chat"
   | "org"
   | "account"
   | "activity"
@@ -121,6 +123,8 @@ function iconPath(name: IconName) {
       return "M7 3v4M17 3v4M4 8h16M5 5h14v15H5V5Zm4 7h2v2H9v-2Z";
     case "customer":
       return "M16 21v-2a4 4 0 0 0-8 0v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm5-1a3 3 0 0 1 3 3v1";
+    case "chat":
+      return "M5 5h14v10H8l-3 3V5Zm4 4h6M9 12h4";
     case "org":
       return "M12 4v5M7 14v-3h10v3M5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
     case "account":
@@ -172,6 +176,8 @@ export function AppFrame({ children }: AppFrameProps) {
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [asWorkOrderAlerts, setAsWorkOrderAlerts] = useState<AsWorkOrderAlertRow[]>([]);
   const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -420,7 +426,14 @@ export function AppFrame({ children }: AppFrameProps) {
   function navigateTo(path: string) {
     setMobileMenuOpen(false);
     setApprovalAlertOpen(false);
+    setChatOpen(false);
     router.push(path);
+  }
+
+  function openChat() {
+    setMobileMenuOpen(false);
+    setApprovalAlertOpen(false);
+    setChatOpen(true);
   }
 
   return (
@@ -455,6 +468,22 @@ export function AppFrame({ children }: AppFrameProps) {
               </button>
             );
           })}
+          <button
+            type="button"
+            title="채팅"
+            style={{
+              ...styles.iconNavItem,
+              ...(chatOpen ? styles.iconNavItemActive : {}),
+              position: "relative",
+            }}
+            onClick={openChat}
+          >
+            <NavIcon name="chat" />
+            <span>채팅</span>
+            {chatUnreadCount > 0 && (
+              <span style={styles.chatMenuBadge}>{chatUnreadCount}</span>
+            )}
+          </button>
         </nav>
       </aside>
 
@@ -580,6 +609,21 @@ export function AppFrame({ children }: AppFrameProps) {
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  style={{
+                    ...styles.mobileDrawerItem,
+                    ...(chatOpen ? styles.mobileDrawerItemActive : {}),
+                    position: "relative",
+                  }}
+                  onClick={openChat}
+                >
+                  <NavIcon name="chat" />
+                  <span>채팅</span>
+                  {chatUnreadCount > 0 && (
+                    <strong style={styles.mobileChatBadge}>{chatUnreadCount}</strong>
+                  )}
+                </button>
               </nav>
             </aside>
           </div>
@@ -650,6 +694,14 @@ export function AppFrame({ children }: AppFrameProps) {
           </section>
         </div>
       )}
+      <ChatPanel
+        open={chatOpen}
+        currentUserId={currentUserId}
+        currentName={name}
+        currentTeam={team}
+        onClose={() => setChatOpen(false)}
+        onUnreadChange={setChatUnreadCount}
+      />
       <SystemToast message={toastMessage} onClose={() => setToastMessage("")} />
     </div>
   );
@@ -741,6 +793,21 @@ const styles: Record<string, CSSProperties> = {
     background: "#eef6f1",
     borderColor: "#d7eee0",
     color: "#0f8a56",
+  },
+  chatMenuBadge: {
+    position: "absolute",
+    top: "5px",
+    right: "7px",
+    minWidth: "17px",
+    height: "17px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "999px",
+    background: "#ef4444",
+    color: "#ffffff",
+    fontSize: "10px",
+    fontWeight: 900,
   },
   sidebar: {
     position: "sticky",
@@ -952,6 +1019,19 @@ const styles: Record<string, CSSProperties> = {
     background: "#eef6f1",
     borderColor: "#d7eee0",
     color: "#0f8a56",
+  },
+  mobileChatBadge: {
+    marginLeft: "auto",
+    minWidth: "18px",
+    height: "18px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "999px",
+    background: "#ef4444",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontWeight: 900,
   },
   mobileNotice: {
     marginTop: "7px",
