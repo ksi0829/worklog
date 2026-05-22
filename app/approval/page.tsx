@@ -3097,6 +3097,13 @@ const styles: Record<string, CSSProperties> = {
     marginTop: "16px",
     borderTop: "1px solid #edf0f3",
     paddingTop: "16px",
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "auto",
+    overflowY: "visible",
+    WebkitOverflowScrolling: "touch",
+    overscrollBehaviorX: "contain",
+    paddingBottom: "8px",
   },
   legacyTopNotice: {
     display: "grid",
