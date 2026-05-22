@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
@@ -21,6 +21,7 @@ type IconName =
   | "customer"
   | "org"
   | "account"
+  | "activity"
   | "logout"
   | "notice";
 
@@ -70,6 +71,7 @@ const MENU_ITEMS: MenuItem[] = [
 ];
 
 const UTILITY_ITEMS: MenuItem[] = [
+  { title: "접속현황", path: "/activity", icon: "activity", description: "로그인 기록" },
   { title: "조직도", path: "/organization", icon: "org", description: "조직 현황" },
   { title: "계정관리", path: "/change-password", icon: "account", description: "비밀번호 변경" },
 ];
@@ -85,6 +87,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/customer": "고객사 DB",
   "/organization": "조직도",
   "/change-password": "계정관리",
+  "/activity": "접속현황",
   "/notices": "공지관리",
 };
 
@@ -97,9 +100,12 @@ const SUBMENU_BY_PATH: Record<string, string[]> = {
   "/customer": ["고객사", "가공업체", "후처리", "담당자"],
   "/organization": ["조직 현황", "부서 구성"],
   "/change-password": ["계정 정보", "비밀번호 변경"],
+  "/activity": ["접속 요약", "활동 로그"],
 };
 
 const TECH_1_MEMBERS = ["한차현", "한재영", "권영일", "김학", "박상현"];
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000;
+const ACTIVITY_LOG_INTERVAL_MS = 5 * 60 * 1000;
 
 function iconPath(name: IconName) {
   switch (name) {
@@ -119,6 +125,8 @@ function iconPath(name: IconName) {
       return "M12 4v5M7 14v-3h10v3M5 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
     case "account":
       return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0";
+    case "activity":
+      return "M4 19h16M7 16V9M12 16V5M17 16v-4M5 5h14";
     case "logout":
       return "M10 5H5v14h5M14 8l4 4-4 4M18 12H9";
     case "notice":
@@ -167,8 +175,18 @@ export function AppFrame({ children }: AppFrameProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const activityTimerRef = useRef<number | null>(null);
+  const lastActivityLogRef = useRef(0);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
+  const utilityItems = useMemo(
+    () =>
+      UTILITY_ITEMS.filter((item) => {
+        if (item.path !== "/activity") return true;
+        return role === "admin";
+      }),
+    [role]
+  );
   const title = TITLE_BY_PATH[pathname] || "ZETA";
 
   const approvalAlerts = useMemo(() => {
@@ -183,6 +201,31 @@ export function AppFrame({ children }: AppFrameProps) {
   }, [approvalDocuments, currentUserId, name]);
 
   const alertCount = approvalAlerts.length + asWorkOrderAlerts.length;
+
+  const recordUserActivity = useCallback(
+    async (eventType: "activity" | "logout" | "auto_logout") => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      await supabase
+        .from("user_activity_logs")
+        .insert({
+          user_id: user.id,
+          user_name: localStorage.getItem("name") || name || "",
+          team: localStorage.getItem("team") || team || "",
+          role: localStorage.getItem("role") || role || "",
+          event_type: eventType,
+          path: pathname,
+          user_agent:
+            typeof navigator !== "undefined" ? navigator.userAgent : "",
+        })
+        .then(() => undefined);
+    },
+    [name, pathname, role, team]
+  );
 
   const loadApprovalAlerts = useCallback(async (storedName: string, userId: string) => {
     const matchFilters = [
@@ -272,6 +315,62 @@ export function AppFrame({ children }: AppFrameProps) {
   }, [loadApprovalAlerts, loadAsWorkOrderAlerts, pathname]);
 
   useEffect(() => {
+    if (pathname === "/login") return;
+
+    const now = Date.now();
+
+    if (now - lastActivityLogRef.current > ACTIVITY_LOG_INTERVAL_MS) {
+      lastActivityLogRef.current = now;
+      void recordUserActivity("activity");
+    }
+  }, [pathname, recordUserActivity]);
+
+  useEffect(() => {
+    if (pathname === "/login") return;
+
+    const clearSession = async (eventType: "logout" | "auto_logout") => {
+      await recordUserActivity(eventType);
+      await supabase.auth.signOut();
+      localStorage.removeItem("role");
+      localStorage.removeItem("team");
+      localStorage.removeItem("name");
+      router.push("/login");
+    };
+
+    const resetIdleTimer = () => {
+      if (activityTimerRef.current) {
+        window.clearTimeout(activityTimerRef.current);
+      }
+
+      activityTimerRef.current = window.setTimeout(() => {
+        void clearSession("auto_logout");
+      }, IDLE_TIMEOUT_MS);
+
+      const now = Date.now();
+
+      if (now - lastActivityLogRef.current > ACTIVITY_LOG_INTERVAL_MS) {
+        lastActivityLogRef.current = now;
+        void recordUserActivity("activity");
+      }
+    };
+
+    const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
+    events.forEach((eventName) =>
+      window.addEventListener(eventName, resetIdleTimer, { passive: true })
+    );
+    resetIdleTimer();
+
+    return () => {
+      if (activityTimerRef.current) {
+        window.clearTimeout(activityTimerRef.current);
+      }
+      events.forEach((eventName) =>
+        window.removeEventListener(eventName, resetIdleTimer)
+      );
+    };
+  }, [pathname, recordUserActivity, router]);
+
+  useEffect(() => {
     const originalAlert = window.alert;
     let timeoutId: number | undefined;
 
@@ -301,6 +400,7 @@ export function AppFrame({ children }: AppFrameProps) {
   }
 
   async function handleLogout() {
+    await recordUserActivity("logout");
     await supabase.auth.signOut();
     localStorage.removeItem("role");
     localStorage.removeItem("team");
@@ -424,7 +524,7 @@ export function AppFrame({ children }: AppFrameProps) {
                 <span style={styles.alertCount}>{alertCount}</span>
               )}
             </button>
-            {UTILITY_ITEMS.map((item) => (
+            {utilityItems.map((item) => (
               <button
                 key={item.path}
                 type="button"

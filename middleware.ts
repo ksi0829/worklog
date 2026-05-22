@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
 
-  let response = NextResponse.next();
+  const response = NextResponse.next();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,7 +18,14 @@ export async function middleware(req: NextRequest) {
         setAll(cookiesToSet) {
 
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            const sessionOptions = { ...options };
+
+            if (sessionOptions.maxAge !== 0) {
+              delete sessionOptions.maxAge;
+              delete sessionOptions.expires;
+            }
+
+            response.cookies.set(name, value, sessionOptions);
           });
 
         },

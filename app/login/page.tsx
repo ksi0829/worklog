@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
@@ -31,28 +31,48 @@ function toDisplayId(id: string) {
   return trimmed;
 }
 
+async function recordLoginActivity(profile: {
+  id: string;
+  name?: string | null;
+  team?: string | null;
+  role?: string | null;
+}) {
+  await supabase
+    .from("user_activity_logs")
+    .insert({
+      user_id: profile.id,
+      user_name: profile.name || "",
+      team: profile.team || "",
+      role: profile.role || "",
+      event_type: "login",
+      path: "/login",
+      user_agent:
+        typeof navigator !== "undefined" ? navigator.userAgent : "",
+    })
+    .then(() => undefined);
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [loginId, setLoginId] =
-    useState("");
+    useState(() => {
+      if (typeof window === "undefined") return "";
+      const saved = localStorage.getItem("savedEmail");
+
+      return saved ? toDisplayId(saved) : "";
+    });
   const [password, setPassword] = useState("");
 
   const [rememberId, setRememberId] =
-    useState(true);
+    useState(() => {
+      if (typeof window === "undefined") return true;
+
+      return Boolean(localStorage.getItem("savedEmail"));
+    });
 
   const [loading, setLoading] =
     useState(false);
-
-  useEffect(() => {
-    const saved =
-      localStorage.getItem("savedEmail");
-
-    if (saved) {
-      setLoginId(toDisplayId(saved));
-      setRememberId(true);
-    }
-  }, []);
 
   async function handleLogin(
     e: React.FormEvent
@@ -112,6 +132,8 @@ export default function LoginPage() {
           "savedEmail"
         );
       }
+
+      await recordLoginActivity(profile);
 
       router.push("/main");
     } catch (err) {
