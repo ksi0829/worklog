@@ -400,7 +400,11 @@ export default function AsPage() {
     currentRole === "lead" ||
     currentRole === "executive" ||
     TEAM_LEAD_NAMES.includes(currentName);
-  const isSalesTeam = currentTeam === "국내영업" || currentTeam === "해외영업";
+  const isSalesTeam =
+    currentTeam === "국내영업" ||
+    currentTeam === "해외영업" ||
+    currentTeam === "국내영업부" ||
+    currentTeam === "해외영업부";
   const isTech1Member = currentTeam === "기술 1팀" || TECH_1_MEMBERS.includes(currentName);
   const canCreateWorkOrder = isLeadOrAbove || isSalesTeam;
   const canDeleteSelectedOrder = Boolean(

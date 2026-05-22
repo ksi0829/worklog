@@ -622,6 +622,11 @@ export const styles: Record<string, CSSProperties> = {
   equipmentHistory: {
     marginTop: "16px",
   },
+  equipmentHistoryScroll: {
+    maxHeight: "320px",
+    overflowY: "auto",
+    paddingRight: "4px",
+  },
   historyBlock: {
     border: "1px solid #e5e7eb",
     borderRadius: "10px",

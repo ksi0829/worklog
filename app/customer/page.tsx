@@ -52,6 +52,9 @@ type AsHistoryLog = {
   part: string;
   memo: string;
   createdAt: string;
+  createdBy: string | null;
+  handlerName: string;
+  handlerTeam: string;
 };
 
 type AsHistoryOrder = {
@@ -151,6 +154,7 @@ type AsServiceLogRow = {
   part: string | null;
   memo: string | null;
   created_at: string | null;
+  created_by?: string | null;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -439,11 +443,31 @@ export default function CustomerPage() {
 
     const { data: serviceLogRows } = await supabase
       .from("as_service_logs")
-      .select("id,work_order_id,seq,action,part,memo,created_at")
+      .select("id,work_order_id,seq,action,part,memo,created_at,created_by")
       .order("seq", { ascending: false });
+
+    const logCreatorIds = Array.from(
+      new Set(
+        ((serviceLogRows || []) as AsServiceLogRow[])
+          .map((log) => log.created_by)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    const { data: logProfiles } = logCreatorIds.length
+      ? await supabase
+          .from("profiles")
+          .select("id,name,team")
+          .in("id", logCreatorIds)
+      : { data: [] };
+    const logProfilesById = new Map(
+      ((logProfiles || []) as { id: string; name: string | null; team: string | null }[]).map(
+        (profile) => [profile.id, profile]
+      )
+    );
 
     const logsByOrder = new Map<number, AsHistoryLog[]>();
     ((serviceLogRows || []) as AsServiceLogRow[]).forEach((log) => {
+      const handler = log.created_by ? logProfilesById.get(log.created_by) : null;
       const nextLog: AsHistoryLog = {
         id: log.id,
         workOrderId: log.work_order_id,
@@ -452,6 +476,9 @@ export default function CustomerPage() {
         part: log.part || "",
         memo: log.memo || "",
         createdAt: (log.created_at || today).slice(0, 10),
+        createdBy: log.created_by || null,
+        handlerName: handler?.name || "",
+        handlerTeam: handler?.team || "",
       };
       logsByOrder.set(log.work_order_id, [
         nextLog,
@@ -1618,35 +1645,42 @@ export default function CustomerPage() {
                 {selectedEquipmentHistory.length === 0 ? (
                   <div style={styles.empty}>이 장비에 연결된 A/S 이력이 없습니다.</div>
                 ) : (
-                  selectedEquipmentHistory.map((order) => (
-                    <div key={order.id} style={styles.historyBlock}>
-                      <div style={styles.historyTitle}>
-                        {order.woNo} · {order.title}
-                      </div>
-                      <div style={styles.equipmentCardMeta}>
-                        {order.createdAt} · {order.status}
-                      </div>
-                      {order.logs.length === 0 ? (
-                        <div style={styles.historyEmpty}>처리내역 없음</div>
-                      ) : (
-                        <div style={styles.historyList}>
-                          {order.logs.map((log) => (
-                            <div key={log.id} style={styles.historyItem}>
-                              <strong>{log.createdAt}</strong>
-                              <span>{log.action}</span>
-                              {(log.part || log.memo) && (
-                                <em>
-                                  {[log.part && `부품 ${log.part}`, log.memo]
+                  <div style={styles.equipmentHistoryScroll}>
+                    {selectedEquipmentHistory.map((order) => (
+                      <div key={order.id} style={styles.historyBlock}>
+                        <div style={styles.historyTitle}>
+                          {order.woNo} · {order.title}
+                        </div>
+                        <div style={styles.equipmentCardMeta}>
+                          {order.createdAt} · {order.status}
+                        </div>
+                        {order.logs.length === 0 ? (
+                          <div style={styles.historyEmpty}>처리내역 없음</div>
+                        ) : (
+                          <div style={styles.historyList}>
+                            {order.logs.map((log) => (
+                              <div key={log.id} style={styles.historyItem}>
+                                <strong>{log.createdAt}</strong>
+                                <span>{log.action}</span>
+                                <small>
+                                  {[log.handlerName && `처리자 ${log.handlerName}`, log.handlerTeam]
                                     .filter(Boolean)
                                     .join(" · ")}
-                                </em>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))
+                                </small>
+                                {(log.part || log.memo) && (
+                                  <em>
+                                    {[log.part && `부품 ${log.part}`, log.memo]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </em>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
