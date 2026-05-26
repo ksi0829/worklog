@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import activityStyles from "./page.module.css";
 
 const supabase = createSupabaseBrowser();
 
@@ -40,6 +41,15 @@ function formatDateTime(value?: string | null) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDateLabel(value: string) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
   }).format(new Date(value));
 }
 
@@ -176,36 +186,56 @@ export default function ActivityPage() {
     [summaries]
   );
 
-  return (
-    <main style={styles.page}>
-      <section style={styles.headerCard}>
-        <div>
-          <h2 style={styles.title}>접속 현황</h2>
-          <p style={styles.description}>
-            로그인, 로그아웃, 최근 활동 기준으로 사용자 접속 상태를 확인합니다.
-          </p>
-        </div>
-        <button type="button" style={styles.refreshButton} onClick={() => void loadLogs()}>
-          새로고침
-        </button>
-      </section>
+  const groupedLogs = useMemo(() => {
+    const groups = new Map<string, ActivityLogRow[]>();
 
+    logs.forEach((log) => {
+      const label = formatDateLabel(log.created_at);
+      const dailyLogs = groups.get(label) || [];
+      dailyLogs.push(log);
+      groups.set(label, dailyLogs);
+    });
+
+    return Array.from(groups.entries());
+  }, [logs]);
+
+  return (
+    <main
+      className={`${activityStyles.page} ${isAdmin ? "" : activityStyles.publicPage}`}
+    >
       {message && <div style={styles.messageBox}>{message}</div>}
 
-      <section style={styles.card}>
-        <div style={styles.cardHeader}>
-          <h3>현재 접속 인원</h3>
-          <span>{loading ? "불러오는 중" : `${activeSummaries.length}명`}</span>
+      <section className={`${activityStyles.card} ${activityStyles.presenceCard}`}>
+        <div className={`${activityStyles.cardHeader} ${activityStyles.presenceHeader}`}>
+          <div className={activityStyles.headingBlock}>
+            <h3>현재 접속 인원</h3>
+            <p>최근 15분 내 활동 기준</p>
+          </div>
+          <div className={activityStyles.presenceControls}>
+            <span>{loading ? "불러오는 중" : `${activeSummaries.length}명`}</span>
+            <button
+              type="button"
+              className={activityStyles.refreshButton}
+              onClick={() => void loadLogs()}
+            >
+              새로고침
+            </button>
+          </div>
         </div>
         {activeSummaries.length === 0 ? (
           <div style={styles.emptyBox}>현재 접속 중으로 확인되는 인원이 없습니다.</div>
         ) : (
-          <div style={styles.onlineGrid}>
+          <div className={activityStyles.presenceList}>
             {activeSummaries.map((summary) => (
-              <div key={summary.userId} style={styles.onlineCard}>
-                <span style={styles.onlineLamp} />
-                <strong>{summary.name}</strong>
-                <em>{summary.team}</em>
+              <div key={summary.userId} className={activityStyles.presenceRow}>
+                <span className={activityStyles.onlineLamp} />
+                <div className={activityStyles.presenceIdentity}>
+                  <strong>{summary.name}</strong>
+                  <span>{summary.team}</span>
+                </div>
+                <span className={activityStyles.presenceTime}>
+                  최근 활동 {formatDateTime(summary.latestActivity || summary.latestAt)}
+                </span>
               </div>
             ))}
           </div>
@@ -214,27 +244,30 @@ export default function ActivityPage() {
 
       {isAdmin && (
         <>
-          <section style={styles.summaryGrid}>
-            <div style={styles.statCard}>
+          <section className={activityStyles.summaryGrid}>
+            <div className={activityStyles.statCard}>
               <span>최근 활동 사용자</span>
               <strong>{summaries.length}명</strong>
             </div>
-            <div style={styles.statCard}>
+            <div className={activityStyles.statCard}>
               <span>접속 추정</span>
               <strong>{activeSummaries.length}명</strong>
             </div>
-            <div style={styles.statCard}>
+            <div className={activityStyles.statCard}>
               <span>저장 로그</span>
               <strong>{logs.length}건</strong>
             </div>
           </section>
 
-          <section style={styles.card}>
-            <div style={styles.cardHeader}>
+          <section className={activityStyles.card}>
+            <div className={activityStyles.cardHeader}>
               <h3>사용자별 최근 상태</h3>
               <span>{loading ? "불러오는 중" : `${summaries.length}명`}</span>
             </div>
-            <div style={styles.tableWrap}>
+            <p className={activityStyles.sectionHint}>
+              사용자별 가장 최근 상태만 표시됩니다.
+            </p>
+            <div className={activityStyles.desktopTable}>
               <table style={styles.table}>
                 <thead>
                   <tr>
@@ -266,25 +299,60 @@ export default function ActivityPage() {
                 </tbody>
               </table>
             </div>
+            <div className={activityStyles.mobileSummaryList}>
+              {summaries.map((summary) => (
+                <div key={summary.userId} className={activityStyles.summaryRow}>
+                  <div className={activityStyles.summaryIdentity}>
+                    <strong>{summary.name}</strong>
+                    <span>{summary.team} / {summary.role}</span>
+                  </div>
+                  <span style={isActive(summary) ? styles.statusOnline : styles.statusOffline}>
+                    {isActive(summary) ? "접속 추정" : eventLabel(summary.latestEvent)}
+                  </span>
+                  <div className={activityStyles.summaryTimes}>
+                    <span>로그인 {formatDateTime(summary.latestLogin)}</span>
+                    <span>활동 {formatDateTime(summary.latestActivity || summary.latestAt)}</span>
+                    <span>종료 {formatDateTime(summary.latestLogout)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
 
-          <section style={styles.card}>
-            <div style={styles.cardHeader}>
+          <section className={activityStyles.card}>
+            <div className={activityStyles.cardHeader}>
               <h3>최근 활동 로그</h3>
               <span>{logs.length}건</span>
             </div>
-            <div style={styles.logList}>
-              {logs.map((log) => (
-                <div key={log.id} style={styles.logItem}>
-                  <span style={{ ...styles.badge, ...eventStyle(log.event_type) }}>
-                    {eventLabel(log.event_type)}
-                  </span>
-                  <strong>{log.user_name || "-"}</strong>
-                  <span>{log.team || "-"}</span>
-                  <span>{log.path || "-"}</span>
-                  <time>{formatDateTime(log.created_at)}</time>
-                </div>
+            <div className={activityStyles.dayList}>
+              {groupedLogs.map(([label, dailyLogs], index) => (
+                <details
+                  key={label}
+                  className={activityStyles.dayGroup}
+                  open={index === 0}
+                >
+                  <summary className={activityStyles.dayHeader}>
+                    <strong>{label}</strong>
+                    <span>{dailyLogs.length}건</span>
+                  </summary>
+                  <div className={activityStyles.logList}>
+                    {dailyLogs.map((log) => (
+                      <div key={log.id} className={activityStyles.logItem}>
+                        <span style={{ ...styles.badge, ...eventStyle(log.event_type) }}>
+                          {eventLabel(log.event_type)}
+                        </span>
+                        <strong>{log.user_name || "-"}</strong>
+                        <span>{log.team || "-"}</span>
+                        <span className={activityStyles.path}>{log.path || "-"}</span>
+                        <time>{formatDateTime(log.created_at)}</time>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               ))}
+              {!loading && groupedLogs.length === 0 && (
+                <div style={styles.emptyBox}>저장된 활동 로그가 없습니다.</div>
+              )}
             </div>
           </section>
         </>
@@ -294,41 +362,6 @@ export default function ActivityPage() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: {
-    display: "grid",
-    gap: "16px",
-  },
-  headerCard: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "16px",
-    alignItems: "center",
-    border: "1px solid #dde3eb",
-    borderRadius: "12px",
-    background: "#ffffff",
-    padding: "18px",
-  },
-  title: {
-    margin: 0,
-    fontSize: "22px",
-    fontWeight: 900,
-  },
-  description: {
-    margin: "7px 0 0",
-    color: "#667085",
-    fontSize: "13px",
-    fontWeight: 650,
-  },
-  refreshButton: {
-    minWidth: "92px",
-    height: "38px",
-    border: "1px solid #cfd8e3",
-    borderRadius: "9px",
-    background: "#ffffff",
-    color: "#111820",
-    fontWeight: 850,
-    cursor: "pointer",
-  },
   messageBox: {
     border: "1px solid #bfdbfe",
     borderRadius: "10px",
@@ -336,56 +369,6 @@ const styles: Record<string, CSSProperties> = {
     color: "#1d4ed8",
     padding: "12px 14px",
     fontWeight: 750,
-  },
-  summaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: "12px",
-  },
-  statCard: {
-    border: "1px solid #dde3eb",
-    borderRadius: "12px",
-    background: "#ffffff",
-    padding: "16px",
-    display: "grid",
-    gap: "8px",
-  },
-  card: {
-    border: "1px solid #dde3eb",
-    borderRadius: "12px",
-    background: "#ffffff",
-    padding: "16px",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "12px",
-  },
-  onlineGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-    gap: "10px",
-  },
-  onlineCard: {
-    minHeight: "54px",
-    display: "grid",
-    gridTemplateColumns: "12px minmax(0, 1fr)",
-    columnGap: "9px",
-    rowGap: "2px",
-    alignItems: "center",
-    border: "1px solid #e5eaf0",
-    borderRadius: "11px",
-    background: "#fbfcfd",
-    padding: "10px 12px",
-  },
-  onlineLamp: {
-    gridRow: "1 / span 2",
-    width: "10px",
-    height: "10px",
-    borderRadius: "999px",
-    background: "#22c55e",
-    boxShadow: "0 0 0 4px rgba(34, 197, 94, 0.12)",
   },
   emptyBox: {
     border: "1px dashed #cbd5e1",
@@ -396,9 +379,6 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
     fontSize: "13px",
     fontWeight: 750,
-  },
-  tableWrap: {
-    overflowX: "auto",
   },
   table: {
     width: "100%",
@@ -442,20 +422,6 @@ const styles: Record<string, CSSProperties> = {
     padding: "5px 9px",
     fontSize: "12px",
     fontWeight: 850,
-  },
-  logList: {
-    display: "grid",
-    gap: "8px",
-  },
-  logItem: {
-    display: "grid",
-    gridTemplateColumns: "110px 130px 1fr 120px 110px",
-    gap: "10px",
-    alignItems: "center",
-    border: "1px solid #edf0f4",
-    borderRadius: "10px",
-    padding: "10px 12px",
-    fontSize: "13px",
   },
   badge: {
     display: "inline-flex",

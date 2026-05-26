@@ -122,7 +122,7 @@ textarea {
   .app-topbar-actions {
     width: 100% !important;
     display: grid !important;
-    grid-template-columns: 42px repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
     gap: 7px !important;
     align-items: center !important;
     overflow: visible !important;
@@ -140,8 +140,8 @@ textarea {
   }
 
   .app-alert-button {
-    width: 38px !important;
-    min-width: 38px !important;
+    width: 100% !important;
+    min-width: 0 !important;
   }
 
   .app-topbar-action-button {
@@ -164,7 +164,7 @@ textarea {
   }
 
   .app-topbar-actions {
-    grid-template-columns: 40px repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
   }
 
   .app-topbar-action-button {
