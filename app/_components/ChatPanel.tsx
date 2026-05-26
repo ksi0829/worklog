@@ -69,6 +69,12 @@ type ChatMessageRow = {
   created_at: string;
 };
 
+type RecipientReadState = {
+  threadId: number;
+  recipientId: string;
+  lastReadAt: string | null;
+};
+
 function getProfileSortValue(profile: ChatUser) {
   const teamIndex = TEAM_ORDER.indexOf(profile.team);
   return `${teamIndex === -1 ? 99 : teamIndex}-${profile.name}`;
@@ -115,6 +121,7 @@ export function ChatPanel({
   const [unreadByUserId, setUnreadByUserId] = useState<Record<string, number>>({});
   const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
+  const [recipientReadState, setRecipientReadState] = useState<RecipientReadState | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedUser = useMemo(
@@ -242,6 +249,23 @@ export function ChatPanel({
     [currentUserId, loadUnreadCount]
   );
 
+  const loadRecipientReadAt = useCallback(async (targetThreadId: number, recipientId: string) => {
+    const { data, error } = await supabase
+      .from("chat_participants")
+      .select("last_read_at")
+      .eq("thread_id", targetThreadId)
+      .eq("user_id", recipientId)
+      .maybeSingle();
+
+    if (!error) {
+      setRecipientReadState({
+        threadId: targetThreadId,
+        recipientId,
+        lastReadAt: (data as Pick<ChatParticipantRow, "last_read_at"> | null)?.last_read_at || null,
+      });
+    }
+  }, []);
+
   const loadMessages = useCallback(
     async (targetThreadId: number) => {
       const { data, error } = await supabase
@@ -337,16 +361,20 @@ export function ChatPanel({
     async (targetUser: ChatUser) => {
       setSelectedUserId(targetUser.id);
       setMobileConversationOpen(true);
+      setRecipientReadState(null);
       setLoading(true);
       setSetupError("");
       const targetThreadId = await findOrCreateThread(targetUser);
       setThreadId(targetThreadId);
       if (targetThreadId) {
-        await loadMessages(targetThreadId);
+        await Promise.all([
+          loadMessages(targetThreadId),
+          loadRecipientReadAt(targetThreadId, targetUser.id),
+        ]);
       }
       setLoading(false);
     },
-    [findOrCreateThread, loadMessages]
+    [findOrCreateThread, loadMessages, loadRecipientReadAt]
   );
 
   const sendMessage = useCallback(async () => {
@@ -411,6 +439,9 @@ export function ChatPanel({
       void loadUnreadCount();
       if (open && threadId) {
         void loadMessages(threadId);
+        if (selectedUserId) {
+          void loadRecipientReadAt(threadId, selectedUserId);
+        }
       }
     }, 6000);
 
@@ -418,7 +449,62 @@ export function ChatPanel({
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
-  }, [currentUserId, loadMessages, loadUnreadCount, loadUsers, open, threadId]);
+  }, [
+    currentUserId,
+    loadMessages,
+    loadRecipientReadAt,
+    loadUnreadCount,
+    loadUsers,
+    open,
+    selectedUserId,
+    threadId,
+  ]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`chat-messages-${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages" },
+        () => {
+          void loadUnreadCount();
+          if (open && threadId) {
+            void loadMessages(threadId);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadMessages, loadUnreadCount, open, threadId]);
+
+  useEffect(() => {
+    if (!currentUserId || !threadId || !selectedUserId) return;
+
+    const channel = supabase
+      .channel(`chat-read-${currentUserId}-${threadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chat_participants",
+          filter: `thread_id=eq.${threadId}`,
+        },
+        () => {
+          void loadRecipientReadAt(threadId, selectedUserId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadRecipientReadAt, selectedUserId, threadId]);
 
   useEffect(() => {
     if (!open) return;
@@ -535,6 +621,15 @@ export function ChatPanel({
                   ) : (
                     messages.map((message) => {
                       const mine = message.sender_id === currentUserId;
+                      const recipientLastReadAt =
+                        recipientReadState?.threadId === threadId &&
+                        recipientReadState.recipientId === selectedUserId
+                          ? recipientReadState.lastReadAt
+                          : undefined;
+                      const awaitingRead =
+                        mine &&
+                        recipientLastReadAt !== undefined &&
+                        (!recipientLastReadAt || message.created_at > recipientLastReadAt);
 
                       return (
                         <div
@@ -544,16 +639,30 @@ export function ChatPanel({
                             justifyContent: mine ? "flex-end" : "flex-start",
                           }}
                         >
-                          <div
-                            style={{
-                              ...styles.messageBubble,
-                              ...(mine ? styles.messageBubbleMine : {}),
-                            }}
-                          >
-                            {!mine && <span style={styles.messageSender}>{message.sender_name}</span>}
-                            <p style={styles.messageText}>{message.body}</p>
-                            <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
-                          </div>
+                          {mine ? (
+                            <div className={chatStyles.outgoingMessage}>
+                              {awaitingRead && (
+                                <span className={chatStyles.unreadMarker} aria-label="상대방이 아직 읽지 않음">
+                                  1
+                                </span>
+                              )}
+                              <div
+                                style={{
+                                  ...styles.messageBubble,
+                                  ...styles.messageBubbleMine,
+                                }}
+                              >
+                                <p style={styles.messageText}>{message.body}</p>
+                                <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={styles.messageBubble}>
+                              <span style={styles.messageSender}>{message.sender_name}</span>
+                              <p style={styles.messageText}>{message.body}</p>
+                              <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })

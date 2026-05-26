@@ -112,6 +112,26 @@
   display: none;
 }
 
+.outgoingMessage {
+  max-width: 80%;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.outgoingMessage > div {
+  max-width: 100% !important;
+}
+
+.unreadMarker {
+  flex: none;
+  margin-bottom: 4px;
+  color: #d97706;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 @media (max-width: 700px) {
   .backdrop {
     align-items: stretch !important;
@@ -209,6 +229,10 @@
 
   .messageList {
     padding: 13px !important;
+  }
+
+  .outgoingMessage {
+    max-width: 88%;
   }
 
   .inputRow {
