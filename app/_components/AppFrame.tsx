@@ -176,7 +176,6 @@ export function AppFrame({ children }: AppFrameProps) {
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [asWorkOrderAlerts, setAsWorkOrderAlerts] = useState<AsWorkOrderAlertRow[]>([]);
   const [approvalAlertOpen, setApprovalAlertOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileInputNotice, setMobileInputNotice] = useState(false);
@@ -398,6 +397,10 @@ export function AppFrame({ children }: AppFrameProps) {
     );
   }
 
+  if (pathname === "/chat-popup") {
+    return <>{children}</>;
+  }
+
   async function handleLogout() {
     await recordUserActivity("logout");
     await supabase.auth.signOut();
@@ -419,14 +422,19 @@ export function AppFrame({ children }: AppFrameProps) {
   function navigateTo(path: string) {
     setMobileMenuOpen(false);
     setApprovalAlertOpen(false);
-    setChatOpen(false);
     router.push(path);
   }
 
   function openChat() {
     setMobileMenuOpen(false);
     setApprovalAlertOpen(false);
-    setChatOpen(true);
+    const popup = window.open(
+      "/chat-popup",
+      "zeta-chat-popup",
+      "popup=yes,width=1120,height=760,resizable=yes,scrollbars=no"
+    );
+
+    popup?.focus();
   }
 
   return (
@@ -466,7 +474,6 @@ export function AppFrame({ children }: AppFrameProps) {
             title="채팅"
             style={{
               ...styles.iconNavItem,
-              ...(chatOpen ? styles.iconNavItemActive : {}),
               position: "relative",
             }}
             onClick={openChat}
@@ -606,7 +613,6 @@ export function AppFrame({ children }: AppFrameProps) {
                   type="button"
                   style={{
                     ...styles.mobileDrawerItem,
-                    ...(chatOpen ? styles.mobileDrawerItemActive : {}),
                     position: "relative",
                   }}
                   onClick={openChat}
@@ -688,12 +694,12 @@ export function AppFrame({ children }: AppFrameProps) {
         </div>
       )}
       <ChatPanel
-        open={chatOpen}
+        open={false}
         currentUserId={currentUserId}
         currentName={name}
         currentTeam={team}
-        onOpen={() => setChatOpen(true)}
-        onClose={() => setChatOpen(false)}
+        onOpen={openChat}
+        onClose={() => undefined}
         onUnreadChange={setChatUnreadCount}
       />
       <SystemToast message={toastMessage} onClose={() => setToastMessage("")} />

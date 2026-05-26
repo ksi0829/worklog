@@ -43,6 +43,30 @@
   content: "";
 }
 
+.popupBackdrop {
+  pointer-events: auto !important;
+}
+
+.popupPanel {
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  transform: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.popupPanel .header {
+  cursor: default;
+  touch-action: auto;
+  user-select: auto;
+}
+
 .headerActions {
   display: inline-flex;
   align-items: center;

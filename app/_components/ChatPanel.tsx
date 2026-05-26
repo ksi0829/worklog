@@ -42,6 +42,7 @@ const CHAT_TEAM_LABELS: Record<string, string> = {
 
 type ChatPanelProps = {
   open: boolean;
+  standalone?: boolean;
   currentUserId: string;
   currentName: string;
   currentTeam: string;
@@ -182,6 +183,7 @@ function isOnlineActivity(log?: ActivityLogRow) {
 
 export function ChatPanel({
   open,
+  standalone = false,
   currentUserId,
   currentName,
   currentTeam,
@@ -1059,6 +1061,7 @@ export function ChatPanel({
 
   function startPanelDrag(event: ReactPointerEvent<HTMLElement>) {
     if (
+      standalone ||
       event.button !== 0 ||
       window.matchMedia("(max-width: 700px)").matches ||
       (event.target as HTMLElement).closest("button")
@@ -1107,7 +1110,7 @@ export function ChatPanel({
 
   function startPanelResize(event: ReactPointerEvent<HTMLSpanElement>) {
     const rect = panelRef.current?.getBoundingClientRect();
-    if (!rect || window.matchMedia("(max-width: 700px)").matches) return;
+    if (standalone || !rect || window.matchMedia("(max-width: 700px)").matches) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -1152,10 +1155,13 @@ export function ChatPanel({
   }
 
   return (
-    <div className={chatStyles.backdrop} style={styles.backdrop}>
+    <div
+      className={`${chatStyles.backdrop} ${standalone ? chatStyles.popupBackdrop : ""}`}
+      style={styles.backdrop}
+    >
       <section
         ref={panelRef}
-        className={chatStyles.panel}
+        className={`${chatStyles.panel} ${standalone ? chatStyles.popupPanel : ""}`}
         style={{
           ...styles.panel,
           ...(panelSize || {}),
@@ -1546,14 +1552,16 @@ export function ChatPanel({
             )}
           </section>
         </div>
-        <span
-          className={chatStyles.resizeHandle}
-          aria-hidden="true"
-          onPointerDown={startPanelResize}
-          onPointerMove={resizePanel}
-          onPointerUp={stopPanelResize}
-          onPointerCancel={stopPanelResize}
-        />
+        {!standalone && (
+          <span
+            className={chatStyles.resizeHandle}
+            aria-hidden="true"
+            onPointerDown={startPanelResize}
+            onPointerMove={resizePanel}
+            onPointerUp={stopPanelResize}
+            onPointerCancel={stopPanelResize}
+          />
+        )}
       </section>
     </div>
   );
