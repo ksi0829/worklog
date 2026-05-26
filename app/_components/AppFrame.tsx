@@ -68,7 +68,7 @@ const MENU_ITEMS: MenuItem[] = [
   { title: "업무일지", path: "/view", icon: "worklog", description: "팀 업무 조회" },
   { title: "A/S 관리", path: "/as", icon: "as", description: "작업지시 · 처리 이력" },
   { title: "영업관리", path: "/sales", icon: "sales", description: "국내 · 해외 영업" },
-  { title: "일정관리", path: "/schedule", icon: "schedule", description: "사내 일정 보드" },
+  { title: "일정관리", path: "/schedule", icon: "schedule", description: "나의 개인 일정" },
   { title: "고객사", path: "/customer", icon: "customer", description: "거래처 · 담당자" },
 ];
 
@@ -98,7 +98,7 @@ const SUBMENU_BY_PATH: Record<string, string[]> = {
   "/view": ["업무일지 조회", "팀별 보기", "일자 선택"],
   "/as": ["작업지시", "처리중", "완료 히스토리"],
   "/sales": ["국내영업", "해외영업", "활동 이력"],
-  "/schedule": ["월간 일정", "일정 등록", "휴가 일정"],
+  "/schedule": ["월간 일정", "일정 등록", "승인 휴가 반영"],
   "/customer": ["고객사", "가공업체", "후처리", "담당자"],
   "/organization": ["조직 현황", "부서 구성"],
   "/change-password": ["계정 정보", "비밀번호 변경"],

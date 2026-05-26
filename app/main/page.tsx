@@ -378,10 +378,16 @@ export default function MainPage() {
     setNoticeText(notice.body || defaultNotice);
   }, []);
 
-  const loadUpcomingSchedules = useCallback(async () => {
+  const loadUpcomingSchedules = useCallback(async (currentUser: string) => {
+    if (!currentUser) {
+      setUpcomingSchedules([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("schedules")
       .select("id,date,time,type,company,title,writer")
+      .eq("writer", currentUser)
       .gte("date", todayKey())
       .order("date", { ascending: true })
       .order("time", { ascending: true })
@@ -464,7 +470,7 @@ export default function MainPage() {
       setName(storedName);
       setRole(storedRole);
       void loadLatestNotice(currentTeam);
-      void loadUpcomingSchedules();
+      void loadUpcomingSchedules(storedName);
       void loadProductionOrders();
       void loadApprovalDocuments();
     });
@@ -779,7 +785,7 @@ export default function MainPage() {
 
       <section style={styles.panel}>
         <div style={styles.panelHeader}>
-          <h2 style={styles.panelTitle}>다가오는 일정</h2>
+          <h2 style={styles.panelTitle}>나의 다가오는 일정</h2>
           <button
             type="button"
             style={styles.panelButton}

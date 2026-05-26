@@ -136,10 +136,16 @@ export default function SchedulePage() {
   ).getDate();
 
   const fetchSchedules = useCallback(async () => {
+    if (!currentUser) {
+      setSchedules([]);
+      return;
+    }
+
     const { data, error } =
       await supabase
         .from("schedules")
         .select("*")
+        .eq("writer", currentUser)
         .order("date", {
           ascending: true,
         });
@@ -147,7 +153,7 @@ export default function SchedulePage() {
     if (!error && data) {
       setSchedules(data);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     const timer =
@@ -610,7 +616,7 @@ export default function SchedulePage() {
                     styles.modalSub
                   }
                 >
-                  일정 관리
+                  내 일정 관리
                 </div>
               </div>
 
@@ -632,7 +638,7 @@ export default function SchedulePage() {
                   styles.sectionTitle
                 }
               >
-                등록된 일정
+                내 일정
               </div>
 
               {selectedSchedules.length ===
