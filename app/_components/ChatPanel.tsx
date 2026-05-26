@@ -158,6 +158,8 @@ export function ChatPanel({
   const visibleMessageLimitRef = useRef(MESSAGE_PAGE_SIZE);
   const preservedScrollRef = useRef<{ height: number; top: number } | null>(null);
   const shouldScrollToBottomRef = useRef(false);
+  const notifiedMessageIdsRef = useRef<Set<number>>(new Set());
+  const unreadSnapshotReadyRef = useRef(false);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) || null,
@@ -210,6 +212,44 @@ export function ChatPanel({
     setUsers(mapped);
   }, [currentUserId]);
 
+  const requestBrowserNotifications = useCallback(async () => {
+    if (!("Notification" in window)) return;
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  }, []);
+
+  const showBrowserNotification = useCallback(
+    (message: ChatMessageRow) => {
+      if (
+        message.sender_id === currentUserId ||
+        notificationPermission !== "granted" ||
+        !("Notification" in window)
+      ) {
+        return;
+      }
+
+      try {
+        const body =
+          message.body.length > 72 ? `${message.body.slice(0, 72)}...` : message.body;
+        const notification = new Notification(`${message.sender_name}님의 새 메시지`, {
+          body,
+          icon: "/icon.png",
+          tag: `chat-message-${message.id}`,
+        });
+
+        notification.onclick = () => {
+          window.focus();
+          onOpen();
+          notification.close();
+        };
+      } catch {
+        setNotificationPermission(Notification.permission);
+      }
+    },
+    [currentUserId, notificationPermission, onOpen]
+  );
+
   const loadUnreadCount = useCallback(async () => {
     if (!currentUserId) {
       onUnreadChange(0);
@@ -233,6 +273,7 @@ export function ChatPanel({
     if (threadIds.length === 0) {
       onUnreadChange(0);
       setUnreadByUserId({});
+      unreadSnapshotReadyRef.current = true;
       return;
     }
 
@@ -256,18 +297,35 @@ export function ChatPanel({
 
     const unreadThreadIds = new Set<number>();
     const unreadUserMap: Record<string, number> = {};
+    const unreadMessages: ChatMessageRow[] = [];
 
     ((messageRows || []) as ChatMessageRow[]).forEach((message) => {
       const lastRead = readMap.get(message.thread_id);
       if (!lastRead || message.created_at > lastRead) {
+        unreadMessages.push(message);
         unreadThreadIds.add(message.thread_id);
         unreadUserMap[message.sender_id] = (unreadUserMap[message.sender_id] || 0) + 1;
       }
     });
 
+    if (!unreadSnapshotReadyRef.current) {
+      unreadMessages.forEach((message) => notifiedMessageIdsRef.current.add(message.id));
+      unreadSnapshotReadyRef.current = true;
+    } else {
+      const newlyArrivedMessages = unreadMessages.filter(
+        (message) => !notifiedMessageIdsRef.current.has(message.id)
+      );
+
+      newlyArrivedMessages.forEach((message) => notifiedMessageIdsRef.current.add(message.id));
+
+      if (newlyArrivedMessages[0]) {
+        showBrowserNotification(newlyArrivedMessages[0]);
+      }
+    }
+
     setUnreadByUserId(unreadUserMap);
     onUnreadChange(unreadThreadIds.size);
-  }, [currentUserId, onUnreadChange]);
+  }, [currentUserId, onUnreadChange, showBrowserNotification]);
 
   const markThreadRead = useCallback(
     async (targetThreadId: number) => {
@@ -503,44 +561,6 @@ export function ChatPanel({
     setLoadingOlderMessages(false);
   }, [hasOlderMessages, loadMessages, loadingOlderMessages, threadId]);
 
-  const requestBrowserNotifications = useCallback(async () => {
-    if (!("Notification" in window)) return;
-
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-  }, []);
-
-  const showBrowserNotification = useCallback(
-    (message: ChatMessageRow) => {
-      if (
-        message.sender_id === currentUserId ||
-        notificationPermission !== "granted" ||
-        !("Notification" in window)
-      ) {
-        return;
-      }
-
-      try {
-        const body =
-          message.body.length > 72 ? `${message.body.slice(0, 72)}...` : message.body;
-        const notification = new Notification(`${message.sender_name}님의 새 메시지`, {
-          body,
-          icon: "/icon.png",
-          tag: `chat-message-${message.id}`,
-        });
-
-        notification.onclick = () => {
-          window.focus();
-          onOpen();
-          notification.close();
-        };
-      } catch {
-        setNotificationPermission(Notification.permission);
-      }
-    },
-    [currentUserId, notificationPermission, onOpen]
-  );
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setNotificationPermission(
@@ -552,6 +572,11 @@ export function ChatPanel({
       window.clearTimeout(timer);
     };
   }, []);
+
+  useEffect(() => {
+    notifiedMessageIdsRef.current.clear();
+    unreadSnapshotReadyRef.current = false;
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -597,7 +622,6 @@ export function ChatPanel({
         (payload) => {
           const insertedMessage = payload.new as ChatMessageRow;
           void loadUnreadCount();
-          showBrowserNotification(insertedMessage);
           if (open && threadId && Number(insertedMessage.thread_id) === threadId) {
             void loadMessages(threadId);
           }
@@ -608,7 +632,7 @@ export function ChatPanel({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [currentUserId, loadMessages, loadUnreadCount, open, showBrowserNotification, threadId]);
+  }, [currentUserId, loadMessages, loadUnreadCount, open, threadId]);
 
   useEffect(() => {
     if (!currentUserId || !threadId || !selectedUserId) return;
