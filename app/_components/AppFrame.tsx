@@ -692,6 +692,7 @@ export function AppFrame({ children }: AppFrameProps) {
         currentUserId={currentUserId}
         currentName={name}
         currentTeam={team}
+        onOpen={() => setChatOpen(true)}
         onClose={() => setChatOpen(false)}
         onUnreadChange={setChatUnreadCount}
       />

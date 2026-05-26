@@ -36,6 +36,7 @@ type ChatPanelProps = {
   currentUserId: string;
   currentName: string;
   currentTeam: string;
+  onOpen: () => void;
   onClose: () => void;
   onUnreadChange: (count: number) => void;
 };
@@ -75,6 +76,8 @@ type RecipientReadState = {
   recipientId: string;
   lastReadAt: string | null;
 };
+
+type BrowserNotificationPermission = NotificationPermission | "unsupported" | "loading";
 
 function getProfileSortValue(profile: ChatUser) {
   const teamIndex = TEAM_ORDER.indexOf(profile.team);
@@ -130,6 +133,7 @@ export function ChatPanel({
   currentUserId,
   currentName,
   currentTeam,
+  onOpen,
   onClose,
   onUnreadChange,
 }: ChatPanelProps) {
@@ -146,6 +150,8 @@ export function ChatPanel({
   const [recipientReadState, setRecipientReadState] = useState<RecipientReadState | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [notificationPermission, setNotificationPermission] =
+    useState<BrowserNotificationPermission>("loading");
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeThreadIdRef = useRef<number | null>(null);
@@ -497,6 +503,56 @@ export function ChatPanel({
     setLoadingOlderMessages(false);
   }, [hasOlderMessages, loadMessages, loadingOlderMessages, threadId]);
 
+  const requestBrowserNotifications = useCallback(async () => {
+    if (!("Notification" in window)) return;
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  }, []);
+
+  const showBrowserNotification = useCallback(
+    (message: ChatMessageRow) => {
+      if (
+        message.sender_id === currentUserId ||
+        notificationPermission !== "granted" ||
+        !("Notification" in window)
+      ) {
+        return;
+      }
+
+      try {
+        const body =
+          message.body.length > 72 ? `${message.body.slice(0, 72)}...` : message.body;
+        const notification = new Notification(`${message.sender_name}님의 새 메시지`, {
+          body,
+          icon: "/icon.png",
+          tag: `chat-message-${message.id}`,
+        });
+
+        notification.onclick = () => {
+          window.focus();
+          onOpen();
+          notification.close();
+        };
+      } catch {
+        setNotificationPermission(Notification.permission);
+      }
+    },
+    [currentUserId, notificationPermission, onOpen]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setNotificationPermission(
+        "Notification" in window ? Notification.permission : "unsupported"
+      );
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -539,8 +595,9 @@ export function ChatPanel({
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_messages" },
         (payload) => {
+          const insertedMessage = payload.new as ChatMessageRow;
           void loadUnreadCount();
-          const insertedMessage = payload.new as Pick<ChatMessageRow, "thread_id">;
+          showBrowserNotification(insertedMessage);
           if (open && threadId && Number(insertedMessage.thread_id) === threadId) {
             void loadMessages(threadId);
           }
@@ -551,7 +608,7 @@ export function ChatPanel({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [currentUserId, loadMessages, loadUnreadCount, open, threadId]);
+  }, [currentUserId, loadMessages, loadUnreadCount, open, showBrowserNotification, threadId]);
 
   useEffect(() => {
     if (!currentUserId || !threadId || !selectedUserId) return;
@@ -609,9 +666,26 @@ export function ChatPanel({
             <span style={styles.kicker}>업무 채팅</span>
             <h2 style={styles.title}>1:1 메시지</h2>
           </div>
-          <button type="button" style={styles.closeButton} onClick={closePanel}>
-            닫기
-          </button>
+          <div className={chatStyles.headerActions}>
+            {notificationPermission === "default" && (
+              <button
+                type="button"
+                className={chatStyles.notificationButton}
+                onClick={() => void requestBrowserNotifications()}
+              >
+                알림 켜기
+              </button>
+            )}
+            {notificationPermission === "granted" && (
+              <span className={chatStyles.notificationEnabled}>알림 켜짐</span>
+            )}
+            {notificationPermission === "denied" && (
+              <span className={chatStyles.notificationBlocked}>알림 차단됨</span>
+            )}
+            <button type="button" style={styles.closeButton} onClick={closePanel}>
+              닫기
+            </button>
+          </div>
         </header>
 
         {setupError && <div style={styles.notice}>{setupError}</div>}

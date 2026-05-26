@@ -2,6 +2,45 @@
   min-width: 0;
 }
 
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.notificationButton {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid #b8dfca;
+  border-radius: 9px;
+  background: #eef8f2;
+  color: #087747;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.notificationEnabled,
+.notificationBlocked {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.notificationEnabled {
+  background: #eef8f2;
+  color: #087747;
+}
+
+.notificationBlocked {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .listHeading {
   display: flex;
   align-items: center;
@@ -195,6 +234,12 @@
   .header {
     min-height: 62px !important;
     padding: 12px 14px !important;
+  }
+
+  .notificationButton,
+  .notificationEnabled,
+  .notificationBlocked {
+    padding: 0 9px;
   }
 
   .body {
