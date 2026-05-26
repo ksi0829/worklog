@@ -36,7 +36,7 @@ export const CURRENT_ORG: CurrentOrgTeam[] = [
   {
     team: "신사업부",
     leader: "권현진",
-    members: ["최하영"],
+    members: ["박봉근", "최하영"],
   },
   {
     team: "R&D/품질보증본부",

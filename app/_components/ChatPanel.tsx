@@ -8,6 +8,7 @@ import {
   getCurrentOrgTeam,
 } from "@/app/_lib/currentOrg";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import chatStyles from "./ChatPanel.module.css";
 
 const supabase = createSupabaseBrowser();
 
@@ -87,12 +88,33 @@ export function ChatPanel({
   const [loading, setLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
   const [unreadByUserId, setUnreadByUserId] = useState<Record<string, number>>({});
+  const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
+  const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) || null,
     [selectedUserId, users]
   );
+
+  const groupedUsers = useMemo(() => {
+    const groups = new Map<string, ChatUser[]>();
+
+    users.forEach((user) => {
+      const team = EXECUTIVE_NAMES.includes(user.name) ? "경영진" : user.team || "기타";
+      const group = groups.get(team) || [];
+      group.push(user);
+      groups.set(team, group);
+    });
+
+    const orderedTeams = ["경영진", ...TEAM_ORDER];
+
+    return Array.from(groups.entries()).sort(([left], [right]) => {
+      const leftIndex = orderedTeams.indexOf(left);
+      const rightIndex = orderedTeams.indexOf(right);
+      return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
+    });
+  }, [users]);
 
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -284,6 +306,7 @@ export function ChatPanel({
   const selectUser = useCallback(
     async (targetUser: ChatUser) => {
       setSelectedUserId(targetUser.id);
+      setMobileConversationOpen(true);
       setLoading(true);
       setSetupError("");
       const targetThreadId = await findOrCreateThread(targetUser);
@@ -374,53 +397,105 @@ export function ChatPanel({
 
   if (!open) return null;
 
+  function closePanel() {
+    setMobileConversationOpen(false);
+    onClose();
+  }
+
   return (
-    <div style={styles.backdrop} onClick={onClose}>
-      <section style={styles.panel} onClick={(event) => event.stopPropagation()}>
-        <header style={styles.header}>
+    <div className={chatStyles.backdrop} style={styles.backdrop} onClick={closePanel}>
+      <section className={chatStyles.panel} style={styles.panel} onClick={(event) => event.stopPropagation()}>
+        <header className={chatStyles.header} style={styles.header}>
           <div>
             <span style={styles.kicker}>업무 채팅</span>
             <h2 style={styles.title}>1:1 메시지</h2>
           </div>
-          <button type="button" style={styles.closeButton} onClick={onClose}>
+          <button type="button" style={styles.closeButton} onClick={closePanel}>
             닫기
           </button>
         </header>
 
         {setupError && <div style={styles.notice}>{setupError}</div>}
 
-        <div style={styles.body}>
-          <aside style={styles.userList}>
-            {users.map((user) => (
-              <button
-                key={user.id}
-                type="button"
-                style={{
-                  ...styles.userButton,
-                  ...(selectedUserId === user.id ? styles.userButtonActive : {}),
-                }}
-                onClick={() => void selectUser(user)}
-              >
-                <span style={styles.userNameRow}>
-                  <strong>{user.name}</strong>
-                  {unreadByUserId[user.id] > 0 && (
-                    <em style={styles.userUnreadBadge}>{unreadByUserId[user.id]}</em>
-                  )}
-                </span>
-                <span>{user.team}</span>
-              </button>
-            ))}
+        <div
+          className={`${chatStyles.body} ${mobileConversationOpen ? chatStyles.conversationView : ""}`}
+          style={styles.body}
+        >
+          <aside className={chatStyles.userList} style={styles.userList}>
+            <div className={chatStyles.listHeading}>
+              <strong>대화 상대</strong>
+              <span>팀별 목록</span>
+            </div>
+            {groupedUsers.map(([team, members], index) => {
+              const unreadCount = members.reduce(
+                (total, member) => total + (unreadByUserId[member.id] || 0),
+                0
+              );
+              const teamOpen =
+                expandedTeams[team] ??
+                (index === 0 ||
+                  members.some(
+                    (member) =>
+                      member.id === selectedUserId || unreadByUserId[member.id] > 0
+                  ));
+
+              return (
+                <details
+                  key={team}
+                  className={chatStyles.teamGroup}
+                  open={teamOpen}
+                  onToggle={(event) => {
+                    const openState = event.currentTarget.open;
+                    setExpandedTeams((current) => ({ ...current, [team]: openState }));
+                  }}
+                >
+                  <summary className={chatStyles.teamHeader}>
+                    <strong>{team}</strong>
+                    <span className={chatStyles.teamMeta}>
+                      {unreadCount > 0 && <em>{unreadCount}</em>}
+                      {members.length}명
+                    </span>
+                  </summary>
+                  <div className={chatStyles.teamMembers}>
+                    {members.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        className={chatStyles.userButton}
+                        style={selectedUserId === user.id ? styles.userButtonActive : undefined}
+                        onClick={() => void selectUser(user)}
+                      >
+                        <strong>{user.name}</strong>
+                        {unreadByUserId[user.id] > 0 && (
+                          <em style={styles.userUnreadBadge}>{unreadByUserId[user.id]}</em>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
           </aside>
 
-          <section style={styles.chatArea}>
+          <section className={chatStyles.chatArea} style={styles.chatArea}>
             {selectedUser ? (
               <>
-                <div style={styles.chatHeader}>
-                  <strong>{selectedUser.name}</strong>
-                  <span>{selectedUser.team}</span>
+                <div className={chatStyles.chatHeader} style={styles.chatHeader}>
+                  <button
+                    type="button"
+                    className={chatStyles.mobileBack}
+                    onClick={() => setMobileConversationOpen(false)}
+                    aria-label="대화 상대 목록으로 돌아가기"
+                  >
+                    &lt;
+                  </button>
+                  <div className={chatStyles.chatIdentity}>
+                    <strong>{selectedUser.name}</strong>
+                    <span>{selectedUser.team}</span>
+                  </div>
                 </div>
 
-                <div style={styles.messageList}>
+                <div className={chatStyles.messageList} style={styles.messageList}>
                   {messages.length === 0 ? (
                     <div style={styles.empty}>아직 주고받은 메시지가 없습니다.</div>
                   ) : (
@@ -452,7 +527,7 @@ export function ChatPanel({
                   <div ref={messageEndRef} />
                 </div>
 
-                <div style={styles.inputRow}>
+                <div className={chatStyles.inputRow} style={styles.inputRow}>
                   <input
                     value={messageBody}
                     onChange={(event) => setMessageBody(event.target.value)}
@@ -476,7 +551,7 @@ export function ChatPanel({
                 </div>
               </>
             ) : (
-              <div style={styles.emptyFull}>왼쪽에서 대화할 인원을 선택해 주세요.</div>
+              <div style={styles.emptyFull}>대화할 인원을 선택해 주세요.</div>
             )}
           </section>
         </div>
@@ -497,8 +572,8 @@ const styles: Record<string, CSSProperties> = {
     padding: "22px",
   },
   panel: {
-    width: "min(760px, calc(100vw - 44px))",
-    height: "min(620px, calc(100dvh - 44px))",
+    width: "min(920px, calc(100vw - 44px))",
+    height: "min(680px, calc(100dvh - 44px))",
     display: "flex",
     flexDirection: "column",
     borderRadius: "14px",
@@ -552,7 +627,7 @@ const styles: Record<string, CSSProperties> = {
     minHeight: 0,
     flex: 1,
     display: "grid",
-    gridTemplateColumns: "210px minmax(0, 1fr)",
+    gridTemplateColumns: "260px minmax(0, 1fr)",
   },
   userList: {
     minHeight: 0,
@@ -561,33 +636,10 @@ const styles: Record<string, CSSProperties> = {
     background: "#f8fafc",
     padding: "10px",
   },
-  userButton: {
-    width: "100%",
-    minHeight: "52px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    justifyContent: "center",
-    gap: "4px",
-    border: "1px solid transparent",
-    borderRadius: "10px",
-    background: "transparent",
-    color: "#111820",
-    padding: "8px 10px",
-    textAlign: "left",
-    cursor: "pointer",
-  },
   userButtonActive: {
     borderColor: "#b7e4c7",
     background: "#eef8f2",
     color: "#0f8a56",
-  },
-  userNameRow: {
-    width: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
   },
   userUnreadBadge: {
     minWidth: "18px",
