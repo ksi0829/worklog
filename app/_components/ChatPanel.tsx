@@ -1,6 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   EXECUTIVE_NAMES,
   ORG_MEMBER_MAP,
@@ -92,6 +101,25 @@ type ActivityLogRow = {
 };
 
 type BrowserNotificationPermission = NotificationPermission | "unsupported" | "loading";
+
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  rect: DOMRect;
+};
+
+type ResizeState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  width: number;
+  height: number;
+  left: number;
+  top: number;
+};
 
 function getProfileSortValue(profile: ChatUser) {
   const teamIndex = TEAM_ORDER.indexOf(profile.team);
@@ -185,12 +213,17 @@ export function ChatPanel({
     useState<BrowserNotificationPermission>("loading");
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const panelDragRef = useRef<DragState | null>(null);
+  const panelResizeRef = useRef<ResizeState | null>(null);
   const activeThreadIdRef = useRef<number | null>(null);
   const visibleMessageLimitRef = useRef(MESSAGE_PAGE_SIZE);
   const preservedScrollRef = useRef<{ height: number; top: number } | null>(null);
   const shouldScrollToBottomRef = useRef(false);
   const notifiedMessageIdsRef = useRef<Set<number>>(new Set());
   const unreadSnapshotReadyRef = useRef(false);
+  const [panelOffset, setPanelOffset] = useState({ x: 0, y: 0 });
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) || null,
@@ -1024,15 +1057,119 @@ export function ChatPanel({
 
   if (!open) return null;
 
+  function startPanelDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (
+      event.button !== 0 ||
+      window.matchMedia("(max-width: 700px)").matches ||
+      (event.target as HTMLElement).closest("button")
+    ) {
+      return;
+    }
+
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    panelDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: panelOffset.x,
+      offsetY: panelOffset.y,
+      rect,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function movePanel(event: ReactPointerEvent<HTMLElement>) {
+    const drag = panelDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const margin = 12;
+    const candidateX = drag.offsetX + event.clientX - drag.startX;
+    const candidateY = drag.offsetY + event.clientY - drag.startY;
+    const minX = drag.offsetX + margin - drag.rect.left;
+    const maxX = drag.offsetX + window.innerWidth - margin - drag.rect.right;
+    const minY = drag.offsetY + margin - drag.rect.top;
+    const maxY = drag.offsetY + window.innerHeight - margin - drag.rect.bottom;
+
+    setPanelOffset({
+      x: Math.min(Math.max(candidateX, minX), maxX),
+      y: Math.min(Math.max(candidateY, minY), maxY),
+    });
+  }
+
+  function stopPanelDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (panelDragRef.current?.pointerId !== event.pointerId) return;
+
+    panelDragRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function startPanelResize(event: ReactPointerEvent<HTMLSpanElement>) {
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect || window.matchMedia("(max-width: 700px)").matches) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    panelResizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: rect.width,
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function resizePanel(event: ReactPointerEvent<HTMLSpanElement>) {
+    const resize = panelResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+
+    const margin = 12;
+    const maxWidth = window.innerWidth - resize.left - margin;
+    const maxHeight = window.innerHeight - resize.top - margin;
+    const minWidth = Math.min(560, maxWidth);
+    const minHeight = Math.min(400, maxHeight);
+
+    setPanelSize({
+      width: Math.min(Math.max(resize.width + event.clientX - resize.startX, minWidth), maxWidth),
+      height: Math.min(Math.max(resize.height + event.clientY - resize.startY, minHeight), maxHeight),
+    });
+  }
+
+  function stopPanelResize(event: ReactPointerEvent<HTMLSpanElement>) {
+    if (panelResizeRef.current?.pointerId !== event.pointerId) return;
+
+    panelResizeRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
   function closePanel() {
     setMobileConversationOpen(false);
     onClose();
   }
 
   return (
-    <div className={chatStyles.backdrop} style={styles.backdrop} onClick={closePanel}>
-      <section className={chatStyles.panel} style={styles.panel} onClick={(event) => event.stopPropagation()}>
-        <header className={chatStyles.header} style={styles.header}>
+    <div className={chatStyles.backdrop} style={styles.backdrop}>
+      <section
+        ref={panelRef}
+        className={chatStyles.panel}
+        style={{
+          ...styles.panel,
+          ...(panelSize || {}),
+          transform: `translate(${panelOffset.x}px, ${panelOffset.y}px)`,
+        }}
+      >
+        <header
+          className={chatStyles.header}
+          style={styles.header}
+          onPointerDown={startPanelDrag}
+          onPointerMove={movePanel}
+          onPointerUp={stopPanelDrag}
+          onPointerCancel={stopPanelDrag}
+        >
           <div>
             <span style={styles.kicker}>업무 채팅</span>
             <h2 style={styles.title}>메시지</h2>
@@ -1409,6 +1546,14 @@ export function ChatPanel({
             )}
           </section>
         </div>
+        <span
+          className={chatStyles.resizeHandle}
+          aria-hidden="true"
+          onPointerDown={startPanelResize}
+          onPointerMove={resizePanel}
+          onPointerUp={stopPanelResize}
+          onPointerCancel={stopPanelResize}
+        />
       </section>
     </div>
   );
@@ -1419,15 +1564,12 @@ const styles: Record<string, CSSProperties> = {
     position: "fixed",
     inset: 0,
     zIndex: 90,
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "flex-end",
-    background: "rgba(15, 23, 42, 0.22)",
-    padding: "22px",
+    pointerEvents: "none",
   },
   panel: {
-    width: "min(920px, calc(100vw - 44px))",
-    height: "min(680px, calc(100dvh - 44px))",
+    position: "fixed",
+    left: "max(22px, calc(100vw - 942px))",
+    top: "max(22px, calc(100dvh - 702px))",
     display: "flex",
     flexDirection: "column",
     borderRadius: "14px",
@@ -1435,6 +1577,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     boxShadow: "0 24px 70px rgba(15, 23, 42, 0.25)",
     overflow: "hidden",
+    pointerEvents: "auto",
   },
   header: {
     minHeight: "66px",
