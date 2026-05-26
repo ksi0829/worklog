@@ -209,9 +209,53 @@
   gap: 8px;
 }
 
+.chatHeaderBody {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 5px;
+}
+
+.participantChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.participantChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #526173;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.onlineLamp,
+.offlineLamp {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.offlineLamp {
+  background: #cbd5e1;
+}
+
+.roomActions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .manageMembersButton {
   height: 30px;
-  margin-left: auto;
   padding: 0 10px;
   border: 1px solid #d5dde7;
   border-radius: 8px;
@@ -220,6 +264,24 @@
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.deleteRoomButton,
+.leaveRoomButton {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.leaveRoomButton {
+  border-color: #d5dde7;
+  color: #526173;
 }
 
 .groupEditor {
@@ -340,6 +402,17 @@
 }
 
 .outgoingMessage > div {
+  max-width: 100% !important;
+}
+
+.incomingMessage {
+  max-width: 80%;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.incomingMessage > div {
   max-width: 100% !important;
 }
 
@@ -468,8 +541,9 @@
 
   .chatHeader {
     min-height: 56px !important;
+    align-items: flex-start !important;
     gap: 10px !important;
-    padding: 0 12px !important;
+    padding: 10px 12px !important;
   }
 
   .mobileBack {
@@ -502,6 +576,16 @@
     font-size: 12px;
   }
 
+  .participantChips {
+    max-height: 40px;
+    overflow-y: auto;
+  }
+
+  .roomActions {
+    align-self: flex-start;
+    flex-direction: column;
+  }
+
   .groupEditor {
     padding: 13px;
   }
@@ -515,6 +599,10 @@
   }
 
   .outgoingMessage {
+    max-width: 88%;
+  }
+
+  .incomingMessage {
     max-width: 88%;
   }
 

@@ -85,6 +85,12 @@ type ChatMessageRow = {
   created_at: string;
 };
 
+type ActivityLogRow = {
+  user_id: string;
+  event_type: "login" | "logout" | "activity" | "auto_logout";
+  created_at: string;
+};
+
 type BrowserNotificationPermission = NotificationPermission | "unsupported" | "loading";
 
 function getProfileSortValue(profile: ChatUser) {
@@ -136,6 +142,16 @@ function isSameChatDate(left: string, right: string) {
   );
 }
 
+function isOnlineActivity(log?: ActivityLogRow) {
+  if (!log) return false;
+  const activeAt = new Date(log.created_at).getTime();
+  return (
+    Date.now() - activeAt < 15 * 60 * 1000 &&
+    log.event_type !== "logout" &&
+    log.event_type !== "auto_logout"
+  );
+}
+
 export function ChatPanel({
   open,
   currentUserId,
@@ -162,6 +178,7 @@ export function ChatPanel({
   const [groupEditorMode, setGroupEditorMode] = useState<"create" | "add" | null>(null);
   const [groupTitle, setGroupTitle] = useState("");
   const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [notificationPermission, setNotificationPermission] =
@@ -226,6 +243,31 @@ export function ChatPanel({
     setUsers(mapped);
   }, [currentUserId]);
 
+  const loadOnlineUsers = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("user_activity_logs")
+      .select("user_id,event_type,created_at")
+      .order("created_at", { ascending: false })
+      .limit(300);
+
+    if (error) return;
+
+    const latestByUser = new Map<string, ActivityLogRow>();
+    ((data || []) as ActivityLogRow[]).forEach((log) => {
+      if (!latestByUser.has(log.user_id)) {
+        latestByUser.set(log.user_id, log);
+      }
+    });
+
+    setOnlineUserIds(
+      new Set(
+        Array.from(latestByUser.entries())
+          .filter(([, log]) => isOnlineActivity(log))
+          .map(([userId]) => userId)
+      )
+    );
+  }, []);
+
   const loadGroupThreads = useCallback(async () => {
     if (!currentUserId) return;
 
@@ -266,11 +308,13 @@ export function ChatPanel({
       .in("thread_id", rows.map((row) => row.id));
     const members = (memberRows || []) as ChatParticipantRow[];
 
-    setGroupThreads(
-      rows.map((row) => ({
+    const nextRooms = rows.map((row) => ({
         ...row,
         participants: members.filter((member) => member.thread_id === row.id),
-      }))
+      }));
+    setGroupThreads(nextRooms);
+    setSelectedGroupThread((selected) =>
+      selected ? nextRooms.find((room) => room.id === selected.id) || null : null
     );
   }, [currentUserId]);
 
@@ -424,13 +468,12 @@ export function ChatPanel({
     const { data, error } = await supabase
       .from("chat_participants")
       .select("thread_id,user_id,user_name,team,last_read_at")
-      .eq("thread_id", targetThreadId)
-      .neq("user_id", currentUserId);
+      .eq("thread_id", targetThreadId);
 
     if (!error) {
       setParticipantReadStates((data || []) as ChatParticipantRow[]);
     }
-  }, [currentUserId]);
+  }, []);
 
   const loadMessages = useCallback(
     async (
@@ -573,10 +616,8 @@ export function ChatPanel({
       const targetThreadId = await findOrCreateThread(targetUser);
       setThreadId(targetThreadId);
       if (targetThreadId) {
-        await Promise.all([
-          loadMessages(targetThreadId, { reset: true }),
-          loadParticipantReadStates(targetThreadId),
-        ]);
+        await loadMessages(targetThreadId, { reset: true });
+        await loadParticipantReadStates(targetThreadId);
       }
       setLoading(false);
     },
@@ -592,10 +633,8 @@ export function ChatPanel({
       setThreadId(targetThread.id);
       setLoading(true);
       setSetupError("");
-      await Promise.all([
-        loadMessages(targetThread.id, { reset: true }),
-        loadParticipantReadStates(targetThread.id),
-      ]);
+      await loadMessages(targetThread.id, { reset: true });
+      await loadParticipantReadStates(targetThread.id);
       setLoading(false);
     },
     [loadMessages, loadParticipantReadStates]
@@ -712,7 +751,7 @@ export function ChatPanel({
         );
 
         if (error) {
-          setSetupError("참여자를 추가하지 못했습니다. 방 생성자만 추가할 수 있습니다.");
+          setSetupError("참여자를 추가하지 못했습니다. 권한 또는 테이블을 확인해 주세요.");
           setLoading(false);
           return;
         }
@@ -751,6 +790,55 @@ export function ChatPanel({
     selectedGroupThread,
     users,
   ]);
+
+  const deleteGroupThread = useCallback(async () => {
+    if (!selectedGroupThread || selectedGroupThread.created_by !== currentUserId) return;
+    if (!window.confirm("이 단체방과 대화 내용을 모두 삭제할까요?")) return;
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("chat_threads")
+      .delete()
+      .eq("id", selectedGroupThread.id);
+
+    if (error) {
+      setSetupError("단체방을 삭제하지 못했습니다.");
+      setLoading(false);
+      return;
+    }
+
+    setSelectedGroupThread(null);
+    setThreadId(null);
+    setMessages([]);
+    setMobileConversationOpen(false);
+    await loadGroupThreads();
+    setLoading(false);
+  }, [currentUserId, loadGroupThreads, selectedGroupThread]);
+
+  const leaveGroupThread = useCallback(async () => {
+    if (!selectedGroupThread || selectedGroupThread.created_by === currentUserId) return;
+    if (!window.confirm("이 단체방에서 나갈까요?")) return;
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("chat_participants")
+      .delete()
+      .eq("thread_id", selectedGroupThread.id)
+      .eq("user_id", currentUserId);
+
+    if (error) {
+      setSetupError("단체방에서 나가지 못했습니다.");
+      setLoading(false);
+      return;
+    }
+
+    setSelectedGroupThread(null);
+    setThreadId(null);
+    setMessages([]);
+    setMobileConversationOpen(false);
+    await loadGroupThreads();
+    setLoading(false);
+  }, [currentUserId, loadGroupThreads, selectedGroupThread]);
 
   const sendMessage = useCallback(async () => {
     const body = messageBody.trim();
@@ -839,12 +927,14 @@ export function ChatPanel({
     const initialTimer = window.setTimeout(() => {
       void loadUsers();
       void loadGroupThreads();
+      void loadOnlineUsers();
       void loadUnreadCount();
     }, 0);
 
     const timer = window.setInterval(() => {
       void loadUnreadCount();
       void loadGroupThreads();
+      void loadOnlineUsers();
       if (open && threadId) {
         void loadMessages(threadId, { preserveScroll: true });
         void loadParticipantReadStates(threadId);
@@ -859,6 +949,7 @@ export function ChatPanel({
     currentUserId,
     loadGroupThreads,
     loadMessages,
+    loadOnlineUsers,
     loadParticipantReadStates,
     loadUnreadCount,
     loadUsers,
@@ -1152,22 +1243,59 @@ export function ChatPanel({
                   >
                     &lt;
                   </button>
-                  <div className={chatStyles.chatIdentity}>
-                    <strong>{selectedGroupThread?.title || selectedUser?.name}</strong>
-                    <span>
-                      {selectedGroupThread
-                        ? `${selectedGroupThread.participants.length}명 참여`
-                        : selectedUser?.team}
-                    </span>
+                  <div className={chatStyles.chatHeaderBody}>
+                    <div className={chatStyles.chatIdentity}>
+                      <strong>{selectedGroupThread?.title || selectedUser?.name}</strong>
+                      <span>
+                        {selectedGroupThread
+                          ? `${selectedGroupThread.participants.length}명 참여`
+                          : selectedUser?.team}
+                      </span>
+                    </div>
+                    {selectedGroupThread && (
+                      <div className={chatStyles.participantChips}>
+                        {selectedGroupThread.participants.map((participant) => (
+                          <span key={participant.user_id} className={chatStyles.participantChip}>
+                            <i
+                              className={
+                                onlineUserIds.has(participant.user_id)
+                                  ? chatStyles.onlineLamp
+                                  : chatStyles.offlineLamp
+                              }
+                            />
+                            {participant.user_name || "사용자"}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {selectedGroupThread?.created_by === currentUserId && (
-                    <button
-                      type="button"
-                      className={chatStyles.manageMembersButton}
-                      onClick={openGroupMemberManager}
-                    >
-                      참여자 추가
-                    </button>
+                  {selectedGroupThread && (
+                    <div className={chatStyles.roomActions}>
+                      <button
+                        type="button"
+                        className={chatStyles.manageMembersButton}
+                        onClick={openGroupMemberManager}
+                      >
+                        참여자 추가
+                      </button>
+                      {selectedGroupThread.created_by === currentUserId ? (
+                        <button
+                          type="button"
+                          className={chatStyles.deleteRoomButton}
+                          onClick={() => void deleteGroupThread()}
+                        >
+                          방 삭제
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={chatStyles.leaveRoomButton}
+                          onClick={() => void leaveGroupThread()}
+                        >
+                          나가기
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1190,13 +1318,12 @@ export function ChatPanel({
                       )}
                       {messages.map((message, index) => {
                       const mine = message.sender_id === currentUserId;
-                      const unreadRecipientCount = mine
-                        ? participantReadStates.filter(
-                            (participant) =>
-                              !participant.last_read_at ||
-                              message.created_at > participant.last_read_at
-                          ).length
-                        : 0;
+                      const unreadRecipientCount = participantReadStates.filter(
+                        (participant) =>
+                          participant.user_id !== message.sender_id &&
+                          (!participant.last_read_at ||
+                            message.created_at > participant.last_read_at)
+                      ).length;
                       const showDate =
                         index === 0 ||
                         !isSameChatDate(messages[index - 1].created_at, message.created_at);
@@ -1232,10 +1359,17 @@ export function ChatPanel({
                                 </div>
                               </div>
                             ) : (
-                              <div style={styles.messageBubble}>
-                                <span style={styles.messageSender}>{message.sender_name}</span>
-                                <p style={styles.messageText}>{message.body}</p>
-                                <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                              <div className={chatStyles.incomingMessage}>
+                                <div style={styles.messageBubble}>
+                                  <span style={styles.messageSender}>{message.sender_name}</span>
+                                  <p style={styles.messageText}>{message.body}</p>
+                                  <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                </div>
+                                {unreadRecipientCount > 0 && (
+                                  <span className={chatStyles.unreadMarker} aria-label="아직 읽지 않은 인원 수">
+                                    {unreadRecipientCount}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
