@@ -11,6 +11,24 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import chatStyles from "./ChatPanel.module.css";
 
 const supabase = createSupabaseBrowser();
+const DIVISION_HEAD_NAMES = ["정대용", "서중석", "장동철"];
+const CHAT_TEAM_ORDER = [
+  "재무/인사",
+  "구매/총무",
+  "국내영업",
+  "해외영업",
+  "신사업",
+  "R&D/QA",
+  "기술 1팀",
+  "기술 2팀",
+  "기술 3팀",
+];
+const CHAT_TEAM_LABELS: Record<string, string> = {
+  국내영업부: "국내영업",
+  해외영업부: "해외영업",
+  신사업부: "신사업",
+  "R&D/QA부": "R&D/QA",
+};
 
 type ChatPanelProps = {
   open: boolean;
@@ -54,6 +72,13 @@ type ChatMessageRow = {
 function getProfileSortValue(profile: ChatUser) {
   const teamIndex = TEAM_ORDER.indexOf(profile.team);
   return `${teamIndex === -1 ? 99 : teamIndex}-${profile.name}`;
+}
+
+function getChatGroup(name: string, team: string) {
+  if (EXECUTIVE_NAMES.includes(name)) return "경영진";
+  if (DIVISION_HEAD_NAMES.includes(name)) return "본부장";
+
+  return CHAT_TEAM_LABELS[team] || team;
 }
 
 function isActiveOrgMember(profile: ProfileRow) {
@@ -101,20 +126,25 @@ export function ChatPanel({
     const groups = new Map<string, ChatUser[]>();
 
     users.forEach((user) => {
-      const team = EXECUTIVE_NAMES.includes(user.name) ? "경영진" : user.team || "기타";
+      const team = getChatGroup(user.name, user.team) || "기타";
       const group = groups.get(team) || [];
       group.push(user);
       groups.set(team, group);
     });
 
-    const orderedTeams = ["경영진", ...TEAM_ORDER];
+    const ownGroup = getChatGroup(currentName, currentTeam);
+    if (CHAT_TEAM_ORDER.includes(ownGroup) && !groups.has(ownGroup)) {
+      groups.set(ownGroup, []);
+    }
+
+    const orderedTeams = ["경영진", "본부장", ...CHAT_TEAM_ORDER];
 
     return Array.from(groups.entries()).sort(([left], [right]) => {
       const leftIndex = orderedTeams.indexOf(left);
       const rightIndex = orderedTeams.indexOf(right);
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
     });
-  }, [users]);
+  }, [currentName, currentTeam, users]);
 
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -457,20 +487,24 @@ export function ChatPanel({
                     </span>
                   </summary>
                   <div className={chatStyles.teamMembers}>
-                    {members.map((user) => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        className={chatStyles.userButton}
-                        style={selectedUserId === user.id ? styles.userButtonActive : undefined}
-                        onClick={() => void selectUser(user)}
-                      >
-                        <strong>{user.name}</strong>
-                        {unreadByUserId[user.id] > 0 && (
-                          <em style={styles.userUnreadBadge}>{unreadByUserId[user.id]}</em>
-                        )}
-                      </button>
-                    ))}
+                    {members.length === 0 ? (
+                      <p className={chatStyles.emptyTeam}>현재 대화 가능한 인원이 없습니다.</p>
+                    ) : (
+                      members.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          className={chatStyles.userButton}
+                          style={selectedUserId === user.id ? styles.userButtonActive : undefined}
+                          onClick={() => void selectUser(user)}
+                        >
+                          <strong>{user.name}</strong>
+                          {unreadByUserId[user.id] > 0 && (
+                            <em style={styles.userUnreadBadge}>{unreadByUserId[user.id]}</em>
+                          )}
+                        </button>
+                      ))
+                    )}
                   </div>
                 </details>
               );

@@ -72,6 +72,14 @@
   border-top: 1px solid #edf0f4;
 }
 
+.emptyTeam {
+  margin: 7px 4px 1px;
+  padding: 9px 7px;
+  color: #667085;
+  font-size: 12px;
+  text-align: center;
+}
+
 .userButton {
   width: 100%;
   min-height: 40px;
