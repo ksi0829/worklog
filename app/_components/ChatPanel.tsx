@@ -95,10 +95,10 @@ type ChatMessageRow = {
   created_at: string;
 };
 
-type ActivityLogRow = {
+type ChatPresenceRow = {
   user_id: string;
-  event_type: "login" | "logout" | "activity" | "auto_logout";
-  created_at: string;
+  visible: boolean;
+  last_seen_at: string;
 };
 
 type BrowserNotificationPermission = NotificationPermission | "unsupported" | "loading";
@@ -171,13 +171,10 @@ function isSameChatDate(left: string, right: string) {
   );
 }
 
-function isOnlineActivity(log?: ActivityLogRow) {
-  if (!log) return false;
-  const activeAt = new Date(log.created_at).getTime();
+function isActiveChatPresence(presence: ChatPresenceRow) {
   return (
-    Date.now() - activeAt < 15 * 60 * 1000 &&
-    log.event_type !== "logout" &&
-    log.event_type !== "auto_logout"
+    presence.visible &&
+    Date.now() - new Date(presence.last_seen_at).getTime() < 45 * 1000
   );
 }
 
@@ -280,25 +277,19 @@ export function ChatPanel({
 
   const loadOnlineUsers = useCallback(async () => {
     const { data, error } = await supabase
-      .from("user_activity_logs")
-      .select("user_id,event_type,created_at")
-      .order("created_at", { ascending: false })
-      .limit(300);
+      .from("chat_presence")
+      .select("user_id,visible,last_seen_at");
 
-    if (error) return;
-
-    const latestByUser = new Map<string, ActivityLogRow>();
-    ((data || []) as ActivityLogRow[]).forEach((log) => {
-      if (!latestByUser.has(log.user_id)) {
-        latestByUser.set(log.user_id, log);
-      }
-    });
+    if (error) {
+      setOnlineUserIds(new Set());
+      return;
+    }
 
     setOnlineUserIds(
       new Set(
-        Array.from(latestByUser.entries())
-          .filter(([, log]) => isOnlineActivity(log))
-          .map(([userId]) => userId)
+        ((data || []) as ChatPresenceRow[])
+          .filter(isActiveChatPresence)
+          .map((presence) => presence.user_id)
       )
     );
   }, []);
@@ -486,7 +477,14 @@ export function ChatPanel({
 
   const markThreadRead = useCallback(
     async (targetThreadId: number) => {
-      if (!currentUserId) return;
+      if (
+        !currentUserId ||
+        !open ||
+        document.visibilityState !== "visible" ||
+        !document.hasFocus()
+      ) {
+        return;
+      }
 
       await supabase
         .from("chat_participants")
@@ -496,7 +494,7 @@ export function ChatPanel({
 
       void loadUnreadCount();
     },
-    [currentUserId, loadUnreadCount]
+    [currentUserId, loadUnreadCount, open]
   );
 
   const loadParticipantReadStates = useCallback(async (targetThreadId: number) => {
@@ -1039,6 +1037,26 @@ export function ChatPanel({
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, loadParticipantReadStates, threadId]);
+
+  useEffect(() => {
+    if (!open || !threadId) return;
+
+    const markVisibleConversationRead = () => {
+      if (document.visibilityState === "visible" && document.hasFocus()) {
+        void markThreadRead(threadId);
+        void loadParticipantReadStates(threadId);
+      }
+    };
+
+    document.addEventListener("visibilitychange", markVisibleConversationRead);
+    window.addEventListener("focus", markVisibleConversationRead);
+    markVisibleConversationRead();
+
+    return () => {
+      document.removeEventListener("visibilitychange", markVisibleConversationRead);
+      window.removeEventListener("focus", markVisibleConversationRead);
+    };
+  }, [loadParticipantReadStates, markThreadRead, open, threadId]);
 
   useEffect(() => {
     if (!open) return;
