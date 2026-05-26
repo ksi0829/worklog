@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   EXECUTIVE_NAMES,
   ORG_MEMBER_MAP,
@@ -11,6 +11,7 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
 import chatStyles from "./ChatPanel.module.css";
 
 const supabase = createSupabaseBrowser();
+const MESSAGE_PAGE_SIZE = 50;
 const DIVISION_HEAD_NAMES = ["정대용", "서중석", "장동철"];
 const CHAT_TEAM_ORDER = [
   "재무/인사",
@@ -103,6 +104,27 @@ function formatTime(value: string) {
   });
 }
 
+function formatChatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function isSameChatDate(left: string, right: string) {
+  const leftDate = new Date(left);
+  const rightDate = new Date(right);
+  return (
+    leftDate.getFullYear() === rightDate.getFullYear() &&
+    leftDate.getMonth() === rightDate.getMonth() &&
+    leftDate.getDate() === rightDate.getDate()
+  );
+}
+
 export function ChatPanel({
   open,
   currentUserId,
@@ -122,7 +144,14 @@ export function ChatPanel({
   const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
   const [recipientReadState, setRecipientReadState] = useState<RecipientReadState | null>(null);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const activeThreadIdRef = useRef<number | null>(null);
+  const visibleMessageLimitRef = useRef(MESSAGE_PAGE_SIZE);
+  const preservedScrollRef = useRef<{ height: number; top: number } | null>(null);
+  const shouldScrollToBottomRef = useRef(false);
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) || null,
@@ -267,20 +296,49 @@ export function ChatPanel({
   }, []);
 
   const loadMessages = useCallback(
-    async (targetThreadId: number) => {
+    async (
+      targetThreadId: number,
+      options?: { reset?: boolean; preserveScroll?: boolean }
+    ) => {
+      if (options?.reset || activeThreadIdRef.current !== targetThreadId) {
+        activeThreadIdRef.current = targetThreadId;
+        visibleMessageLimitRef.current = MESSAGE_PAGE_SIZE;
+      }
+
+      const visibleLimit = visibleMessageLimitRef.current;
       const { data, error } = await supabase
         .from("chat_messages")
         .select("id,thread_id,sender_id,sender_name,sender_team,body,created_at")
         .eq("thread_id", targetThreadId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(visibleLimit + 1);
 
       if (error) {
         setSetupError("채팅 테이블이 아직 준비되지 않았습니다. SQL 실행 후 다시 열어주세요.");
-        return;
+        return false;
       }
 
-      setMessages((data || []) as ChatMessageRow[]);
+      const messageList = messageListRef.current;
+      const readingOlderMessages =
+        options?.preserveScroll &&
+        messageList &&
+        messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight > 28;
+
+      if (readingOlderMessages && messageList) {
+        preservedScrollRef.current = {
+          height: messageList.scrollHeight,
+          top: messageList.scrollTop,
+        };
+        shouldScrollToBottomRef.current = false;
+      } else {
+        shouldScrollToBottomRef.current = true;
+      }
+
+      const recentMessages = (data || []) as ChatMessageRow[];
+      setHasOlderMessages(recentMessages.length > visibleLimit);
+      setMessages(recentMessages.slice(0, visibleLimit).reverse());
       await markThreadRead(targetThreadId);
+      return true;
     },
     [markThreadRead]
   );
@@ -368,7 +426,7 @@ export function ChatPanel({
       setThreadId(targetThreadId);
       if (targetThreadId) {
         await Promise.all([
-          loadMessages(targetThreadId),
+          loadMessages(targetThreadId, { reset: true }),
           loadRecipientReadAt(targetThreadId, targetUser.id),
         ]);
       }
@@ -427,6 +485,18 @@ export function ChatPanel({
     threadId,
   ]);
 
+  const loadOlderMessages = useCallback(async () => {
+    if (!threadId || !hasOlderMessages || loadingOlderMessages) return;
+
+    setLoadingOlderMessages(true);
+    visibleMessageLimitRef.current += MESSAGE_PAGE_SIZE;
+    const loaded = await loadMessages(threadId, { preserveScroll: true });
+    if (!loaded) {
+      visibleMessageLimitRef.current -= MESSAGE_PAGE_SIZE;
+    }
+    setLoadingOlderMessages(false);
+  }, [hasOlderMessages, loadMessages, loadingOlderMessages, threadId]);
+
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -438,7 +508,7 @@ export function ChatPanel({
     const timer = window.setInterval(() => {
       void loadUnreadCount();
       if (open && threadId) {
-        void loadMessages(threadId);
+        void loadMessages(threadId, { preserveScroll: true });
         if (selectedUserId) {
           void loadRecipientReadAt(threadId, selectedUserId);
         }
@@ -468,9 +538,10 @@ export function ChatPanel({
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_messages" },
-        () => {
+        (payload) => {
           void loadUnreadCount();
-          if (open && threadId) {
+          const insertedMessage = payload.new as Pick<ChatMessageRow, "thread_id">;
+          if (open && threadId && Number(insertedMessage.thread_id) === threadId) {
             void loadMessages(threadId);
           }
         }
@@ -508,7 +579,19 @@ export function ChatPanel({
 
   useEffect(() => {
     if (!open) return;
-    messageEndRef.current?.scrollIntoView({ block: "end" });
+
+    if (preservedScrollRef.current && messageListRef.current) {
+      const previous = preservedScrollRef.current;
+      messageListRef.current.scrollTop =
+        messageListRef.current.scrollHeight - previous.height + previous.top;
+      preservedScrollRef.current = null;
+      return;
+    }
+
+    if (shouldScrollToBottomRef.current) {
+      messageEndRef.current?.scrollIntoView({ block: "end" });
+      shouldScrollToBottomRef.current = false;
+    }
   }, [messages, open]);
 
   if (!open) return null;
@@ -615,11 +698,24 @@ export function ChatPanel({
                   </div>
                 </div>
 
-                <div className={chatStyles.messageList} style={styles.messageList}>
+                <div ref={messageListRef} className={chatStyles.messageList} style={styles.messageList}>
                   {messages.length === 0 ? (
                     <div style={styles.empty}>아직 주고받은 메시지가 없습니다.</div>
                   ) : (
-                    messages.map((message) => {
+                    <>
+                      {hasOlderMessages && (
+                        <div className={chatStyles.historyControls}>
+                          <button
+                            type="button"
+                            className={chatStyles.loadOlderButton}
+                            disabled={loadingOlderMessages}
+                            onClick={() => void loadOlderMessages()}
+                          >
+                            {loadingOlderMessages ? "불러오는 중..." : "이전 대화 불러오기"}
+                          </button>
+                        </div>
+                      )}
+                      {messages.map((message, index) => {
                       const mine = message.sender_id === currentUserId;
                       const recipientLastReadAt =
                         recipientReadState?.threadId === threadId &&
@@ -630,42 +726,52 @@ export function ChatPanel({
                         mine &&
                         recipientLastReadAt !== undefined &&
                         (!recipientLastReadAt || message.created_at > recipientLastReadAt);
+                      const showDate =
+                        index === 0 ||
+                        !isSameChatDate(messages[index - 1].created_at, message.created_at);
 
                       return (
-                        <div
-                          key={message.id}
-                          style={{
-                            ...styles.messageRow,
-                            justifyContent: mine ? "flex-end" : "flex-start",
-                          }}
-                        >
-                          {mine ? (
-                            <div className={chatStyles.outgoingMessage}>
-                              {awaitingRead && (
-                                <span className={chatStyles.unreadMarker} aria-label="상대방이 아직 읽지 않음">
-                                  1
-                                </span>
-                              )}
-                              <div
-                                style={{
-                                  ...styles.messageBubble,
-                                  ...styles.messageBubbleMine,
-                                }}
-                              >
+                        <Fragment key={message.id}>
+                          {showDate && (
+                            <div className={chatStyles.dateDivider}>
+                              <span>{formatChatDate(message.created_at)}</span>
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              ...styles.messageRow,
+                              justifyContent: mine ? "flex-end" : "flex-start",
+                            }}
+                          >
+                            {mine ? (
+                              <div className={chatStyles.outgoingMessage}>
+                                {awaitingRead && (
+                                  <span className={chatStyles.unreadMarker} aria-label="상대방이 아직 읽지 않음">
+                                    1
+                                  </span>
+                                )}
+                                <div
+                                  style={{
+                                    ...styles.messageBubble,
+                                    ...styles.messageBubbleMine,
+                                  }}
+                                >
+                                  <p style={styles.messageText}>{message.body}</p>
+                                  <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={styles.messageBubble}>
+                                <span style={styles.messageSender}>{message.sender_name}</span>
                                 <p style={styles.messageText}>{message.body}</p>
                                 <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
                               </div>
-                            </div>
-                          ) : (
-                            <div style={styles.messageBubble}>
-                              <span style={styles.messageSender}>{message.sender_name}</span>
-                              <p style={styles.messageText}>{message.body}</p>
-                              <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
-                            </div>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        </Fragment>
                       );
-                    })
+                      })}
+                    </>
                   )}
                   <div ref={messageEndRef} />
                 </div>

@@ -132,6 +132,51 @@
   line-height: 1;
 }
 
+.historyControls {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 5px;
+}
+
+.loadOlderButton {
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid #d5dde7;
+  border-radius: 999px;
+  background: #fff;
+  color: #526173;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.loadOlderButton:disabled {
+  opacity: 0.62;
+  cursor: default;
+}
+
+.dateDivider {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 3px 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.dateDivider::before,
+.dateDivider::after {
+  height: 1px;
+  flex: 1;
+  background: #e2e8f0;
+  content: "";
+}
+
+.dateDivider span {
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
   .backdrop {
     align-items: stretch !important;
