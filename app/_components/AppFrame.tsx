@@ -25,7 +25,8 @@ type IconName =
   | "account"
   | "activity"
   | "logout"
-  | "notice";
+  | "notice"
+  | "admin";
 
 type MenuItem = {
   title: string;
@@ -72,6 +73,13 @@ const MENU_ITEMS: MenuItem[] = [
   { title: "고객사", path: "/customer", icon: "customer", description: "거래처 · 담당자" },
 ];
 
+const ADMIN_MENU_ITEM: MenuItem = {
+  title: "그룹웨어 관리",
+  path: "/admin",
+  icon: "admin",
+  description: "운영 현황",
+};
+
 const UTILITY_ITEMS: MenuItem[] = [
   { title: "접속현황", path: "/activity", icon: "activity", description: "로그인 기록" },
   { title: "조직도", path: "/organization", icon: "org", description: "조직 현황" },
@@ -91,6 +99,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/change-password": "계정관리",
   "/activity": "접속현황",
   "/notices": "공지관리",
+  "/admin": "그룹웨어 관리",
 };
 
 const SUBMENU_BY_PATH: Record<string, string[]> = {
@@ -135,6 +144,8 @@ function iconPath(name: IconName) {
       return "M10 5H5v14h5M14 8l4 4-4 4M18 12H9";
     case "notice":
       return "M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2ZM18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2Z";
+    case "admin":
+      return "M4 19h16M6 16V9h4v7H6Zm8 0V5h4v11h-4ZM7 5h3M15 9h3";
     default:
       return "";
   }
@@ -183,7 +194,10 @@ export function AppFrame({ children }: AppFrameProps) {
   const activityTimerRef = useRef<number | null>(null);
   const lastActivityLogRef = useRef(0);
 
-  const menuItems = useMemo(() => MENU_ITEMS, []);
+  const menuItems = useMemo(
+    () => (role === "admin" ? [...MENU_ITEMS, ADMIN_MENU_ITEM] : MENU_ITEMS),
+    [role]
+  );
   const utilityItems = useMemo(() => UTILITY_ITEMS, []);
   const title = TITLE_BY_PATH[pathname] || "ZETA";
 
