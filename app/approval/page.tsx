@@ -19,6 +19,7 @@ type ApprovalStatus = "pending" | "approved" | "rejected";
 type EquipmentStageKey = "manufacturingRequest" | "purchaseRequest" | "outsourcingRequest" | "qa";
 type InputMode = "modern" | "legacy";
 type DocumentFilter = "mine" | "pending" | "reference" | "history";
+type DocumentStatusFilter = "all" | ApprovalStatus;
 
 type FieldDef = {
   key: string;
@@ -569,6 +570,14 @@ function statusText(status: ApprovalStatus) {
   return "진행중";
 }
 
+function progressText(document: ApprovalDocumentRow) {
+  if (document.status === "approved") return "최종 승인 완료";
+  if (document.status === "rejected") return "반려 처리됨";
+
+  const pendingLine = getFirstPendingLine(document);
+  return pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label}) 결재 대기` : "결재 진행 중";
+}
+
 function deriveDocumentTitle(template: TemplateDef, data: Record<string, unknown>) {
   const candidates = [
     data.title,
@@ -815,6 +824,13 @@ export default function ApprovalPage() {
   const [detailModalDocumentId, setDetailModalDocumentId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<DocumentFilter>("mine");
   const [documentSearchQuery, setDocumentSearchQuery] = useState("");
+  const [documentTemplateFilter, setDocumentTemplateFilter] = useState("all");
+  const [documentStatusFilter, setDocumentStatusFilter] = useState<DocumentStatusFilter>("all");
+  const [documentRequesterFilter, setDocumentRequesterFilter] = useState("all");
+  const [documentDateFrom, setDocumentDateFrom] = useState("");
+  const [documentDateTo, setDocumentDateTo] = useState("");
+  const [documentsWithAttachmentsOnly, setDocumentsWithAttachmentsOnly] = useState(false);
+  const [showDocumentFilters, setShowDocumentFilters] = useState(false);
   const [expandedHistoryMonths, setExpandedHistoryMonths] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -887,11 +903,21 @@ export default function ApprovalPage() {
     () => visibleDocuments.filter(isCurrentReference),
     [isCurrentReference, visibleDocuments]
   );
+  const myDocuments = useMemo(
+    () => (isAdmin ? visibleDocuments : visibleDocuments.filter(isCurrentRequester)),
+    [isAdmin, isCurrentRequester, visibleDocuments]
+  );
+  const requesterFilterOptions = useMemo(
+    () =>
+      Array.from(new Set(visibleDocuments.map((document) => document.requester_name)))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "ko")),
+    [visibleDocuments]
+  );
 
   const baseFilteredDocuments = useMemo(() => {
     if (activeFilter === "mine") {
-      if (isAdmin) return visibleDocuments;
-      return visibleDocuments.filter(isCurrentRequester);
+      return myDocuments;
     }
 
     if (activeFilter === "pending") {
@@ -910,20 +936,44 @@ export default function ApprovalPage() {
   }, [
     activeFilter,
     completedForMe,
-    isAdmin,
-    isCurrentRequester,
+    myDocuments,
     pendingForMe,
     referenceForMe,
-    visibleDocuments,
   ]);
 
   const filteredDocuments = useMemo(
     () =>
-      baseFilteredDocuments.filter((document) =>
-        documentMatchesSearch(document, documentSearchQuery)
-      ),
-    [baseFilteredDocuments, documentSearchQuery]
+      baseFilteredDocuments.filter((document) => {
+        if (!documentMatchesSearch(document, documentSearchQuery)) return false;
+        if (documentTemplateFilter !== "all" && document.template_key !== documentTemplateFilter) return false;
+        if (documentStatusFilter !== "all" && document.status !== documentStatusFilter) return false;
+        if (documentRequesterFilter !== "all" && document.requester_name !== documentRequesterFilter) return false;
+        if (documentDateFrom && document.submitted_at.slice(0, 10) < documentDateFrom) return false;
+        if (documentDateTo && document.submitted_at.slice(0, 10) > documentDateTo) return false;
+        if (documentsWithAttachmentsOnly && !attachments.some((attachment) => attachment.document_id === document.id)) {
+          return false;
+        }
+        return true;
+      }),
+    [
+      attachments,
+      baseFilteredDocuments,
+      documentDateFrom,
+      documentDateTo,
+      documentRequesterFilter,
+      documentSearchQuery,
+      documentStatusFilter,
+      documentTemplateFilter,
+      documentsWithAttachmentsOnly,
+    ]
   );
+  const hasDetailedFilters =
+    documentTemplateFilter !== "all" ||
+    documentStatusFilter !== "all" ||
+    documentRequesterFilter !== "all" ||
+    Boolean(documentDateFrom) ||
+    Boolean(documentDateTo) ||
+    documentsWithAttachmentsOnly;
 
   const historyMonthGroups = useMemo(() => {
     const groupMap = new Map<string, ApprovalDocumentRow[]>();
@@ -1726,9 +1776,58 @@ export default function ApprovalPage() {
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
     selectedDocument?.status === "pending" && isCurrentApprovalLine(currentPendingLine);
+  const getDocumentRelationText = (document: ApprovalDocumentRow) => {
+    if (isCurrentRequester(document)) return "작성 문서";
+    if (isCurrentApprover(document)) return "결재 문서";
+    if (isCurrentReference(document)) return "참조 문서";
+    return "관리 열람";
+  };
+  const renderProgressNotice = (document: ApprovalDocumentRow) => {
+    const pendingLine = getFirstPendingLine(document);
+    const awaitingMyApproval = document.status === "pending" && isCurrentApprovalLine(pendingLine);
+    const headline =
+      document.status === "approved"
+        ? "최종 승인이 완료된 문서입니다."
+        : document.status === "rejected"
+          ? "반려 처리된 문서입니다."
+          : awaitingMyApproval
+            ? "현재 내 결재 처리가 필요합니다."
+            : pendingLine
+              ? `현재 ${pendingLine.approver_name}님의 결재를 기다리고 있습니다.`
+              : "결재가 진행 중인 문서입니다.";
+    const description =
+      document.status === "approved"
+        ? "완료된 문서의 첨부파일은 추가하거나 변경할 수 없습니다."
+        : document.status === "rejected"
+          ? "반려된 문서는 첨부파일을 추가하거나 변경할 수 없습니다."
+          : awaitingMyApproval
+            ? `${pendingLine?.role_label || "결재"} 단계의 승인 또는 반려를 진행해 주세요.`
+            : pendingLine
+              ? `${pendingLine.role_label} 단계가 완료되면 다음 결재로 진행됩니다.`
+              : "결재선 진행 상태를 확인해 주세요.";
+
+    return (
+      <div
+        style={{
+          ...styles.progressNotice,
+          ...(document.status === "approved"
+            ? styles.progressNoticeApproved
+            : document.status === "rejected"
+              ? styles.progressNoticeRejected
+              : awaitingMyApproval
+                ? styles.progressNoticeAction
+                : {}),
+        }}
+      >
+        <strong>{headline}</strong>
+        <span>{description}</span>
+      </div>
+    );
+  };
   const renderDocumentButton = (document: ApprovalDocumentRow) => {
     const active = selectedDocument?.id === document.id;
     const pendingLine = getFirstPendingLine(document);
+    const awaitingMyApproval = document.status === "pending" && isCurrentApprovalLine(pendingLine);
 
     return (
       <button
@@ -1743,15 +1842,32 @@ export default function ApprovalPage() {
           setDetailModalDocumentId(document.id);
         }}
       >
+        <span style={styles.documentTagRow}>
+          <small style={styles.relationBadge}>{getDocumentRelationText(document)}</small>
+          {awaitingMyApproval && <small style={styles.actionBadge}>내 결재 필요</small>}
+        </span>
         <span style={styles.documentTopLine}>
           <strong>{document.title}</strong>
-          <em style={styles.statusBadge}>{statusText(document.status)}</em>
+          <em
+            style={{
+              ...styles.statusBadge,
+              ...(document.status === "approved"
+                ? styles.statusBadgeApproved
+                : document.status === "rejected"
+                  ? styles.statusBadgeRejected
+                  : awaitingMyApproval
+                    ? styles.statusBadgeAction
+                    : {}),
+            }}
+          >
+            {awaitingMyApproval ? "결재 필요" : statusText(document.status)}
+          </em>
         </span>
         <span style={styles.documentMeta}>
           {document.requester_name} · {formatDate(document.submitted_at)}
         </span>
-        <span style={styles.documentMeta}>
-          다음 결재: {pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "-"}
+        <span style={styles.documentProgress}>
+          {progressText(document)}
         </span>
       </button>
     );
@@ -1767,6 +1883,13 @@ export default function ApprovalPage() {
           <strong>첨부파일</strong>
           <span>{rows.length}개</span>
         </div>
+        {document.status !== "pending" && (
+          <p style={styles.attachmentLockedNotice}>
+            {document.status === "approved"
+              ? "승인 완료 문서의 첨부파일은 추가하거나 변경할 수 없습니다."
+              : "반려 문서의 첨부파일은 추가하거나 변경할 수 없습니다."}
+          </p>
+        )}
         {rows.length === 0 ? (
           <p style={styles.attachmentEmpty}>등록된 첨부파일이 없습니다.</p>
         ) : (
@@ -2325,11 +2448,11 @@ export default function ApprovalPage() {
             }}
           >
             {[
-              ["mine", "내 문서"],
-              ["pending", "결재 대기"],
-              ["reference", "참조"],
-              ["history", "완료"],
-            ].map(([key, label]) => (
+              { key: "mine", label: isAdmin ? "전체 문서" : "내 문서", count: myDocuments.length },
+              { key: "pending", label: "결재 대기", count: pendingForMe.length },
+              { key: "reference", label: "참조", count: referenceForMe.length },
+              { key: "history", label: "완료", count: completedForMe.length },
+            ].map(({ key, label, count }) => (
               <button
                 key={key}
                 type="button"
@@ -2339,7 +2462,8 @@ export default function ApprovalPage() {
                 }}
                 onClick={() => setActiveFilter(key as typeof activeFilter)}
               >
-                {label}
+                <span>{label}</span>
+                <small>{count}</small>
               </button>
             ))}
           </div>
@@ -2351,6 +2475,107 @@ export default function ApprovalPage() {
             placeholder="문서명, 작성자, 고객사, 장비명, S/N 검색"
             style={styles.documentSearchInput}
           />
+
+          <button
+            type="button"
+            style={{
+              ...styles.documentFilterToggle,
+              ...(hasDetailedFilters ? styles.documentFilterToggleActive : {}),
+            }}
+            onClick={() => setShowDocumentFilters((prev) => !prev)}
+          >
+            <span>상세 필터 {hasDetailedFilters ? "적용 중" : ""}</span>
+            <strong>{showDocumentFilters ? "접기" : "펼치기"}</strong>
+          </button>
+
+          {showDocumentFilters && <section style={styles.documentFilterPanel}>
+            <div style={styles.documentFilterHeader}>
+              <strong>상세 필터</strong>
+              {hasDetailedFilters && (
+                <button
+                  type="button"
+                  style={styles.filterResetButton}
+                  onClick={() => {
+                    setDocumentTemplateFilter("all");
+                    setDocumentStatusFilter("all");
+                    setDocumentRequesterFilter("all");
+                    setDocumentDateFrom("");
+                    setDocumentDateTo("");
+                    setDocumentsWithAttachmentsOnly(false);
+                  }}
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+            <div style={styles.documentFilterGrid}>
+              <label style={styles.documentFilterField}>
+                <span>양식</span>
+                <select
+                  style={styles.documentFilterControl}
+                  value={documentTemplateFilter}
+                  onChange={(event) => setDocumentTemplateFilter(event.target.value)}
+                >
+                  <option value="all">전체</option>
+                  {templates.map((template) => (
+                    <option key={template.key} value={template.key}>{template.title}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.documentFilterField}>
+                <span>상태</span>
+                <select
+                  style={styles.documentFilterControl}
+                  value={documentStatusFilter}
+                  onChange={(event) => setDocumentStatusFilter(event.target.value as DocumentStatusFilter)}
+                >
+                  <option value="all">전체</option>
+                  <option value="pending">진행중</option>
+                  <option value="approved">승인완료</option>
+                  <option value="rejected">반려</option>
+                </select>
+              </label>
+              <label style={{ ...styles.documentFilterField, ...styles.documentFilterFieldWide }}>
+                <span>작성자</span>
+                <select
+                  style={styles.documentFilterControl}
+                  value={documentRequesterFilter}
+                  onChange={(event) => setDocumentRequesterFilter(event.target.value)}
+                >
+                  <option value="all">전체 작성자</option>
+                  {requesterFilterOptions.map((requesterName) => (
+                    <option key={requesterName} value={requesterName}>{requesterName}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={styles.documentFilterField}>
+                <span>작성일 시작</span>
+                <input
+                  style={styles.documentFilterControl}
+                  type="date"
+                  value={documentDateFrom}
+                  onChange={(event) => setDocumentDateFrom(event.target.value)}
+                />
+              </label>
+              <label style={styles.documentFilterField}>
+                <span>작성일 종료</span>
+                <input
+                  style={styles.documentFilterControl}
+                  type="date"
+                  value={documentDateTo}
+                  onChange={(event) => setDocumentDateTo(event.target.value)}
+                />
+              </label>
+            </div>
+            <label style={styles.attachmentOnlyFilter}>
+              <input
+                type="checkbox"
+                checked={documentsWithAttachmentsOnly}
+                onChange={(event) => setDocumentsWithAttachmentsOnly(event.target.checked)}
+              />
+              첨부파일이 있는 문서만 보기
+            </label>
+          </section>}
 
           <div
             style={{
@@ -2425,6 +2650,8 @@ export default function ApprovalPage() {
                   <strong>{formatDate(selectedDocument.submitted_at)}</strong>
                 </div>
               </div>
+
+              {renderProgressNotice(selectedDocument)}
 
               <div style={styles.lineStatusList}>
                 {(selectedDocument.approval_lines || []).map((line) => (
@@ -2531,6 +2758,8 @@ export default function ApprovalPage() {
                 <strong>{statusText(detailModalDocument.status)}</strong>
               </div>
             </div>
+
+            {renderProgressNotice(detailModalDocument)}
 
             <div style={styles.lineStatusList}>
               {(detailModalDocument.approval_lines || []).map((line) => (
@@ -3445,6 +3674,16 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     lineHeight: 1.5,
   },
+  attachmentLockedNotice: {
+    margin: "0 0 9px",
+    borderRadius: "7px",
+    background: "#f8fafc",
+    color: "#475467",
+    padding: "8px 9px",
+    fontSize: "11px",
+    fontWeight: 700,
+    lineHeight: 1.45,
+  },
   attachmentEmpty: {
     margin: 0,
     color: "#667085",
@@ -4051,7 +4290,12 @@ const styles: Record<string, CSSProperties> = {
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   },
   filterButton: {
-    height: "32px",
+    minHeight: "38px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "1px",
     border: "1px solid #e5e7eb",
     borderRadius: "6px",
     background: "#ffffff",
@@ -4065,6 +4309,89 @@ const styles: Record<string, CSSProperties> = {
     background: "#111820",
     color: "#ffffff",
   },
+  documentFilterToggle: {
+    width: "100%",
+    minHeight: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    background: "#ffffff",
+    color: "#667085",
+    padding: "0 10px",
+    marginBottom: "10px",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  documentFilterToggleActive: {
+    borderColor: "#a7f3d0",
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  documentFilterPanel: {
+    marginBottom: "12px",
+    border: "1px solid #e6eaf0",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    padding: "10px",
+  },
+  documentFilterHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    marginBottom: "9px",
+    color: "#344054",
+    fontSize: "12px",
+  },
+  filterResetButton: {
+    border: 0,
+    background: "transparent",
+    color: "#0f8a56",
+    padding: 0,
+    fontSize: "11px",
+    fontWeight: 800,
+    cursor: "pointer",
+  },
+  documentFilterGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "8px",
+  },
+  documentFilterField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    color: "#667085",
+    fontSize: "11px",
+    fontWeight: 800,
+  },
+  documentFilterFieldWide: {
+    gridColumn: "1 / -1",
+  },
+  documentFilterControl: {
+    width: "100%",
+    minWidth: 0,
+    height: "32px",
+    border: "1px solid #d0d5dd",
+    borderRadius: "6px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "0 7px",
+    fontSize: "11px",
+    fontWeight: 700,
+  },
+  attachmentOnlyFilter: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    marginTop: "10px",
+    color: "#344054",
+    fontSize: "12px",
+    fontWeight: 700,
+  },
   documentSearchInput: {
     width: "100%",
     height: "36px",
@@ -4075,7 +4402,7 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     fontWeight: 700,
     padding: "0 10px",
-    marginBottom: "12px",
+    marginBottom: "8px",
     outline: "none",
   },
   documentList: {
@@ -4104,6 +4431,29 @@ const styles: Record<string, CSSProperties> = {
   documentButtonActive: {
     borderColor: "#0f8a56",
     background: "#f6fbf8",
+  },
+  documentTagRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+  },
+  relationBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    background: "#eef2f6",
+    color: "#475467",
+    padding: "3px 7px",
+    fontSize: "10px",
+    fontWeight: 800,
+  },
+  actionBadge: {
+    display: "inline-flex",
+    borderRadius: "999px",
+    background: "#ecfdf3",
+    color: "#047857",
+    padding: "3px 7px",
+    fontSize: "10px",
+    fontWeight: 850,
   },
   historyMonthGroup: {
     display: "grid",
@@ -4146,6 +4496,11 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     fontWeight: 500,
   },
+  documentProgress: {
+    color: "#344054",
+    fontSize: "12px",
+    fontWeight: 750,
+  },
   statusBadge: {
     display: "inline-flex",
     alignItems: "center",
@@ -4158,6 +4513,18 @@ const styles: Record<string, CSSProperties> = {
     fontStyle: "normal",
     fontWeight: 700,
     whiteSpace: "nowrap",
+  },
+  statusBadgeApproved: {
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  statusBadgeRejected: {
+    background: "#fff1f2",
+    color: "#dc2626",
+  },
+  statusBadgeAction: {
+    background: "#ecfdf3",
+    color: "#047857",
   },
   emptyBox: {
     border: "1px dashed #cfd6df",
@@ -4196,6 +4563,34 @@ const styles: Record<string, CSSProperties> = {
   },
   detailMetaGridMobile: {
     gridTemplateColumns: "minmax(0, 1fr)",
+  },
+  progressNotice: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    marginTop: "12px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    color: "#344054",
+    padding: "10px",
+    fontSize: "12px",
+    lineHeight: 1.45,
+  },
+  progressNoticeApproved: {
+    borderColor: "#a7f3d0",
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  progressNoticeRejected: {
+    borderColor: "#fecdd3",
+    background: "#fff1f2",
+    color: "#be123c",
+  },
+  progressNoticeAction: {
+    borderColor: "#86efac",
+    background: "#f0fdf4",
+    color: "#047857",
   },
   lineStatusList: {
     display: "flex",
