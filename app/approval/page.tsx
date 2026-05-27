@@ -613,6 +613,15 @@ function formatDocumentValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function escapePrintHtml(value: unknown) {
+  return formatDocumentValue(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function getReferenceInfos(data: Record<string, unknown>): ApprovalReferenceInfo[] {
   const value = data._references;
   if (!Array.isArray(value)) return [];
@@ -1773,6 +1782,173 @@ export default function ApprovalPage() {
     );
   }
 
+  function printApprovedDocument(document: ApprovalDocumentRow) {
+    if (document.status !== "approved") {
+      setMessage("승인 완료된 문서만 인쇄하거나 PDF로 저장할 수 있습니다.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=980,height=900");
+    if (!printWindow) {
+      setMessage("인쇄 창을 열 수 없습니다. 브라우저의 팝업 차단 설정을 확인해 주세요.");
+      return;
+    }
+
+    const template = templateMap[document.template_key];
+    const documentAttachments = getDocumentAttachments(document.id);
+    const references = getReferenceInfos(document.form_data);
+    const printDate = new Intl.DateTimeFormat("ko-KR", {
+      dateStyle: "long",
+      timeStyle: "short",
+    }).format(new Date());
+    const fieldsMarkup = (template?.fields || [])
+      .map(
+        (field) => `
+          <div class="field ${field.span === 2 ? "wide" : ""}">
+            <span>${escapePrintHtml(field.label)}</span>
+            <strong>${escapePrintHtml(document.form_data[field.key])}</strong>
+          </div>`
+      )
+      .join("");
+    const approvalMarkup = (document.approval_lines || [])
+      .map(
+        (line) => `
+          <div class="approval-cell">
+            <span>${escapePrintHtml(line.role_label)}</span>
+            <strong>${escapePrintHtml(line.approver_name)}</strong>
+            <em>${escapePrintHtml(statusText(line.status))}</em>
+            <small>${escapePrintHtml(formatDate(line.acted_at))}</small>
+          </div>`
+      )
+      .join("");
+    const referenceMarkup =
+      references.length > 0
+        ? references
+            .map((reference) => `${escapePrintHtml(reference.name)} / ${escapePrintHtml(reference.team || "-")}`)
+            .join(", ")
+        : "-";
+    const attachmentMarkup =
+      documentAttachments.length > 0
+        ? documentAttachments
+            .map(
+              (attachment) =>
+                `<li><span>${escapePrintHtml(attachment.original_name)}</span><strong>${escapePrintHtml(formatFileSize(attachment.size_bytes))}</strong></li>`
+            )
+            .join("")
+        : "<li class=\"empty\">등록된 첨부파일이 없습니다.</li>";
+    const tablesMarkup = (template?.tables || [])
+      .map((table) => {
+        const rows = getRows(document.form_data[table.key]);
+        if (rows.length === 0) return "";
+
+        return `
+          <section class="section keep-together">
+            <h2>${escapePrintHtml(table.title)}</h2>
+            <table>
+              <thead>
+                <tr>${table.columns.map((column) => `<th>${escapePrintHtml(column.label)}</th>`).join("")}</tr>
+              </thead>
+              <tbody>
+                ${rows
+                  .map(
+                    (row) =>
+                      `<tr>${table.columns.map((column) => `<td>${escapePrintHtml(row[column.key])}</td>`).join("")}</tr>`
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </section>`;
+      })
+      .join("");
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="ko">
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapePrintHtml(document.title)} - 인쇄</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; background: #fff; color: #111827; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+            .page { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 17mm 16mm; }
+            header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid #111827; }
+            .brand { font-size: 19px; font-weight: 900; letter-spacing: 0.22em; }
+            .heading { flex: 1; text-align: center; }
+            .heading p { margin: 0 0 7px; color: #64748b; font-size: 12px; font-weight: 700; }
+            .heading h1 { margin: 0; font-size: 25px; line-height: 1.35; }
+            .status { border: 1px solid #86efac; border-radius: 999px; background: #ecfdf3; color: #047857; padding: 7px 11px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+            .meta { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 16px; border: 1px solid #cbd5e1; }
+            .meta div { min-height: 54px; padding: 9px 10px; border-right: 1px solid #e2e8f0; }
+            .meta div:last-child { border-right: 0; }
+            .meta span, .field span, .approval-cell span { display: block; margin-bottom: 5px; color: #64748b; font-size: 11px; font-weight: 700; }
+            .meta strong, .field strong { font-size: 13px; font-weight: 700; white-space: pre-wrap; word-break: break-word; }
+            .section { margin-top: 18px; }
+            .section h2 { margin: 0 0 9px; font-size: 14px; font-weight: 900; }
+            .approval { display: grid; grid-template-columns: repeat(${Math.max(document.approval_lines?.length || 1, 1)}, 1fr); border: 1px solid #cbd5e1; }
+            .approval-cell { min-height: 75px; border-right: 1px solid #e2e8f0; padding: 9px; text-align: center; }
+            .approval-cell:last-child { border-right: 0; }
+            .approval-cell strong { display: block; margin: 8px 0 7px; font-size: 13px; }
+            .approval-cell em { display: inline-block; color: #047857; font-size: 11px; font-style: normal; font-weight: 800; }
+            .approval-cell small { display: block; margin-top: 6px; color: #64748b; font-size: 10px; }
+            .reference { border: 1px solid #e2e8f0; padding: 10px; font-size: 12px; }
+            .fields { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; }
+            .field { min-height: 58px; padding: 9px 10px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+            .field.wide { grid-column: 1 / -1; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background: #f8fafc; font-weight: 800; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; word-break: break-word; }
+            .attachments { margin: 0; padding: 0; list-style: none; border: 1px solid #e2e8f0; }
+            .attachments li { display: flex; justify-content: space-between; gap: 16px; padding: 9px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
+            .attachments li:last-child { border-bottom: 0; }
+            .attachments .empty { color: #64748b; }
+            footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 10px; }
+            .keep-together { break-inside: avoid; page-break-inside: avoid; }
+            @page { size: A4; margin: 0; }
+            @media print { .page { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <main class="page">
+            <header>
+              <div class="brand">ZETA</div>
+              <div class="heading">
+                <p>${escapePrintHtml(document.template_title)}</p>
+                <h1>${escapePrintHtml(document.title)}</h1>
+              </div>
+              <div class="status">승인 완료</div>
+            </header>
+            <section class="meta keep-together">
+              <div><span>작성자</span><strong>${escapePrintHtml(document.requester_name)}</strong></div>
+              <div><span>소속</span><strong>${escapePrintHtml(document.requester_team || "-")}</strong></div>
+              <div><span>작성일</span><strong>${escapePrintHtml(formatDate(document.submitted_at))}</strong></div>
+              <div><span>승인 완료일</span><strong>${escapePrintHtml(formatDate(document.completed_at))}</strong></div>
+            </section>
+            <section class="section keep-together">
+              <h2>결재선</h2>
+              <div class="approval">${approvalMarkup}</div>
+            </section>
+            <section class="section keep-together">
+              <h2>참조</h2>
+              <div class="reference">${referenceMarkup}</div>
+            </section>
+            <section class="section">
+              <h2>문서 내용</h2>
+              <div class="fields">${fieldsMarkup}</div>
+            </section>
+            ${tablesMarkup}
+            <section class="section keep-together">
+              <h2>첨부파일 목록</h2>
+              <ul class="attachments">${attachmentMarkup}</ul>
+            </section>
+            <footer>출력일: ${escapePrintHtml(printDate)} / 본 출력물은 ZETA 업무통합시스템의 승인 완료 문서를 기준으로 생성되었습니다.</footer>
+          </main>
+        </body>
+      </html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  }
+
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
     selectedDocument?.status === "pending" && isCurrentApprovalLine(currentPendingLine);
@@ -2735,13 +2911,24 @@ export default function ApprovalPage() {
                 <span style={styles.templateCategory}>{detailModalDocument.template_title}</span>
                 <h3 style={styles.detailTitle}>{detailModalDocument.title}</h3>
               </div>
-              <button
-                type="button"
-                style={styles.ghostButton}
-                onClick={() => setDetailModalDocumentId(null)}
-              >
-                닫기
-              </button>
+              <div style={styles.modalHeaderActions}>
+                {detailModalDocument.status === "approved" && (
+                  <button
+                    type="button"
+                    style={styles.printButton}
+                    onClick={() => printApprovedDocument(detailModalDocument)}
+                  >
+                    인쇄 / PDF 저장
+                  </button>
+                )}
+                <button
+                  type="button"
+                  style={styles.ghostButton}
+                  onClick={() => setDetailModalDocumentId(null)}
+                >
+                  닫기
+                </button>
+              </div>
             </div>
 
             <div style={{ ...styles.modalMetaGrid, ...(isMobile ? styles.modalMetaGridMobile : {}) }}>
@@ -4673,6 +4860,25 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: "14px",
     marginBottom: "14px",
+  },
+  modalHeaderActions: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+  printButton: {
+    height: "36px",
+    border: "1px solid #0f8a56",
+    borderRadius: "8px",
+    background: "#0f8a56",
+    color: "#ffffff",
+    padding: "0 13px",
+    fontSize: "12px",
+    fontWeight: 850,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
   },
   modalMetaGrid: {
     display: "grid",
