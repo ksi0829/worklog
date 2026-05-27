@@ -495,6 +495,94 @@
   display: none;
 }
 
+.pinnedMessages {
+  flex: none;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f3dfac;
+  background: #fffaf0;
+}
+
+.pinnedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8a5312;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pinnedHeader span {
+  font-size: 11px;
+  color: #a0691d;
+}
+
+.pinnedList {
+  display: grid;
+  gap: 6px;
+  max-height: 128px;
+  margin-top: 7px;
+  overflow-y: auto;
+}
+
+.pinnedItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid #f0dfbb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pinnedItem div {
+  min-width: 0;
+}
+
+.pinnedItem strong {
+  display: block;
+  color: #59677a;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.pinnedItem p {
+  display: -webkit-box;
+  margin: 3px 0;
+  overflow: hidden;
+  color: #1c2735;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pinnedItem small {
+  color: #8994a4;
+  font-size: 10px;
+}
+
+.unpinButton {
+  flex: none;
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid #eed39e;
+  border-radius: 7px;
+  background: #fffaf0;
+  color: #8a5312;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.unpinButton:disabled,
+.pinButton:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .outgoingMessage {
   max-width: 80%;
   display: flex;
@@ -515,6 +603,37 @@
 
 .incomingMessage > div {
   max-width: 100% !important;
+}
+
+.messageMetaActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.incomingMessage .messageMetaActions {
+  justify-content: flex-start;
+}
+
+.pinnedBadge {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #9a6700;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.pinButton {
+  border: 0;
+  background: transparent;
+  color: #697586;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .unreadMarker {
@@ -714,6 +833,14 @@
 
   .messageList {
     padding: 13px !important;
+  }
+
+  .pinnedMessages {
+    padding: 9px 12px;
+  }
+
+  .pinnedList {
+    max-height: 112px;
   }
 
   .outgoingMessage {

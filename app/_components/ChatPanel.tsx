@@ -95,6 +95,14 @@ type ChatMessageRow = {
   created_at: string;
 };
 
+type ChatPinnedMessageRow = {
+  thread_id: number;
+  message_id: number;
+  pinned_by: string;
+  pinned_at: string;
+  message: ChatMessageRow;
+};
+
 type ChatPresenceRow = {
   user_id: string;
   visible: boolean;
@@ -194,6 +202,9 @@ export function ChatPanel({
   const [groupThreads, setGroupThreads] = useState<GroupThread[]>([]);
   const [threadId, setThreadId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<ChatPinnedMessageRow[]>([]);
+  const [pinFeatureReady, setPinFeatureReady] = useState(false);
+  const [pinBusyMessageId, setPinBusyMessageId] = useState<number | null>(null);
   const [messageBody, setMessageBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
@@ -285,6 +296,13 @@ export function ChatPanel({
       return matchingMembers.length > 0 ? [[team, matchingMembers] as [string, ChatUser[]]] : [];
     });
   }, [groupedUsers, normalizedRoomSearch]);
+  const pinnedMessageIds = useMemo(
+    () => new Set(pinnedMessages.map((pin) => pin.message_id)),
+    [pinnedMessages]
+  );
+  const canManagePins = Boolean(
+    threadId && (!selectedGroupThread || selectedGroupThread.created_by === currentUserId)
+  );
 
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -541,6 +559,32 @@ export function ChatPanel({
     }
   }, []);
 
+  const loadPinnedMessages = useCallback(async (targetThreadId: number) => {
+    const { data, error } = await supabase
+      .from("chat_message_pins")
+      .select(
+        "thread_id,message_id,pinned_by,pinned_at,message:chat_messages!chat_message_pins_message_fkey(id,thread_id,sender_id,sender_name,sender_team,body,created_at)"
+      )
+      .eq("thread_id", targetThreadId)
+      .order("pinned_at", { ascending: false });
+
+    if (error) {
+      setPinFeatureReady(false);
+      setPinnedMessages([]);
+      return;
+    }
+
+    const rows = ((data || []) as unknown as Array<
+      Omit<ChatPinnedMessageRow, "message"> & { message: ChatMessageRow | ChatMessageRow[] }
+    >).flatMap((pin) => {
+      const message = Array.isArray(pin.message) ? pin.message[0] : pin.message;
+      return message ? [{ ...pin, message }] : [];
+    });
+
+    setPinFeatureReady(true);
+    setPinnedMessages(rows);
+  }, []);
+
   const loadMessages = useCallback(
     async (
       targetThreadId: number,
@@ -675,6 +719,8 @@ export function ChatPanel({
     async (targetUser: ChatUser) => {
       setSelectedUserId(targetUser.id);
       setSelectedGroupThread(null);
+      setPinnedMessages([]);
+      setPinFeatureReady(false);
       setMobileConversationOpen(true);
       setParticipantReadStates([]);
       setLoading(true);
@@ -684,16 +730,19 @@ export function ChatPanel({
       if (targetThreadId) {
         await loadMessages(targetThreadId, { reset: true });
         await loadParticipantReadStates(targetThreadId);
+        await loadPinnedMessages(targetThreadId);
       }
       setLoading(false);
     },
-    [findOrCreateThread, loadMessages, loadParticipantReadStates]
+    [findOrCreateThread, loadMessages, loadParticipantReadStates, loadPinnedMessages]
   );
 
   const selectGroupThread = useCallback(
     async (targetThread: GroupThread) => {
       setSelectedGroupThread(targetThread);
       setSelectedUserId("");
+      setPinnedMessages([]);
+      setPinFeatureReady(false);
       setMobileConversationOpen(true);
       setParticipantReadStates([]);
       setThreadId(targetThread.id);
@@ -701,15 +750,18 @@ export function ChatPanel({
       setSetupError("");
       await loadMessages(targetThread.id, { reset: true });
       await loadParticipantReadStates(targetThread.id);
+      await loadPinnedMessages(targetThread.id);
       setLoading(false);
     },
-    [loadMessages, loadParticipantReadStates]
+    [loadMessages, loadParticipantReadStates, loadPinnedMessages]
   );
 
   const openGroupCreator = useCallback(() => {
     setSelectedUserId("");
     setSelectedGroupThread(null);
     setThreadId(null);
+    setPinnedMessages([]);
+    setPinFeatureReady(false);
     setGroupTitle("");
     setGroupMemberIds([]);
     setGroupEditorMode("create");
@@ -876,6 +928,8 @@ export function ChatPanel({
     setSelectedGroupThread(null);
     setThreadId(null);
     setMessages([]);
+    setPinnedMessages([]);
+    setPinFeatureReady(false);
     setMobileConversationOpen(false);
     await loadGroupThreads();
     setLoading(false);
@@ -901,6 +955,8 @@ export function ChatPanel({
     setSelectedGroupThread(null);
     setThreadId(null);
     setMessages([]);
+    setPinnedMessages([]);
+    setPinFeatureReady(false);
     setMobileConversationOpen(false);
     await loadGroupThreads();
     setLoading(false);
@@ -958,6 +1014,48 @@ export function ChatPanel({
     threadId,
   ]);
 
+  const pinMessage = useCallback(
+    async (message: ChatMessageRow) => {
+      if (!threadId || !canManagePins || !pinFeatureReady) return;
+
+      setPinBusyMessageId(message.id);
+      const { error } = await supabase.from("chat_message_pins").insert({
+        thread_id: threadId,
+        message_id: message.id,
+        pinned_by: currentUserId,
+      });
+
+      if (error) {
+        setSetupError("중요 메시지를 고정하지 못했습니다.");
+      } else {
+        await loadPinnedMessages(threadId);
+      }
+      setPinBusyMessageId(null);
+    },
+    [canManagePins, currentUserId, loadPinnedMessages, pinFeatureReady, threadId]
+  );
+
+  const unpinMessage = useCallback(
+    async (messageId: number) => {
+      if (!threadId || !canManagePins || !pinFeatureReady) return;
+
+      setPinBusyMessageId(messageId);
+      const { error } = await supabase
+        .from("chat_message_pins")
+        .delete()
+        .eq("thread_id", threadId)
+        .eq("message_id", messageId);
+
+      if (error) {
+        setSetupError("중요 메시지 고정을 해제하지 못했습니다.");
+      } else {
+        await loadPinnedMessages(threadId);
+      }
+      setPinBusyMessageId(null);
+    },
+    [canManagePins, loadPinnedMessages, pinFeatureReady, threadId]
+  );
+
   const loadOlderMessages = useCallback(async () => {
     if (!threadId || !hasOlderMessages || loadingOlderMessages) return;
 
@@ -1004,6 +1102,7 @@ export function ChatPanel({
       if (open && threadId) {
         void loadMessages(threadId, { preserveScroll: true });
         void loadParticipantReadStates(threadId);
+        if (pinFeatureReady) void loadPinnedMessages(threadId);
       }
     }, 6000);
 
@@ -1017,9 +1116,11 @@ export function ChatPanel({
     loadMessages,
     loadOnlineUsers,
     loadParticipantReadStates,
+    loadPinnedMessages,
     loadUnreadCount,
     loadUsers,
     open,
+    pinFeatureReady,
     threadId,
   ]);
 
@@ -1070,6 +1171,30 @@ export function ChatPanel({
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, loadParticipantReadStates, threadId]);
+
+  useEffect(() => {
+    if (!currentUserId || !threadId || !pinFeatureReady) return;
+
+    const channel = supabase
+      .channel(`chat-pins-${currentUserId}-${threadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_message_pins",
+          filter: `thread_id=eq.${threadId}`,
+        },
+        () => {
+          void loadPinnedMessages(threadId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadPinnedMessages, pinFeatureReady, threadId]);
 
   useEffect(() => {
     if (!open || !threadId) return;
@@ -1510,6 +1635,36 @@ export function ChatPanel({
                   )}
                 </div>
 
+                {pinFeatureReady && pinnedMessages.length > 0 && (
+                  <section className={chatStyles.pinnedMessages}>
+                    <div className={chatStyles.pinnedHeader}>
+                      <strong>중요 메시지</strong>
+                      <span>{pinnedMessages.length}건</span>
+                    </div>
+                    <div className={chatStyles.pinnedList}>
+                      {pinnedMessages.map((pin) => (
+                        <article key={pin.message_id} className={chatStyles.pinnedItem}>
+                          <div>
+                            <strong>{pin.message.sender_name}</strong>
+                            <p>{pin.message.body}</p>
+                            <small>{formatTime(pin.message.created_at)}</small>
+                          </div>
+                          {canManagePins && (
+                            <button
+                              type="button"
+                              className={chatStyles.unpinButton}
+                              disabled={pinBusyMessageId === pin.message_id}
+                              onClick={() => void unpinMessage(pin.message_id)}
+                            >
+                              해제
+                            </button>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 <div ref={messageListRef} className={chatStyles.messageList} style={styles.messageList}>
                   {messages.length === 0 ? (
                     <div style={styles.empty}>아직 주고받은 메시지가 없습니다.</div>
@@ -1566,7 +1721,26 @@ export function ChatPanel({
                                   }}
                                 >
                                   <p style={styles.messageText}>{message.body}</p>
-                                  <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                  <div className={chatStyles.messageMetaActions}>
+                                    <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                    {pinnedMessageIds.has(message.id) && (
+                                      <span className={chatStyles.pinnedBadge}>고정됨</span>
+                                    )}
+                                    {pinFeatureReady && canManagePins && (
+                                      <button
+                                        type="button"
+                                        className={chatStyles.pinButton}
+                                        disabled={pinBusyMessageId === message.id}
+                                        onClick={() =>
+                                          pinnedMessageIds.has(message.id)
+                                            ? void unpinMessage(message.id)
+                                            : void pinMessage(message)
+                                        }
+                                      >
+                                        {pinnedMessageIds.has(message.id) ? "고정 해제" : "고정"}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             ) : (
@@ -1574,7 +1748,26 @@ export function ChatPanel({
                                 <div style={styles.messageBubble}>
                                   <span style={styles.messageSender}>{message.sender_name}</span>
                                   <p style={styles.messageText}>{message.body}</p>
-                                  <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                  <div className={chatStyles.messageMetaActions}>
+                                    <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
+                                    {pinnedMessageIds.has(message.id) && (
+                                      <span className={chatStyles.pinnedBadge}>고정됨</span>
+                                    )}
+                                    {pinFeatureReady && canManagePins && (
+                                      <button
+                                        type="button"
+                                        className={chatStyles.pinButton}
+                                        disabled={pinBusyMessageId === message.id}
+                                        onClick={() =>
+                                          pinnedMessageIds.has(message.id)
+                                            ? void unpinMessage(message.id)
+                                            : void pinMessage(message)
+                                        }
+                                      >
+                                        {pinnedMessageIds.has(message.id) ? "고정 해제" : "고정"}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 {unreadRecipientCount > 0 && (
                                   <span className={chatStyles.unreadMarker} aria-label="아직 읽지 않은 인원 수">
