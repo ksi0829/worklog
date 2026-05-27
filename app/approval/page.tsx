@@ -1759,7 +1759,7 @@ export default function ApprovalPage() {
   const renderAttachments = (document: ApprovalDocumentRow) => {
     const rows = getDocumentAttachments(document.id);
     const canAdd = document.status === "pending" && isCurrentRequester(document);
-    const canRemove = isAdmin || canAdd;
+    const canRemove = canAdd;
 
     return (
       <section style={styles.attachmentDetailBox}>

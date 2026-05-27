@@ -49,6 +49,18 @@ type AdminDashboardSettingRow = {
   cleanup_candidate_days: number;
 };
 
+type AttachmentDeletionLogRow = {
+  id: number;
+  document_title: string;
+  original_name: string;
+  size_bytes: number;
+  deletion_reason: string;
+  operation_status: "requested" | "completed" | "failed";
+  deleted_by_name: string;
+  requested_at: string;
+  completed_at: string | null;
+};
+
 function formatBytes(sizeBytes: number) {
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   if (sizeBytes < 1024 * 1024 * 1024) return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -93,6 +105,8 @@ export default function AdminPage() {
   const [warningLimitMb, setWarningLimitMb] = useState(DEFAULT_WARNING_LIMIT_MB);
   const [cleanupCandidateDays, setCleanupCandidateDays] = useState(DEFAULT_CLEANUP_CANDIDATE_DAYS);
   const [managementBusy, setManagementBusy] = useState(false);
+  const [deletionAuditReady, setDeletionAuditReady] = useState(false);
+  const [deletionLogs, setDeletionLogs] = useState<AttachmentDeletionLogRow[]>([]);
 
   const loadDashboard = useCallback(async (preserveMessage = false) => {
     setLoading(true);
@@ -124,7 +138,7 @@ export default function AdminPage() {
 
     setIsAuthorized(true);
 
-    const [attachmentResult, documentResult, profileResult, activityResult, settingsResult] = await Promise.all([
+    const [attachmentResult, documentResult, profileResult, activityResult, settingsResult, deletionLogResult] = await Promise.all([
       supabase
         .from("approval_attachments")
         .select("id,document_id,storage_path,original_name,size_bytes,created_at")
@@ -144,6 +158,11 @@ export default function AdminPage() {
         .select("id,attachment_warning_limit_mb,cleanup_candidate_days")
         .eq("id", "default")
         .maybeSingle(),
+      supabase
+        .from("approval_attachment_deletion_logs")
+        .select("id,document_title,original_name,size_bytes,deletion_reason,operation_status,deleted_by_name,requested_at,completed_at")
+        .order("requested_at", { ascending: false })
+        .limit(20),
     ]);
 
     const errors = [
@@ -170,6 +189,13 @@ export default function AdminPage() {
       setSettingsReady(true);
       setWarningLimitMb(settings.attachment_warning_limit_mb);
       setCleanupCandidateDays(settings.cleanup_candidate_days);
+    }
+    if (deletionLogResult.error) {
+      setDeletionAuditReady(false);
+      setDeletionLogs([]);
+    } else {
+      setDeletionAuditReady(true);
+      setDeletionLogs((deletionLogResult.data || []) as AttachmentDeletionLogRow[]);
     }
     setDashboardAsOf(Date.now());
     setLoading(false);
@@ -207,21 +233,63 @@ export default function AdminPage() {
   }
 
   async function deleteAttachment(attachment: AttachmentRow) {
+    if (!deletionAuditReady) {
+      setMessage("삭제 이력 SQL 적용 후 관리자 삭제를 사용할 수 있습니다.");
+      return;
+    }
+
     const linkedTitle = documents.find((document) => document.id === attachment.document_id)?.title || "결재문서";
-    if (!confirm(`${linkedTitle}의 첨부파일 "${attachment.original_name}"을 삭제할까요? 문서 본문은 남습니다.`)) {
+    const deletionReason = prompt(
+      `"${attachment.original_name}" 파일을 삭제하는 사유를 입력해 주세요.`,
+      "테스트 또는 불필요 자료 정리"
+    )?.trim();
+
+    if (!deletionReason) return;
+    if (deletionReason.length < 2 || deletionReason.length > 300) {
+      setMessage("삭제 사유는 2자 이상 300자 이하로 입력해 주세요.");
+      return;
+    }
+
+    if (!confirm(`${linkedTitle}의 첨부파일 "${attachment.original_name}"을 삭제할까요? 문서 본문은 남고 삭제 사유가 기록됩니다.`)) {
       return;
     }
 
     setManagementBusy(true);
     setMessage("");
 
+    const { data: deletionLog, error: logError } = await supabase
+      .from("approval_attachment_deletion_logs")
+      .insert({
+        document_id: attachment.document_id,
+        document_title: linkedTitle,
+        storage_path: attachment.storage_path,
+        original_name: attachment.original_name,
+        size_bytes: attachment.size_bytes,
+        deletion_reason: deletionReason,
+        operation_status: "requested",
+      })
+      .select("id")
+      .single();
+
+    if (logError || !deletionLog) {
+      setMessage("삭제 이력을 저장하지 못해 파일 삭제를 진행하지 않았습니다.");
+      setManagementBusy(false);
+      return;
+    }
+
+    const deletionLogId = Number(deletionLog.id);
     const { error: storageError } = await supabase.storage
       .from(APPROVAL_ATTACHMENT_BUCKET)
       .remove([attachment.storage_path]);
 
     if (storageError) {
+      await supabase
+        .from("approval_attachment_deletion_logs")
+        .update({ operation_status: "failed", failure_message: "Storage 파일 삭제 실패" })
+        .eq("id", deletionLogId);
       setMessage("저장된 파일을 삭제하지 못했습니다. 다시 시도해 주세요.");
       setManagementBusy(false);
+      await loadDashboard(true);
       return;
     }
 
@@ -231,11 +299,20 @@ export default function AdminPage() {
       .eq("id", attachment.id);
 
     if (metadataError) {
+      await supabase
+        .from("approval_attachment_deletion_logs")
+        .update({ operation_status: "failed", failure_message: "첨부 메타데이터 삭제 실패" })
+        .eq("id", deletionLogId);
       setMessage("파일은 삭제됐지만 첨부 목록 정리에 실패했습니다. 관리자 확인이 필요합니다.");
       setManagementBusy(false);
+      await loadDashboard(true);
       return;
     }
 
+    await supabase
+      .from("approval_attachment_deletion_logs")
+      .update({ operation_status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", deletionLogId);
     setMessage(`"${attachment.original_name}" 첨부파일을 삭제했습니다.`);
     setManagementBusy(false);
     await loadDashboard(true);
@@ -392,6 +469,35 @@ export default function AdminPage() {
         </div>
       </section>
 
+      <section style={styles.card}>
+        <div style={styles.cardInner}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h3 style={styles.cardTitle}>첨부 보관 및 삭제 운영 기준</h3>
+              <p style={styles.cardHint}>중요 완료 문서의 파일은 보존을 기본으로 하고, 삭제 전 필요 여부를 확인합니다.</p>
+            </div>
+          </div>
+          <div style={styles.policyGrid}>
+            <div style={styles.policyItem}>
+              <strong>삭제 권한</strong>
+              <span>관리자는 불필요 자료를 사유 기록 후 삭제하며, 작성자는 결재 대기 중 오첨부만 삭제합니다.</span>
+            </div>
+            <div style={styles.policyItem}>
+              <strong>완료 문서</strong>
+              <span>승인 완료 문서 첨부는 원칙적으로 유지하고, 삭제가 필요하면 별도 보관 후 진행합니다.</span>
+            </div>
+            <div style={styles.policyItem}>
+              <strong>정리 우선순위</strong>
+              <span>테스트 파일, 중복 업로드, 취소 또는 반려 후 보존 불필요 자료부터 검토합니다.</span>
+            </div>
+            <div style={styles.policyItem}>
+              <strong>정기 점검</strong>
+              <span>월 1회 사용량, 오래된 첨부, 삭제 이력을 관리자 페이지에서 확인합니다.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section style={styles.settingsCard}>
         <div style={styles.settingsInner}>
           <div style={styles.cardHeader}>
@@ -494,6 +600,11 @@ export default function AdminPage() {
             </div>
             <span style={styles.cardCount}>{attachments.length}건</span>
           </div>
+          {!deletionAuditReady && (
+            <div style={styles.setupNotice}>
+              관리자 삭제 이력을 남기려면 `project-docs/supabase-approval-attachment-deletion-logs.sql`을 실행해 주세요. 적용 전에는 이 화면에서 파일을 삭제할 수 없습니다.
+            </div>
+          )}
           {attachments.length === 0 ? (
             <div style={styles.emptyBox}>관리할 첨부파일이 없습니다.</div>
           ) : (
@@ -519,12 +630,53 @@ export default function AdminPage() {
                     <button
                       type="button"
                       style={styles.dangerButton}
-                      disabled={managementBusy}
+                      disabled={managementBusy || !deletionAuditReady}
                       onClick={() => void deleteAttachment(attachment)}
                     >
                       삭제
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section style={styles.card}>
+        <div style={styles.cardInner}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h3 style={styles.cardTitle}>최근 첨부 삭제 이력</h3>
+              <p style={styles.cardHint}>관리자 페이지에서 수행한 첨부 삭제 요청과 처리 결과를 표시합니다.</p>
+            </div>
+            <span style={styles.cardCount}>{deletionLogs.length}건</span>
+          </div>
+          {!deletionAuditReady ? (
+            <div style={styles.emptyBox}>삭제 이력 SQL 적용 후 기록이 표시됩니다.</div>
+          ) : deletionLogs.length === 0 ? (
+            <div style={styles.emptyBox}>기록된 관리자 첨부 삭제 이력이 없습니다.</div>
+          ) : (
+            <div style={styles.auditList}>
+              {deletionLogs.map((log) => (
+                <div key={log.id} style={styles.auditItem}>
+                  <div style={styles.listText}>
+                    <strong>{log.original_name}</strong>
+                    <span>{log.document_title} / {log.deletion_reason}</span>
+                    <span>{log.deleted_by_name || "관리자"} / {formatDateTime(log.completed_at || log.requested_at)}</span>
+                  </div>
+                  <em
+                    style={{
+                      ...styles.auditStatus,
+                      ...(log.operation_status === "completed"
+                        ? styles.auditCompleted
+                        : log.operation_status === "failed"
+                          ? styles.auditFailed
+                          : styles.auditRequested),
+                    }}
+                  >
+                    {log.operation_status === "completed" ? "삭제 완료" : log.operation_status === "failed" ? "실패" : "처리 중"}
+                  </em>
                 </div>
               ))}
             </div>
@@ -761,8 +913,27 @@ const styles: Record<string, CSSProperties> = {
     background: "#fff7ed",
     color: "#9a3412",
     padding: "12px",
+    marginBottom: "12px",
     fontSize: "13px",
     fontWeight: 700,
+  },
+  policyGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "10px",
+  },
+  policyItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    border: "1px solid #edf0f3",
+    borderRadius: "9px",
+    background: "#fbfcfd",
+    color: "#475467",
+    padding: "12px",
+    fontSize: "12px",
+    fontWeight: 650,
+    lineHeight: 1.55,
   },
   settingsRow: {
     display: "flex",
@@ -812,6 +983,43 @@ const styles: Record<string, CSSProperties> = {
     gap: "8px",
     maxHeight: "430px",
     overflowY: "auto",
+  },
+  auditList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    maxHeight: "330px",
+    overflowY: "auto",
+  },
+  auditItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    border: "1px solid #edf0f3",
+    borderRadius: "9px",
+    background: "#fbfcfd",
+    padding: "11px",
+  },
+  auditStatus: {
+    flexShrink: 0,
+    borderRadius: "999px",
+    padding: "5px 9px",
+    fontSize: "11px",
+    fontStyle: "normal",
+    fontWeight: 850,
+  },
+  auditCompleted: {
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  auditFailed: {
+    background: "#fff1f2",
+    color: "#dc2626",
+  },
+  auditRequested: {
+    background: "#fff7ed",
+    color: "#c2410c",
   },
   managementItem: {
     display: "grid",
