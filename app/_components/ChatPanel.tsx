@@ -260,10 +260,7 @@ export function ChatPanel({
     return groupThreads.filter((room) =>
       [
         room.title || "단체 대화방",
-        ...room.participants.flatMap((participant) => [
-          participant.user_name || "",
-          participant.team || "",
-        ]),
+        ...room.participants.map((participant) => participant.user_name || ""),
       ]
         .join(" ")
         .toLocaleLowerCase("ko")
