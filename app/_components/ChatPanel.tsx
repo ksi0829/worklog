@@ -200,6 +200,7 @@ export function ChatPanel({
   const [unreadByUserId, setUnreadByUserId] = useState<Record<string, number>>({});
   const [unreadByThreadId, setUnreadByThreadId] = useState<Record<number, number>>({});
   const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
+  const [roomSearchQuery, setRoomSearchQuery] = useState("");
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
   const [participantReadStates, setParticipantReadStates] = useState<ChatParticipantRow[]>([]);
   const [groupEditorMode, setGroupEditorMode] = useState<"create" | "add" | null>(null);
@@ -252,6 +253,41 @@ export function ChatPanel({
       return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
     });
   }, [currentName, currentTeam, users]);
+  const normalizedRoomSearch = roomSearchQuery.trim().toLocaleLowerCase("ko");
+  const filteredGroupThreads = useMemo(() => {
+    if (!normalizedRoomSearch) return groupThreads;
+
+    return groupThreads.filter((room) =>
+      [
+        room.title || "단체 대화방",
+        ...room.participants.flatMap((participant) => [
+          participant.user_name || "",
+          participant.team || "",
+        ]),
+      ]
+        .join(" ")
+        .toLocaleLowerCase("ko")
+        .includes(normalizedRoomSearch)
+    );
+  }, [groupThreads, normalizedRoomSearch]);
+  const filteredGroupedUsers = useMemo(() => {
+    if (!normalizedRoomSearch) return groupedUsers;
+
+    return groupedUsers.flatMap(([team, members]) => {
+      if (team.toLocaleLowerCase("ko").includes(normalizedRoomSearch)) {
+        return [[team, members] as [string, ChatUser[]]];
+      }
+
+      const matchingMembers = members.filter((user) =>
+        [user.name, user.team, user.role]
+          .join(" ")
+          .toLocaleLowerCase("ko")
+          .includes(normalizedRoomSearch)
+      );
+
+      return matchingMembers.length > 0 ? [[team, matchingMembers] as [string, ChatUser[]]] : [];
+    });
+  }, [groupedUsers, normalizedRoomSearch]);
 
   const loadUsers = useCallback(async () => {
     const { data, error } = await supabase
@@ -1227,6 +1263,15 @@ export function ChatPanel({
           style={styles.body}
         >
           <aside className={chatStyles.userList} style={styles.userList}>
+            <label className={chatStyles.roomSearch}>
+              <span className={chatStyles.srOnly}>대화방 검색</span>
+              <input
+                type="search"
+                value={roomSearchQuery}
+                onChange={(event) => setRoomSearchQuery(event.target.value)}
+                placeholder="방 이름, 참여자, 부서 검색"
+              />
+            </label>
             <div className={chatStyles.listHeading}>
               <strong>단체방</strong>
               <button type="button" className={chatStyles.createRoomButton} onClick={openGroupCreator}>
@@ -1234,10 +1279,12 @@ export function ChatPanel({
               </button>
             </div>
             <div className={chatStyles.groupRoomList}>
-              {groupThreads.length === 0 ? (
-                <p className={chatStyles.emptyRooms}>참여 중인 단체방이 없습니다.</p>
+              {filteredGroupThreads.length === 0 ? (
+                <p className={chatStyles.emptyRooms}>
+                  {normalizedRoomSearch ? "일치하는 단체방이 없습니다." : "참여 중인 단체방이 없습니다."}
+                </p>
               ) : (
-                groupThreads.map((room) => (
+                filteredGroupThreads.map((room) => (
                   <button
                     key={room.id}
                     type="button"
@@ -1260,18 +1307,24 @@ export function ChatPanel({
               <strong>1:1 대화</strong>
               <span>팀별 목록</span>
             </div>
-            {groupedUsers.map(([team, members], index) => {
+            {filteredGroupedUsers.length === 0 && (
+              <p className={chatStyles.emptyRooms}>
+                {normalizedRoomSearch ? "일치하는 대화 상대가 없습니다." : "대화 가능한 인원이 없습니다."}
+              </p>
+            )}
+            {filteredGroupedUsers.map(([team, members], index) => {
               const unreadCount = members.reduce(
                 (total, member) => total + (unreadByUserId[member.id] || 0),
                 0
               );
               const teamOpen =
-                expandedTeams[team] ??
-                (index === 0 ||
-                  members.some(
-                    (member) =>
-                      member.id === selectedUserId || unreadByUserId[member.id] > 0
-                  ));
+                Boolean(normalizedRoomSearch) ||
+                (expandedTeams[team] ??
+                  (index === 0 ||
+                    members.some(
+                      (member) =>
+                        member.id === selectedUserId || unreadByUserId[member.id] > 0
+                    )));
 
               return (
                 <details
