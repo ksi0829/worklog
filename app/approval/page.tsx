@@ -1877,31 +1877,31 @@ export default function ApprovalPage() {
             .heading p { margin: 0 0 7px; color: #64748b; font-size: 12px; font-weight: 700; }
             .heading h1 { margin: 0; font-size: 25px; line-height: 1.35; }
             .status { border: 1px solid #86efac; border-radius: 999px; background: #ecfdf3; color: #047857; padding: 7px 11px; font-size: 12px; font-weight: 800; white-space: nowrap; }
-            .meta { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 16px; border: 1px solid #cbd5e1; }
-            .meta div { min-height: 54px; padding: 9px 10px; border-right: 1px solid #e2e8f0; }
+            .meta { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 16px; border: 1.5px solid #334155; }
+            .meta div { min-height: 54px; padding: 9px 10px; border-right: 1px solid #64748b; }
             .meta div:last-child { border-right: 0; }
             .meta span, .field span, .approval-cell span { display: block; margin-bottom: 5px; color: #64748b; font-size: 11px; font-weight: 700; }
             .meta strong, .field strong { font-size: 13px; font-weight: 700; white-space: pre-wrap; word-break: break-word; }
             .section { margin-top: 18px; }
             .section h2 { margin: 0 0 9px; font-size: 14px; font-weight: 900; }
-            .approval { display: grid; grid-template-columns: repeat(${Math.max(document.approval_lines?.length || 1, 1)}, 1fr); border: 1px solid #cbd5e1; }
-            .approval-cell { min-height: 75px; border-right: 1px solid #e2e8f0; padding: 9px; text-align: center; }
+            .approval { display: grid; grid-template-columns: repeat(${Math.max(document.approval_lines?.length || 1, 1)}, 1fr); border: 1.5px solid #334155; }
+            .approval-cell { min-height: 75px; border-right: 1px solid #64748b; padding: 9px; text-align: center; }
             .approval-cell:last-child { border-right: 0; }
             .approval-cell strong { display: block; margin: 8px 0 7px; font-size: 13px; }
             .approval-cell em { display: inline-block; color: #047857; font-size: 11px; font-style: normal; font-weight: 800; }
             .approval-cell small { display: block; margin-top: 6px; color: #64748b; font-size: 10px; }
-            .reference { border: 1px solid #e2e8f0; padding: 10px; font-size: 12px; }
-            .fields { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; }
-            .field { min-height: 58px; padding: 9px 10px; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+            .reference { border: 1px solid #475569; padding: 10px; font-size: 12px; }
+            .fields { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1.5px solid #334155; border-left: 1.5px solid #334155; }
+            .field { min-height: 58px; padding: 9px 10px; border-right: 1.5px solid #334155; border-bottom: 1.5px solid #334155; }
             .field.wide { grid-column: 1 / -1; }
             table { width: 100%; border-collapse: collapse; font-size: 12px; }
             th { background: #f8fafc; font-weight: 800; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; word-break: break-word; }
-            .attachments { margin: 0; padding: 0; list-style: none; border: 1px solid #e2e8f0; }
-            .attachments li { display: flex; justify-content: space-between; gap: 16px; padding: 9px 10px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
+            th, td { border: 1.5px solid #334155; padding: 8px; text-align: left; word-break: break-word; }
+            .attachments { margin: 0; padding: 0; list-style: none; border: 1.5px solid #334155; }
+            .attachments li { display: flex; justify-content: space-between; gap: 16px; padding: 9px 10px; border-bottom: 1px solid #64748b; font-size: 12px; }
             .attachments li:last-child { border-bottom: 0; }
             .attachments .empty { color: #64748b; }
-            footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 10px; }
+            footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #64748b; color: #475569; font-size: 10px; }
             .keep-together { break-inside: avoid; page-break-inside: avoid; }
             @page { size: A4; margin: 0; }
             @media print { .page { margin: 0; } }
