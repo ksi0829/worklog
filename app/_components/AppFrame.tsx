@@ -74,7 +74,7 @@ const MENU_ITEMS: MenuItem[] = [
 ];
 
 const ADMIN_MENU_ITEM: MenuItem = {
-  title: "그룹웨어 관리",
+  title: "관리자",
   path: "/admin",
   icon: "admin",
   description: "운영 현황",
