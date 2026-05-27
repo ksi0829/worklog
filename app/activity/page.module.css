@@ -29,8 +29,11 @@
 }
 
 .card {
-  padding: 15px 16px;
   overflow: hidden;
+}
+
+.cardInner {
+  padding: 17px 18px;
 }
 
 .presenceCard {
@@ -240,8 +243,8 @@
     min-width: 70px;
   }
 
-  .card {
-    padding: 12px;
+  .cardInner {
+    padding: 13px;
   }
 
   .presenceControls {

@@ -206,40 +206,42 @@ export default function ActivityPage() {
       {message && <div style={styles.messageBox}>{message}</div>}
 
       <section className={`${activityStyles.card} ${activityStyles.presenceCard}`}>
-        <div className={`${activityStyles.cardHeader} ${activityStyles.presenceHeader}`}>
-          <div className={activityStyles.headingBlock}>
-            <h3>현재 접속 인원</h3>
-            <p>최근 15분 내 활동 기준</p>
+        <div className={activityStyles.cardInner}>
+          <div className={`${activityStyles.cardHeader} ${activityStyles.presenceHeader}`}>
+            <div className={activityStyles.headingBlock}>
+              <h3>현재 접속 인원</h3>
+              <p>최근 15분 내 활동 기준</p>
+            </div>
+            <div className={activityStyles.presenceControls}>
+              <span>{loading ? "불러오는 중" : `${activeSummaries.length}명`}</span>
+              <button
+                type="button"
+                className={activityStyles.refreshButton}
+                onClick={() => void loadLogs()}
+              >
+                새로고침
+              </button>
+            </div>
           </div>
-          <div className={activityStyles.presenceControls}>
-            <span>{loading ? "불러오는 중" : `${activeSummaries.length}명`}</span>
-            <button
-              type="button"
-              className={activityStyles.refreshButton}
-              onClick={() => void loadLogs()}
-            >
-              새로고침
-            </button>
-          </div>
-        </div>
-        {activeSummaries.length === 0 ? (
-          <div style={styles.emptyBox}>현재 접속 중으로 확인되는 인원이 없습니다.</div>
-        ) : (
-          <div className={activityStyles.presenceList}>
-            {activeSummaries.map((summary) => (
-              <div key={summary.userId} className={activityStyles.presenceRow}>
-                <span className={activityStyles.onlineLamp} />
-                <div className={activityStyles.presenceIdentity}>
-                  <strong>{summary.name}</strong>
-                  <span>{summary.team}</span>
+          {activeSummaries.length === 0 ? (
+            <div style={styles.emptyBox}>현재 접속 중으로 확인되는 인원이 없습니다.</div>
+          ) : (
+            <div className={activityStyles.presenceList}>
+              {activeSummaries.map((summary) => (
+                <div key={summary.userId} className={activityStyles.presenceRow}>
+                  <span className={activityStyles.onlineLamp} />
+                  <div className={activityStyles.presenceIdentity}>
+                    <strong>{summary.name}</strong>
+                    <span>{summary.team}</span>
+                  </div>
+                  <span className={activityStyles.presenceTime}>
+                    최근 활동 {formatDateTime(summary.latestActivity || summary.latestAt)}
+                  </span>
                 </div>
-                <span className={activityStyles.presenceTime}>
-                  최근 활동 {formatDateTime(summary.latestActivity || summary.latestAt)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       {isAdmin && (
@@ -260,99 +262,103 @@ export default function ActivityPage() {
           </section>
 
           <section className={activityStyles.card}>
-            <div className={activityStyles.cardHeader}>
-              <h3>사용자별 최근 상태</h3>
-              <span>{loading ? "불러오는 중" : `${summaries.length}명`}</span>
-            </div>
-            <p className={activityStyles.sectionHint}>
-              사용자별 가장 최근 상태만 표시됩니다.
-            </p>
-            <div className={activityStyles.desktopTable}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>상태</th>
-                    <th style={styles.th}>사용자</th>
-                    <th style={styles.th}>부서</th>
-                    <th style={styles.th}>권한</th>
-                    <th style={styles.th}>최근 로그인</th>
-                    <th style={styles.th}>최근 활동</th>
-                    <th style={styles.th}>로그아웃</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summaries.map((summary) => (
-                    <tr key={summary.userId}>
-                      <td style={styles.td}>
-                        <span style={isActive(summary) ? styles.statusOnline : styles.statusOffline}>
-                          {isActive(summary) ? "접속 추정" : eventLabel(summary.latestEvent)}
-                        </span>
-                      </td>
-                      <td style={styles.tdStrong}>{summary.name}</td>
-                      <td style={styles.td}>{summary.team}</td>
-                      <td style={styles.td}>{summary.role}</td>
-                      <td style={styles.td}>{formatDateTime(summary.latestLogin)}</td>
-                      <td style={styles.td}>{formatDateTime(summary.latestActivity || summary.latestAt)}</td>
-                      <td style={styles.td}>{formatDateTime(summary.latestLogout)}</td>
+            <div className={activityStyles.cardInner}>
+              <div className={activityStyles.cardHeader}>
+                <h3>사용자별 최근 상태</h3>
+                <span>{loading ? "불러오는 중" : `${summaries.length}명`}</span>
+              </div>
+              <p className={activityStyles.sectionHint}>
+                사용자별 가장 최근 상태만 표시됩니다.
+              </p>
+              <div className={activityStyles.desktopTable}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>상태</th>
+                      <th style={styles.th}>사용자</th>
+                      <th style={styles.th}>부서</th>
+                      <th style={styles.th}>권한</th>
+                      <th style={styles.th}>최근 로그인</th>
+                      <th style={styles.th}>최근 활동</th>
+                      <th style={styles.th}>로그아웃</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className={activityStyles.mobileSummaryList}>
-              {summaries.map((summary) => (
-                <div key={summary.userId} className={activityStyles.summaryRow}>
-                  <div className={activityStyles.summaryIdentity}>
-                    <strong>{summary.name}</strong>
-                    <span>{summary.team} / {summary.role}</span>
+                  </thead>
+                  <tbody>
+                    {summaries.map((summary) => (
+                      <tr key={summary.userId}>
+                        <td style={styles.td}>
+                          <span style={isActive(summary) ? styles.statusOnline : styles.statusOffline}>
+                            {isActive(summary) ? "접속 추정" : eventLabel(summary.latestEvent)}
+                          </span>
+                        </td>
+                        <td style={styles.tdStrong}>{summary.name}</td>
+                        <td style={styles.td}>{summary.team}</td>
+                        <td style={styles.td}>{summary.role}</td>
+                        <td style={styles.td}>{formatDateTime(summary.latestLogin)}</td>
+                        <td style={styles.td}>{formatDateTime(summary.latestActivity || summary.latestAt)}</td>
+                        <td style={styles.td}>{formatDateTime(summary.latestLogout)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className={activityStyles.mobileSummaryList}>
+                {summaries.map((summary) => (
+                  <div key={summary.userId} className={activityStyles.summaryRow}>
+                    <div className={activityStyles.summaryIdentity}>
+                      <strong>{summary.name}</strong>
+                      <span>{summary.team} / {summary.role}</span>
+                    </div>
+                    <span style={isActive(summary) ? styles.statusOnline : styles.statusOffline}>
+                      {isActive(summary) ? "접속 추정" : eventLabel(summary.latestEvent)}
+                    </span>
+                    <div className={activityStyles.summaryTimes}>
+                      <span>로그인 {formatDateTime(summary.latestLogin)}</span>
+                      <span>활동 {formatDateTime(summary.latestActivity || summary.latestAt)}</span>
+                      <span>종료 {formatDateTime(summary.latestLogout)}</span>
+                    </div>
                   </div>
-                  <span style={isActive(summary) ? styles.statusOnline : styles.statusOffline}>
-                    {isActive(summary) ? "접속 추정" : eventLabel(summary.latestEvent)}
-                  </span>
-                  <div className={activityStyles.summaryTimes}>
-                    <span>로그인 {formatDateTime(summary.latestLogin)}</span>
-                    <span>활동 {formatDateTime(summary.latestActivity || summary.latestAt)}</span>
-                    <span>종료 {formatDateTime(summary.latestLogout)}</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </section>
 
           <section className={activityStyles.card}>
-            <div className={activityStyles.cardHeader}>
-              <h3>최근 활동 로그</h3>
-              <span>{logs.length}건</span>
-            </div>
-            <div className={activityStyles.dayList}>
-              {groupedLogs.map(([label, dailyLogs], index) => (
-                <details
-                  key={label}
-                  className={activityStyles.dayGroup}
-                  open={index === 0}
-                >
-                  <summary className={activityStyles.dayHeader}>
-                    <strong>{label}</strong>
-                    <span>{dailyLogs.length}건</span>
-                  </summary>
-                  <div className={activityStyles.logList}>
-                    {dailyLogs.map((log) => (
-                      <div key={log.id} className={activityStyles.logItem}>
-                        <span style={{ ...styles.badge, ...eventStyle(log.event_type) }}>
-                          {eventLabel(log.event_type)}
-                        </span>
-                        <strong>{log.user_name || "-"}</strong>
-                        <span>{log.team || "-"}</span>
-                        <span className={activityStyles.path}>{log.path || "-"}</span>
-                        <time>{formatDateTime(log.created_at)}</time>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ))}
-              {!loading && groupedLogs.length === 0 && (
-                <div style={styles.emptyBox}>저장된 활동 로그가 없습니다.</div>
-              )}
+            <div className={activityStyles.cardInner}>
+              <div className={activityStyles.cardHeader}>
+                <h3>최근 활동 로그</h3>
+                <span>{logs.length}건</span>
+              </div>
+              <div className={activityStyles.dayList}>
+                {groupedLogs.map(([label, dailyLogs], index) => (
+                  <details
+                    key={label}
+                    className={activityStyles.dayGroup}
+                    open={index === 0}
+                  >
+                    <summary className={activityStyles.dayHeader}>
+                      <strong>{label}</strong>
+                      <span>{dailyLogs.length}건</span>
+                    </summary>
+                    <div className={activityStyles.logList}>
+                      {dailyLogs.map((log) => (
+                        <div key={log.id} className={activityStyles.logItem}>
+                          <span style={{ ...styles.badge, ...eventStyle(log.event_type) }}>
+                            {eventLabel(log.event_type)}
+                          </span>
+                          <strong>{log.user_name || "-"}</strong>
+                          <span>{log.team || "-"}</span>
+                          <span className={activityStyles.path}>{log.path || "-"}</span>
+                          <time>{formatDateTime(log.created_at)}</time>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+                {!loading && groupedLogs.length === 0 && (
+                  <div style={styles.emptyBox}>저장된 활동 로그가 없습니다.</div>
+                )}
+              </div>
             </div>
           </section>
         </>

@@ -393,45 +393,47 @@ export default function AdminPage() {
       </section>
 
       <section style={styles.settingsCard}>
-        <div style={styles.cardHeader}>
-          <div>
-            <h3 style={styles.cardTitle}>관리 기준 설정</h3>
-            <p style={styles.cardHint}>용량 경고와 오래된 파일 후보를 판단하는 기준입니다. Supabase 요금제 한도 자체를 변경하지는 않습니다.</p>
+        <div style={styles.settingsInner}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h3 style={styles.cardTitle}>관리 기준 설정</h3>
+              <p style={styles.cardHint}>용량 경고와 오래된 파일 후보를 판단하는 기준입니다. Supabase 요금제 한도 자체를 변경하지는 않습니다.</p>
+            </div>
           </div>
+          {!settingsReady ? (
+            <div style={styles.setupNotice}>
+              설정 저장 기능을 사용하려면 `project-docs/supabase-admin-dashboard-settings.sql`을 한 번 실행해 주세요.
+            </div>
+          ) : (
+            <div style={styles.settingsRow}>
+              <label style={styles.settingField}>
+                <span>용량 경고 기준 (MB)</span>
+                <input
+                  type="number"
+                  min={100}
+                  max={10240}
+                  value={warningLimitMb}
+                  onChange={(event) => setWarningLimitMb(Number(event.target.value))}
+                  style={styles.settingInput}
+                />
+              </label>
+              <label style={styles.settingField}>
+                <span>정리 후보 기준 (일)</span>
+                <input
+                  type="number"
+                  min={30}
+                  max={3650}
+                  value={cleanupCandidateDays}
+                  onChange={(event) => setCleanupCandidateDays(Number(event.target.value))}
+                  style={styles.settingInput}
+                />
+              </label>
+              <button type="button" style={styles.primaryButton} onClick={() => void saveSettings()} disabled={managementBusy}>
+                설정 저장
+              </button>
+            </div>
+          )}
         </div>
-        {!settingsReady ? (
-          <div style={styles.setupNotice}>
-            설정 저장 기능을 사용하려면 `project-docs/supabase-admin-dashboard-settings.sql`을 한 번 실행해 주세요.
-          </div>
-        ) : (
-          <div style={styles.settingsRow}>
-            <label style={styles.settingField}>
-              <span>용량 경고 기준 (MB)</span>
-              <input
-                type="number"
-                min={100}
-                max={10240}
-                value={warningLimitMb}
-                onChange={(event) => setWarningLimitMb(Number(event.target.value))}
-                style={styles.settingInput}
-              />
-            </label>
-            <label style={styles.settingField}>
-              <span>정리 후보 기준 (일)</span>
-              <input
-                type="number"
-                min={30}
-                max={3650}
-                value={cleanupCandidateDays}
-                onChange={(event) => setCleanupCandidateDays(Number(event.target.value))}
-                style={styles.settingInput}
-              />
-            </label>
-            <button type="button" style={styles.primaryButton} onClick={() => void saveSettings()} disabled={managementBusy}>
-              설정 저장
-            </button>
-          </div>
-        )}
       </section>
 
       <div style={styles.twoColumn}>
@@ -484,48 +486,50 @@ export default function AdminPage() {
       </div>
 
       <section style={styles.card}>
-        <div style={styles.cardHeader}>
-          <div>
-            <h3 style={styles.cardTitle}>첨부파일 관리</h3>
-            <p style={styles.cardHint}>삭제하면 해당 파일만 제거되며 결재문서 내용은 유지됩니다.</p>
+        <div style={styles.cardInner}>
+          <div style={styles.cardHeader}>
+            <div>
+              <h3 style={styles.cardTitle}>첨부파일 관리</h3>
+              <p style={styles.cardHint}>삭제하면 해당 파일만 제거되며 결재문서 내용은 유지됩니다.</p>
+            </div>
+            <span style={styles.cardCount}>{attachments.length}건</span>
           </div>
-          <span style={styles.cardCount}>{attachments.length}건</span>
+          {attachments.length === 0 ? (
+            <div style={styles.emptyBox}>관리할 첨부파일이 없습니다.</div>
+          ) : (
+            <div style={styles.managementList}>
+              {attachments.map((attachment) => (
+                <div key={attachment.id} style={styles.managementItem}>
+                  <div style={styles.listText}>
+                    <strong>{attachment.original_name}</strong>
+                    <span>
+                      {documentsById.get(attachment.document_id)?.title || "연결 문서"} / {formatDate(attachment.created_at)}
+                    </span>
+                  </div>
+                  <em style={styles.fileSize}>{formatBytes(attachment.size_bytes)}</em>
+                  <div style={styles.itemActions}>
+                    <button
+                      type="button"
+                      style={styles.secondaryButton}
+                      disabled={managementBusy}
+                      onClick={() => void downloadAttachment(attachment)}
+                    >
+                      다운로드
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.dangerButton}
+                      disabled={managementBusy}
+                      onClick={() => void deleteAttachment(attachment)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {attachments.length === 0 ? (
-          <div style={styles.emptyBox}>관리할 첨부파일이 없습니다.</div>
-        ) : (
-          <div style={styles.managementList}>
-            {attachments.map((attachment) => (
-              <div key={attachment.id} style={styles.managementItem}>
-                <div style={styles.listText}>
-                  <strong>{attachment.original_name}</strong>
-                  <span>
-                    {documentsById.get(attachment.document_id)?.title || "연결 문서"} / {formatDate(attachment.created_at)}
-                  </span>
-                </div>
-                <em style={styles.fileSize}>{formatBytes(attachment.size_bytes)}</em>
-                <div style={styles.itemActions}>
-                  <button
-                    type="button"
-                    style={styles.secondaryButton}
-                    disabled={managementBusy}
-                    onClick={() => void downloadAttachment(attachment)}
-                  >
-                    다운로드
-                  </button>
-                  <button
-                    type="button"
-                    style={styles.dangerButton}
-                    disabled={managementBusy}
-                    onClick={() => void deleteAttachment(attachment)}
-                  >
-                    삭제
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
       <div style={styles.twoColumn}>
@@ -682,7 +686,10 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #e5e7eb",
     borderRadius: "12px",
     background: "#ffffff",
-    padding: "16px",
+    overflow: "hidden",
+  },
+  settingsInner: {
+    padding: "18px 20px",
   },
   card: {
     border: "1px solid #e5e7eb",
@@ -690,6 +697,9 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     padding: "16px",
     minWidth: 0,
+  },
+  cardInner: {
+    padding: "18px 20px",
   },
   cardHeader: {
     display: "flex",
