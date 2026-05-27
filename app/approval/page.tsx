@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
 import {
   EXECUTIVE_NAMES,
   ORG_MEMBER_MAP,
@@ -98,6 +98,17 @@ type ApprovalDocumentRow = {
   approval_lines?: ApprovalLineRow[];
 };
 
+type ApprovalAttachmentRow = {
+  id: number;
+  document_id: number;
+  storage_path: string;
+  original_name: string;
+  mime_type: string | null;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: string;
+};
+
 type NotificationRow = {
   id: number;
   user_id: string;
@@ -135,6 +146,21 @@ type CustomerOption = {
 const supabase = createSupabaseBrowser();
 const today = new Date().toISOString().slice(0, 10);
 const DEFAULT_APPROVER_COUNT = 3;
+const APPROVAL_ATTACHMENT_BUCKET = "approval-attachments";
+const APPROVAL_ATTACHMENT_ACCEPT = ".xlsx,.xls,.pdf,.jpg,.jpeg,.png,.dwg,.dxf,.zip";
+const MAX_ATTACHMENT_COUNT = 10;
+const MAX_ATTACHMENT_SIZE = 30 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([
+  "xlsx",
+  "xls",
+  "pdf",
+  "jpg",
+  "jpeg",
+  "png",
+  "dwg",
+  "dxf",
+  "zip",
+]);
 
 const equipmentStageByTemplate: Partial<Record<string, EquipmentStageKey>> = {
   manufacturing_request: "manufacturingRequest",
@@ -270,7 +296,7 @@ const templates: TemplateDef[] = [
       { key: "productSpec", label: "제품규격", type: "textarea", span: 2 },
       { key: "additional", label: "추가사항", type: "textarea", span: 2 },
       { key: "reference", label: "참고사항", type: "textarea", span: 2 },
-      { key: "attachment", label: "첨부", type: "text", span: 2 },
+      { key: "attachment", label: "첨부 메모(기존)", type: "text", span: 2 },
     ],
     tables: [{ key: "specs", title: "Specification", columns: [{ key: "content", label: "내용" }], initialRows: 4 }],
   },
@@ -481,6 +507,37 @@ function getErrorMessage(error: unknown) {
 function getRows(value: unknown): Record<string, string>[] {
   if (!Array.isArray(value)) return [];
   return value.filter((row): row is Record<string, string> => row && typeof row === "object");
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileExtension(fileName: string) {
+  const extension = fileName.split(".").pop()?.toLowerCase() || "";
+  return extension;
+}
+
+function validateAttachmentFiles(files: File[], existingCount = 0) {
+  if (existingCount + files.length > MAX_ATTACHMENT_COUNT) {
+    return `첨부파일은 문서당 최대 ${MAX_ATTACHMENT_COUNT}개까지 등록할 수 있습니다.`;
+  }
+
+  for (const file of files) {
+    const extension = getFileExtension(file.name);
+
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.has(extension)) {
+      return `${file.name}: 엑셀, PDF, 이미지, DWG/DXF, ZIP 파일만 첨부할 수 있습니다.`;
+    }
+
+    if (file.size <= 0 || file.size > MAX_ATTACHMENT_SIZE) {
+      return `${file.name}: 파일 크기는 30MB 이하여야 합니다.`;
+    }
+  }
+
+  return "";
 }
 
 function formatDate(value?: string | null) {
@@ -745,6 +802,10 @@ export default function ApprovalPage() {
   const [equipmentOrders, setEquipmentOrders] = useState<EquipmentOrderRow[]>([]);
   const [selectedEquipmentOrderId, setSelectedEquipmentOrderId] = useState("");
   const [documents, setDocuments] = useState<ApprovalDocumentRow[]>([]);
+  const [attachments, setAttachments] = useState<ApprovalAttachmentRow[]>([]);
+  const [pendingAttachmentFiles, setPendingAttachmentFiles] = useState<File[]>([]);
+  const [attachmentFeatureReady, setAttachmentFeatureReady] = useState(false);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentName, setCurrentName] = useState("");
@@ -1019,6 +1080,19 @@ export default function ApprovalPage() {
     setDocuments(normalizedDocuments);
     setSelectedDocumentId((prev) => prev || normalizedDocuments[0]?.id || null);
 
+    const { data: attachmentRows, error: attachmentError } = await supabase
+      .from("approval_attachments")
+      .select("id,document_id,storage_path,original_name,mime_type,size_bytes,uploaded_by,created_at")
+      .order("created_at", { ascending: true });
+
+    if (attachmentError) {
+      setAttachments([]);
+      setAttachmentFeatureReady(false);
+    } else {
+      setAttachments((attachmentRows || []) as ApprovalAttachmentRow[]);
+      setAttachmentFeatureReady(true);
+    }
+
     if (user?.id) {
       const { data: notificationRows } = await supabase
         .from("approval_notifications")
@@ -1083,6 +1157,7 @@ export default function ApprovalPage() {
     setApproverSlots(createDefaultApproverSlots());
     setReferenceIds([]);
     setSelectedEquipmentOrderId("");
+    setPendingAttachmentFiles([]);
     setMessage("");
   }
 
@@ -1160,6 +1235,146 @@ export default function ApprovalPage() {
 
   function handleEquipmentOrderChange(orderId: string) {
     setSelectedEquipmentOrderId(orderId);
+  }
+
+  function getDocumentAttachments(documentId: number) {
+    return attachments.filter((attachment) => attachment.document_id === documentId);
+  }
+
+  function handlePendingAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (files.length === 0) return;
+
+    const error = validateAttachmentFiles(files, pendingAttachmentFiles.length);
+    if (error) {
+      setMessage(error);
+      return;
+    }
+
+    setPendingAttachmentFiles((prev) => [...prev, ...files]);
+    setMessage("");
+  }
+
+  async function uploadFilesToDocument(documentId: number, files: File[]) {
+    const failedFiles: string[] = [];
+
+    if (!currentUserId || !attachmentFeatureReady) {
+      return ["파일 첨부 저장소가 아직 준비되지 않았습니다."];
+    }
+
+    setAttachmentBusy(true);
+
+    for (const file of files) {
+      const extension = getFileExtension(file.name);
+      const storagePath = `${currentUserId}/${documentId}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from(APPROVAL_ATTACHMENT_BUCKET)
+        .upload(storagePath, file, {
+          contentType: file.type || undefined,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        failedFiles.push(file.name);
+        continue;
+      }
+
+      const { error: metadataError } = await supabase.from("approval_attachments").insert({
+        document_id: documentId,
+        storage_path: storagePath,
+        original_name: file.name,
+        mime_type: file.type || null,
+        size_bytes: file.size,
+        uploaded_by: currentUserId,
+      });
+
+      if (metadataError) {
+        await supabase.storage.from(APPROVAL_ATTACHMENT_BUCKET).remove([storagePath]);
+        failedFiles.push(file.name);
+      }
+    }
+
+    setAttachmentBusy(false);
+    return failedFiles;
+  }
+
+  async function addFilesToExistingDocument(
+    document: ApprovalDocumentRow,
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (files.length === 0) return;
+
+    const error = validateAttachmentFiles(files, getDocumentAttachments(document.id).length);
+    if (error) {
+      setMessage(error);
+      return;
+    }
+
+    const failedFiles = await uploadFilesToDocument(document.id, files);
+    setMessage(
+      failedFiles.length > 0
+        ? `일부 파일을 첨부하지 못했습니다: ${failedFiles.join(", ")}`
+        : "첨부파일이 등록되었습니다."
+    );
+    await loadData();
+  }
+
+  async function downloadAttachment(attachment: ApprovalAttachmentRow) {
+    setAttachmentBusy(true);
+    setMessage("");
+
+    const { data, error } = await supabase.storage
+      .from(APPROVAL_ATTACHMENT_BUCKET)
+      .download(attachment.storage_path);
+
+    if (error || !data) {
+      setMessage(`첨부파일을 내려받지 못했습니다. ${getErrorMessage(error)}`);
+      setAttachmentBusy(false);
+      return;
+    }
+
+    const url = URL.createObjectURL(data);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = attachment.original_name;
+    link.click();
+    URL.revokeObjectURL(url);
+    setAttachmentBusy(false);
+  }
+
+  async function deleteAttachment(attachment: ApprovalAttachmentRow) {
+    if (!confirm(`${attachment.original_name} 파일을 삭제할까요?`)) return;
+
+    setAttachmentBusy(true);
+    setMessage("");
+
+    const { error: storageError } = await supabase.storage
+      .from(APPROVAL_ATTACHMENT_BUCKET)
+      .remove([attachment.storage_path]);
+
+    if (storageError) {
+      setMessage(`첨부파일을 삭제하지 못했습니다. ${getErrorMessage(storageError)}`);
+      setAttachmentBusy(false);
+      return;
+    }
+
+    const { error: metadataError } = await supabase
+      .from("approval_attachments")
+      .delete()
+      .eq("id", attachment.id);
+
+    if (metadataError) {
+      setMessage(`첨부 내역을 삭제하지 못했습니다. ${getErrorMessage(metadataError)}`);
+      setAttachmentBusy(false);
+      return;
+    }
+
+    setMessage("첨부파일이 삭제되었습니다.");
+    setAttachmentBusy(false);
+    await loadData();
   }
 
   async function submitDocument() {
@@ -1275,10 +1490,22 @@ export default function ApprovalPage() {
       return;
     }
 
-    setMessage("결재문서가 등록되었습니다.");
+    const failedAttachments =
+      pendingAttachmentFiles.length > 0
+        ? await uploadFilesToDocument(Number(documentId), pendingAttachmentFiles)
+        : [];
+
+    setMessage(
+      failedAttachments.length > 0
+        ? `결재문서는 등록됐지만 일부 첨부 업로드에 실패했습니다: ${failedAttachments.join(", ")}`
+        : pendingAttachmentFiles.length > 0
+          ? "결재문서와 첨부파일이 등록되었습니다."
+          : "결재문서가 등록되었습니다."
+    );
     setFormData(applyCurrentUserFields(createEmptyFormData(selectedTemplate), currentName, currentTeam, true));
     setReferenceIds([]);
     setSelectedEquipmentOrderId("");
+    setPendingAttachmentFiles([]);
     setSaving(false);
     await loadData();
     setSelectedDocumentId(documentId);
@@ -1407,6 +1634,19 @@ export default function ApprovalPage() {
     setSaving(true);
     setMessage("");
 
+    const storedAttachments = getDocumentAttachments(selectedDocument.id);
+    if (storedAttachments.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from(APPROVAL_ATTACHMENT_BUCKET)
+        .remove(storedAttachments.map((attachment) => attachment.storage_path));
+
+      if (storageError) {
+        setMessage(`문서의 첨부파일을 정리하지 못했습니다. ${getErrorMessage(storageError)}`);
+        setSaving(false);
+        return;
+      }
+    }
+
     await supabase
       .from("approval_notifications")
       .delete()
@@ -1514,6 +1754,67 @@ export default function ApprovalPage() {
           다음 결재: {pendingLine ? `${pendingLine.approver_name} (${pendingLine.role_label})` : "-"}
         </span>
       </button>
+    );
+  };
+  const renderAttachments = (document: ApprovalDocumentRow) => {
+    const rows = getDocumentAttachments(document.id);
+    const canAdd = document.status === "pending" && isCurrentRequester(document);
+    const canRemove = isAdmin || canAdd;
+
+    return (
+      <section style={styles.attachmentDetailBox}>
+        <div style={styles.attachmentHeader}>
+          <strong>첨부파일</strong>
+          <span>{rows.length}개</span>
+        </div>
+        {rows.length === 0 ? (
+          <p style={styles.attachmentEmpty}>등록된 첨부파일이 없습니다.</p>
+        ) : (
+          <div style={styles.attachmentList}>
+            {rows.map((attachment) => (
+              <div key={attachment.id} style={styles.attachmentItem}>
+                <div style={styles.attachmentFileInfo}>
+                  <strong>{attachment.original_name}</strong>
+                  <span>{formatFileSize(attachment.size_bytes)}</span>
+                </div>
+                <div style={styles.attachmentActions}>
+                  <button
+                    type="button"
+                    style={styles.ghostButton}
+                    disabled={attachmentBusy}
+                    onClick={() => downloadAttachment(attachment)}
+                  >
+                    다운로드
+                  </button>
+                  {canRemove && (
+                    <button
+                      type="button"
+                      style={styles.smallDangerButton}
+                      disabled={attachmentBusy}
+                      onClick={() => deleteAttachment(attachment)}
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {canAdd && attachmentFeatureReady && rows.length < MAX_ATTACHMENT_COUNT && (
+          <label style={styles.attachmentAddButton}>
+            파일 추가
+            <input
+              type="file"
+              multiple
+              accept={APPROVAL_ATTACHMENT_ACCEPT}
+              style={styles.hiddenFileInput}
+              disabled={attachmentBusy}
+              onChange={(event) => addFilesToExistingDocument(document, event)}
+            />
+          </label>
+        )}
+      </section>
     );
   };
 
@@ -1940,6 +2241,57 @@ export default function ApprovalPage() {
             </>
           )}
 
+          <section style={styles.attachmentUploadBox}>
+            <div style={styles.attachmentHeader}>
+              <div>
+                <h3 style={styles.sectionTitle}>파일 첨부</h3>
+                <p style={styles.panelSubText}>엑셀, PDF, 이미지, DWG/DXF, ZIP 파일 · 파일당 최대 30MB · 최대 10개</p>
+              </div>
+              {attachmentFeatureReady && (
+                <label style={styles.attachmentAddButton}>
+                  파일 선택
+                  <input
+                    type="file"
+                    multiple
+                    accept={APPROVAL_ATTACHMENT_ACCEPT}
+                    style={styles.hiddenFileInput}
+                    disabled={saving}
+                    onChange={handlePendingAttachmentChange}
+                  />
+                </label>
+              )}
+            </div>
+            {!attachmentFeatureReady ? (
+              <p style={styles.attachmentNotice}>
+                파일 첨부 기능은 저장소 설정 SQL 적용 후 사용할 수 있습니다. 기존 결재 등록은 그대로 이용할 수 있습니다.
+              </p>
+            ) : pendingAttachmentFiles.length === 0 ? (
+              <p style={styles.attachmentEmpty}>상신할 파일을 선택해 주세요.</p>
+            ) : (
+              <div style={styles.attachmentList}>
+                {pendingAttachmentFiles.map((file, index) => (
+                  <div key={`${file.name}-${file.lastModified}-${index}`} style={styles.attachmentItem}>
+                    <div style={styles.attachmentFileInfo}>
+                      <strong>{file.name}</strong>
+                      <span>{formatFileSize(file.size)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      style={styles.smallDangerButton}
+                      onClick={() =>
+                        setPendingAttachmentFiles((prev) =>
+                          prev.filter((_, currentIndex) => currentIndex !== index)
+                        )
+                      }
+                    >
+                      제거
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
         </section>
 
         <aside
@@ -2103,6 +2455,8 @@ export default function ApprovalPage() {
                 </div>
               )}
 
+              {renderAttachments(selectedDocument)}
+
               {canAct && (
                 <div style={styles.actionRow}>
                   <button
@@ -2202,6 +2556,8 @@ export default function ApprovalPage() {
                 </div>
               ))}
             </div>
+
+            {renderAttachments(detailModalDocument)}
 
             {(templateMap[detailModalDocument.template_key]?.tables || []).map((table) => {
               const rows = getRows(detailModalDocument.form_data[table.key]);
@@ -2414,7 +2770,7 @@ function LegacyManufacturingForm({
             />
           </label>
           <label style={styles.legacyWideRow}>
-            <span>첨 부</span>
+            <span>첨부 메모(기존)</span>
             <input
               style={styles.legacyInput}
               value={value("attachment")}
@@ -3054,6 +3410,94 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     cursor: "pointer",
     whiteSpace: "nowrap",
+  },
+  attachmentUploadBox: {
+    marginTop: "18px",
+    border: "1px solid #e1e5ea",
+    borderRadius: "8px",
+    background: "#fbfcfd",
+    padding: "14px",
+  },
+  attachmentDetailBox: {
+    marginTop: "14px",
+    border: "1px solid #edf0f3",
+    borderRadius: "8px",
+    background: "#ffffff",
+    padding: "10px",
+  },
+  attachmentHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    color: "#344054",
+    fontSize: "12px",
+    fontWeight: 800,
+    marginBottom: "9px",
+  },
+  attachmentNotice: {
+    margin: 0,
+    borderRadius: "7px",
+    background: "#fffbeb",
+    color: "#92400e",
+    padding: "10px",
+    fontSize: "12px",
+    fontWeight: 700,
+    lineHeight: 1.5,
+  },
+  attachmentEmpty: {
+    margin: 0,
+    color: "#667085",
+    fontSize: "12px",
+    fontWeight: 600,
+  },
+  attachmentList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "7px",
+  },
+  attachmentItem: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    border: "1px solid #edf0f3",
+    borderRadius: "7px",
+    background: "#ffffff",
+    padding: "8px",
+  },
+  attachmentFileInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "3px",
+    minWidth: 0,
+    color: "#111827",
+    fontSize: "12px",
+    wordBreak: "break-all",
+  },
+  attachmentActions: {
+    display: "flex",
+    gap: "5px",
+    flexShrink: 0,
+  },
+  attachmentAddButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: "72px",
+    height: "32px",
+    border: "1px solid #0f8a56",
+    borderRadius: "7px",
+    background: "#ffffff",
+    color: "#0f8a56",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: 800,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  hiddenFileInput: {
+    display: "none",
   },
   tableSection: {
     marginTop: "20px",
