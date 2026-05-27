@@ -636,6 +636,117 @@
   cursor: pointer;
 }
 
+.messageAttachments {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.attachmentDownload {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #d7e2ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attachmentDownload strong {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentDownload span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.attachmentDownload:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.composer {
+  flex: none;
+  border-top: 1px solid #e5eaf0;
+  background: #fff;
+}
+
+.pendingAttachments {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px 0;
+}
+
+.pendingAttachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #dce6ef;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pendingAttachment span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pendingAttachment button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.attachButton {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  border: 1px solid #c9dbd2;
+  border-radius: 10px;
+  background: #f1faf5;
+  color: #087747;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.attachButton input {
+  display: none;
+}
+
+.attachButtonDisabled {
+  border-color: #dbe3eb;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .unreadMarker {
   flex: none;
   margin-bottom: 4px;
@@ -852,7 +963,7 @@
   }
 
   .inputRow {
-    grid-template-columns: minmax(0, 1fr) 64px !important;
+    grid-template-columns: auto minmax(0, 1fr) 64px !important;
     padding: 10px 12px max(10px, env(safe-area-inset-bottom)) !important;
   }
 }

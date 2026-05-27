@@ -61,6 +61,11 @@ type AttachmentDeletionLogRow = {
   completed_at: string | null;
 };
 
+type ChatAttachmentSummaryRow = {
+  attachment_count: number;
+  total_bytes: number;
+};
+
 function formatBytes(sizeBytes: number) {
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   if (sizeBytes < 1024 * 1024 * 1024) return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -107,6 +112,9 @@ export default function AdminPage() {
   const [managementBusy, setManagementBusy] = useState(false);
   const [deletionAuditReady, setDeletionAuditReady] = useState(false);
   const [deletionLogs, setDeletionLogs] = useState<AttachmentDeletionLogRow[]>([]);
+  const [chatAttachmentSummaryReady, setChatAttachmentSummaryReady] = useState(false);
+  const [chatAttachmentCount, setChatAttachmentCount] = useState(0);
+  const [chatAttachmentBytes, setChatAttachmentBytes] = useState(0);
 
   const loadDashboard = useCallback(async (preserveMessage = false) => {
     setLoading(true);
@@ -138,7 +146,7 @@ export default function AdminPage() {
 
     setIsAuthorized(true);
 
-    const [attachmentResult, documentResult, profileResult, activityResult, settingsResult, deletionLogResult] = await Promise.all([
+    const [attachmentResult, documentResult, profileResult, activityResult, settingsResult, deletionLogResult, chatAttachmentSummaryResult] = await Promise.all([
       supabase
         .from("approval_attachments")
         .select("id,document_id,storage_path,original_name,size_bytes,created_at")
@@ -163,6 +171,7 @@ export default function AdminPage() {
         .select("id,document_title,original_name,size_bytes,deletion_reason,operation_status,deleted_by_name,requested_at,completed_at")
         .order("requested_at", { ascending: false })
         .limit(20),
+      supabase.rpc("get_chat_attachment_admin_summary"),
     ]);
 
     const errors = [
@@ -196,6 +205,16 @@ export default function AdminPage() {
     } else {
       setDeletionAuditReady(true);
       setDeletionLogs((deletionLogResult.data || []) as AttachmentDeletionLogRow[]);
+    }
+    if (chatAttachmentSummaryResult.error || !chatAttachmentSummaryResult.data?.[0]) {
+      setChatAttachmentSummaryReady(false);
+      setChatAttachmentCount(0);
+      setChatAttachmentBytes(0);
+    } else {
+      const summary = chatAttachmentSummaryResult.data[0] as ChatAttachmentSummaryRow;
+      setChatAttachmentSummaryReady(true);
+      setChatAttachmentCount(Number(summary.attachment_count));
+      setChatAttachmentBytes(Number(summary.total_bytes));
     }
     setDashboardAsOf(Date.now());
     setLoading(false);
@@ -410,7 +429,7 @@ export default function AdminPage() {
             <span style={styles.kicker}>ADMIN DASHBOARD</span>
             <h2 style={styles.title}>그룹웨어 운영 현황</h2>
             <p style={styles.description}>
-              결재 첨부 사용량과 운영 기준을 관리합니다.
+              결재 및 채팅 첨부 사용량과 운영 기준을 관리합니다.
             </p>
           </div>
           <button type="button" style={styles.refreshButton} onClick={() => void loadDashboard()} disabled={loading}>
@@ -426,6 +445,17 @@ export default function AdminPage() {
           <span style={styles.summaryLabel}>결재 첨부 사용량</span>
           <strong style={styles.summaryValue}>{formatBytes(totalAttachmentBytes)}</strong>
           <span style={styles.summaryHint}>{attachments.length}개 파일 / 경고 기준 {formatBytes(warningLimitMb * 1024 * 1024)}</span>
+        </div>
+        <div style={styles.summaryCard}>
+          <span style={styles.summaryLabel}>채팅 첨부 사용량</span>
+          <strong style={styles.summaryValue}>
+            {chatAttachmentSummaryReady ? formatBytes(chatAttachmentBytes) : "-"}
+          </strong>
+          <span style={styles.summaryHint}>
+            {chatAttachmentSummaryReady
+              ? `${chatAttachmentCount}개 파일 / 대화 참여자만 다운로드 가능`
+              : "채팅 첨부 SQL 적용 후 집계"}
+          </span>
         </div>
         <div style={styles.summaryCard}>
           <span style={styles.summaryLabel}>결재 대기</span>

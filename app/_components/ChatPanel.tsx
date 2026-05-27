@@ -21,6 +21,16 @@ import chatStyles from "./ChatPanel.module.css";
 
 const supabase = createSupabaseBrowser();
 const MESSAGE_PAGE_SIZE = 50;
+const CHAT_ATTACHMENT_BUCKET = "chat-attachments";
+const MAX_CHAT_ATTACHMENT_COUNT = 5;
+const MAX_CHAT_ATTACHMENT_BYTES = 30 * 1024 * 1024;
+const CHAT_ATTACHMENT_EXTENSIONS = new Set([
+  "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp",
+  "xlsx", "xls", "csv", "docx", "doc", "pptx", "ppt",
+  "dwg", "dxf", "zip",
+]);
+const CHAT_ATTACHMENT_ACCEPT =
+  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.xlsx,.xls,.csv,.docx,.doc,.pptx,.ppt,.dwg,.dxf,.zip";
 const DIVISION_HEAD_NAMES = ["정대용", "서중석", "장동철"];
 const CHAT_TEAM_ORDER = [
   "재무/인사",
@@ -103,6 +113,18 @@ type ChatPinnedMessageRow = {
   message: ChatMessageRow;
 };
 
+type ChatAttachmentRow = {
+  id: number;
+  thread_id: number;
+  message_id: number;
+  storage_path: string;
+  original_name: string;
+  mime_type: string | null;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: string;
+};
+
 type ChatPresenceRow = {
   user_id: string;
   visible: boolean;
@@ -169,6 +191,32 @@ function formatChatDate(value: string) {
   });
 }
 
+function formatAttachmentSize(sizeBytes: number) {
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getAttachmentExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLocaleLowerCase() || "";
+}
+
+function getAttachmentValidationError(files: File[]) {
+  if (files.length > MAX_CHAT_ATTACHMENT_COUNT) {
+    return `파일은 한 번에 최대 ${MAX_CHAT_ATTACHMENT_COUNT}개까지 첨부할 수 있습니다.`;
+  }
+
+  for (const file of files) {
+    if (!CHAT_ATTACHMENT_EXTENSIONS.has(getAttachmentExtension(file.name))) {
+      return `${file.name}: 이미지, PDF, Office, 엑셀, DWG/DXF, ZIP 파일만 첨부할 수 있습니다.`;
+    }
+    if (file.size <= 0 || file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+      return `${file.name}: 파일 크기는 30MB 이하만 첨부할 수 있습니다.`;
+    }
+  }
+
+  return "";
+}
+
 function isSameChatDate(left: string, right: string) {
   const leftDate = new Date(left);
   const rightDate = new Date(right);
@@ -205,6 +253,12 @@ export function ChatPanel({
   const [pinnedMessages, setPinnedMessages] = useState<ChatPinnedMessageRow[]>([]);
   const [pinFeatureReady, setPinFeatureReady] = useState(false);
   const [pinBusyMessageId, setPinBusyMessageId] = useState<number | null>(null);
+  const [attachmentsByMessageId, setAttachmentsByMessageId] = useState<
+    Record<number, ChatAttachmentRow[]>
+  >({});
+  const [attachmentFeatureReady, setAttachmentFeatureReady] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [messageBody, setMessageBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [setupError, setSetupError] = useState("");
@@ -223,6 +277,7 @@ export function ChatPanel({
   const [notificationPermission, setNotificationPermission] =
     useState<BrowserNotificationPermission>("loading");
   const messageListRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelDragRef = useRef<DragState | null>(null);
@@ -585,6 +640,30 @@ export function ChatPanel({
     setPinnedMessages(rows);
   }, []);
 
+  const loadAttachments = useCallback(async (targetThreadId: number) => {
+    const { data, error } = await supabase
+      .from("chat_attachments")
+      .select("id,thread_id,message_id,storage_path,original_name,mime_type,size_bytes,uploaded_by,created_at")
+      .eq("thread_id", targetThreadId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setAttachmentFeatureReady(false);
+      setAttachmentsByMessageId({});
+      return;
+    }
+
+    const grouped = ((data || []) as ChatAttachmentRow[]).reduce<Record<number, ChatAttachmentRow[]>>(
+      (map, attachment) => {
+        map[attachment.message_id] = [...(map[attachment.message_id] || []), attachment];
+        return map;
+      },
+      {}
+    );
+    setAttachmentFeatureReady(true);
+    setAttachmentsByMessageId(grouped);
+  }, []);
+
   const loadMessages = useCallback(
     async (
       targetThreadId: number,
@@ -721,6 +800,9 @@ export function ChatPanel({
       setSelectedGroupThread(null);
       setPinnedMessages([]);
       setPinFeatureReady(false);
+      setAttachmentsByMessageId({});
+      setAttachmentFeatureReady(false);
+      setPendingAttachments([]);
       setMobileConversationOpen(true);
       setParticipantReadStates([]);
       setLoading(true);
@@ -731,10 +813,11 @@ export function ChatPanel({
         await loadMessages(targetThreadId, { reset: true });
         await loadParticipantReadStates(targetThreadId);
         await loadPinnedMessages(targetThreadId);
+        await loadAttachments(targetThreadId);
       }
       setLoading(false);
     },
-    [findOrCreateThread, loadMessages, loadParticipantReadStates, loadPinnedMessages]
+    [findOrCreateThread, loadAttachments, loadMessages, loadParticipantReadStates, loadPinnedMessages]
   );
 
   const selectGroupThread = useCallback(
@@ -743,6 +826,9 @@ export function ChatPanel({
       setSelectedUserId("");
       setPinnedMessages([]);
       setPinFeatureReady(false);
+      setAttachmentsByMessageId({});
+      setAttachmentFeatureReady(false);
+      setPendingAttachments([]);
       setMobileConversationOpen(true);
       setParticipantReadStates([]);
       setThreadId(targetThread.id);
@@ -751,9 +837,10 @@ export function ChatPanel({
       await loadMessages(targetThread.id, { reset: true });
       await loadParticipantReadStates(targetThread.id);
       await loadPinnedMessages(targetThread.id);
+      await loadAttachments(targetThread.id);
       setLoading(false);
     },
-    [loadMessages, loadParticipantReadStates, loadPinnedMessages]
+    [loadAttachments, loadMessages, loadParticipantReadStates, loadPinnedMessages]
   );
 
   const openGroupCreator = useCallback(() => {
@@ -762,6 +849,9 @@ export function ChatPanel({
     setThreadId(null);
     setPinnedMessages([]);
     setPinFeatureReady(false);
+    setAttachmentsByMessageId({});
+    setAttachmentFeatureReady(false);
+    setPendingAttachments([]);
     setGroupTitle("");
     setGroupMemberIds([]);
     setGroupEditorMode("create");
@@ -930,6 +1020,9 @@ export function ChatPanel({
     setMessages([]);
     setPinnedMessages([]);
     setPinFeatureReady(false);
+    setAttachmentsByMessageId({});
+    setAttachmentFeatureReady(false);
+    setPendingAttachments([]);
     setMobileConversationOpen(false);
     await loadGroupThreads();
     setLoading(false);
@@ -957,16 +1050,69 @@ export function ChatPanel({
     setMessages([]);
     setPinnedMessages([]);
     setPinFeatureReady(false);
+    setAttachmentsByMessageId({});
+    setAttachmentFeatureReady(false);
+    setPendingAttachments([]);
     setMobileConversationOpen(false);
     await loadGroupThreads();
     setLoading(false);
   }, [currentUserId, loadGroupThreads, selectedGroupThread]);
 
+  const chooseAttachments = useCallback(
+    (files: FileList | null) => {
+      if (!files) return;
+      const selectedFiles = [...pendingAttachments, ...Array.from(files)];
+      const validationError = getAttachmentValidationError(selectedFiles);
+      if (validationError) {
+        setSetupError(validationError);
+      } else {
+        setSetupError("");
+        setPendingAttachments(selectedFiles);
+      }
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+    },
+    [pendingAttachments]
+  );
+
+  const downloadChatAttachment = useCallback(async (attachment: ChatAttachmentRow) => {
+    setAttachmentBusy(true);
+    setSetupError("");
+    const { data, error } = await supabase.storage
+      .from(CHAT_ATTACHMENT_BUCKET)
+      .download(attachment.storage_path);
+
+    if (error || !data) {
+      setSetupError("첨부파일을 내려받지 못했습니다. 대화방 참여 권한을 확인해 주세요.");
+      setAttachmentBusy(false);
+      return;
+    }
+
+    const url = URL.createObjectURL(data);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = attachment.original_name;
+    link.click();
+    URL.revokeObjectURL(url);
+    setAttachmentBusy(false);
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const body = messageBody.trim();
-    if (!body || (!selectedUser && !selectedGroupThread)) return;
+    const files = pendingAttachments;
+    if ((!body && files.length === 0) || (!selectedUser && !selectedGroupThread)) return;
+    if (files.length > 0 && !attachmentFeatureReady) {
+      setSetupError("채팅 첨부 저장소 SQL 적용 후 파일을 전송할 수 있습니다.");
+      return;
+    }
+
+    const validationError = getAttachmentValidationError(files);
+    if (validationError) {
+      setSetupError(validationError);
+      return;
+    }
 
     setLoading(true);
+    setAttachmentBusy(files.length > 0);
     setSetupError("");
 
     const targetThreadId =
@@ -974,41 +1120,107 @@ export function ChatPanel({
 
     if (!targetThreadId) {
       setLoading(false);
+      setAttachmentBusy(false);
       return;
     }
 
-    const { error } = await supabase
-      .from("chat_messages")
-      .insert({
-        thread_id: targetThreadId,
-        sender_id: currentUserId,
-        sender_name: currentName || "사용자",
-        sender_team: currentTeam,
-        body,
+    if (files.length > 0) {
+      const uploadedAttachments: Array<{
+        storage_path: string;
+        original_name: string;
+        mime_type: string;
+        size_bytes: number;
+      }> = [];
+
+      for (const file of files) {
+        const extension = getAttachmentExtension(file.name);
+        const storagePath = `${targetThreadId}/${currentUserId}/${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from(CHAT_ATTACHMENT_BUCKET)
+          .upload(storagePath, file, {
+            cacheControl: "3600",
+            contentType: file.type || undefined,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          if (uploadedAttachments.length > 0) {
+            await supabase.storage
+              .from(CHAT_ATTACHMENT_BUCKET)
+              .remove(uploadedAttachments.map((attachment) => attachment.storage_path));
+          }
+          setSetupError(`${file.name} 파일을 업로드하지 못했습니다.`);
+          setLoading(false);
+          setAttachmentBusy(false);
+          return;
+        }
+
+        uploadedAttachments.push({
+          storage_path: storagePath,
+          original_name: file.name,
+          mime_type: file.type,
+          size_bytes: file.size,
+        });
+      }
+
+      const { error: messageError } = await supabase.rpc("send_chat_message_with_attachments", {
+        target_thread_id: targetThreadId,
+        message_body: body,
+        attachment_rows: uploadedAttachments,
       });
 
-    if (error) {
-      setSetupError("메시지를 보내지 못했습니다.");
-      setLoading(false);
-      return;
-    }
+      if (messageError) {
+        await supabase.storage
+          .from(CHAT_ATTACHMENT_BUCKET)
+          .remove(uploadedAttachments.map((attachment) => attachment.storage_path));
+        setSetupError("첨부 메시지를 저장하지 못했습니다. 다시 시도해 주세요.");
+        setLoading(false);
+        setAttachmentBusy(false);
+        return;
+      }
 
-    await supabase
-      .from("chat_threads")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", targetThreadId);
+      setPendingAttachments([]);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+      await loadAttachments(targetThreadId);
+    } else {
+      const { error } = await supabase
+        .from("chat_messages")
+        .insert({
+          thread_id: targetThreadId,
+          sender_id: currentUserId,
+          sender_name: currentName || "사용자",
+          sender_team: currentTeam,
+          body,
+        });
+
+      if (error) {
+        setSetupError("메시지를 보내지 못했습니다.");
+        setLoading(false);
+        setAttachmentBusy(false);
+        return;
+      }
+
+      await supabase
+        .from("chat_threads")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", targetThreadId);
+    }
 
     setMessageBody("");
     setThreadId(targetThreadId);
     await loadMessages(targetThreadId);
     setLoading(false);
+    setAttachmentBusy(false);
   }, [
+    attachmentFeatureReady,
     currentName,
     currentTeam,
     currentUserId,
     findOrCreateThread,
+    loadAttachments,
     loadMessages,
     messageBody,
+    pendingAttachments,
     selectedGroupThread,
     selectedUser,
     threadId,
@@ -1103,6 +1315,7 @@ export function ChatPanel({
         void loadMessages(threadId, { preserveScroll: true });
         void loadParticipantReadStates(threadId);
         if (pinFeatureReady) void loadPinnedMessages(threadId);
+        if (attachmentFeatureReady) void loadAttachments(threadId);
       }
     }, 6000);
 
@@ -1111,7 +1324,9 @@ export function ChatPanel({
       window.clearInterval(timer);
     };
   }, [
+    attachmentFeatureReady,
     currentUserId,
+    loadAttachments,
     loadGroupThreads,
     loadMessages,
     loadOnlineUsers,
@@ -1195,6 +1410,30 @@ export function ChatPanel({
       void supabase.removeChannel(channel);
     };
   }, [currentUserId, loadPinnedMessages, pinFeatureReady, threadId]);
+
+  useEffect(() => {
+    if (!currentUserId || !threadId || !attachmentFeatureReady) return;
+
+    const channel = supabase
+      .channel(`chat-attachments-${currentUserId}-${threadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_attachments",
+          filter: `thread_id=eq.${threadId}`,
+        },
+        () => {
+          void loadAttachments(threadId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [attachmentFeatureReady, currentUserId, loadAttachments, threadId]);
 
   useEffect(() => {
     if (!open || !threadId) return;
@@ -1684,6 +1923,7 @@ export function ChatPanel({
                       )}
                       {messages.map((message, index) => {
                       const mine = message.sender_id === currentUserId;
+                      const messageAttachments = attachmentsByMessageId[message.id] || [];
                       const unreadRecipientCount = participantReadStates.filter(
                         (participant) =>
                           participant.user_id !== message.sender_id &&
@@ -1721,6 +1961,22 @@ export function ChatPanel({
                                   }}
                                 >
                                   <p style={styles.messageText}>{message.body}</p>
+                                  {messageAttachments.length > 0 && (
+                                    <div className={chatStyles.messageAttachments}>
+                                      {messageAttachments.map((attachment) => (
+                                        <button
+                                          key={attachment.id}
+                                          type="button"
+                                          className={chatStyles.attachmentDownload}
+                                          disabled={attachmentBusy}
+                                          onClick={() => void downloadChatAttachment(attachment)}
+                                        >
+                                          <strong>{attachment.original_name}</strong>
+                                          <span>{formatAttachmentSize(attachment.size_bytes)} / 다운로드</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                   <div className={chatStyles.messageMetaActions}>
                                     <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
                                     {pinnedMessageIds.has(message.id) && (
@@ -1748,6 +2004,22 @@ export function ChatPanel({
                                 <div style={styles.messageBubble}>
                                   <span style={styles.messageSender}>{message.sender_name}</span>
                                   <p style={styles.messageText}>{message.body}</p>
+                                  {messageAttachments.length > 0 && (
+                                    <div className={chatStyles.messageAttachments}>
+                                      {messageAttachments.map((attachment) => (
+                                        <button
+                                          key={attachment.id}
+                                          type="button"
+                                          className={chatStyles.attachmentDownload}
+                                          disabled={attachmentBusy}
+                                          onClick={() => void downloadChatAttachment(attachment)}
+                                        >
+                                          <strong>{attachment.original_name}</strong>
+                                          <span>{formatAttachmentSize(attachment.size_bytes)} / 다운로드</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                   <div className={chatStyles.messageMetaActions}>
                                     <span style={styles.messageTime}>{formatTime(message.created_at)}</span>
                                     {pinnedMessageIds.has(message.id) && (
@@ -1785,27 +2057,65 @@ export function ChatPanel({
                   <div ref={messageEndRef} />
                 </div>
 
-                <div className={chatStyles.inputRow} style={styles.inputRow}>
-                  <input
-                    value={messageBody}
-                    onChange={(event) => setMessageBody(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void sendMessage();
-                      }
-                    }}
-                    placeholder="메시지 입력"
-                    style={styles.input}
-                  />
-                  <button
-                    type="button"
-                    style={styles.sendButton}
-                    disabled={loading || !messageBody.trim()}
-                    onClick={() => void sendMessage()}
-                  >
-                    전송
-                  </button>
+                <div className={chatStyles.composer}>
+                  {pendingAttachments.length > 0 && (
+                    <div className={chatStyles.pendingAttachments}>
+                      {pendingAttachments.map((file, index) => (
+                        <div key={`${file.name}-${file.size}-${index}`} className={chatStyles.pendingAttachment}>
+                          <span>{file.name} ({formatAttachmentSize(file.size)})</span>
+                          <button
+                            type="button"
+                            disabled={attachmentBusy}
+                            onClick={() =>
+                              setPendingAttachments((current) =>
+                                current.filter((_, currentIndex) => currentIndex !== index)
+                              )
+                            }
+                          >
+                            제거
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className={chatStyles.inputRow} style={styles.inputRow}>
+                    <label
+                      className={`${chatStyles.attachButton} ${
+                        attachmentFeatureReady ? "" : chatStyles.attachButtonDisabled
+                      }`}
+                      title={attachmentFeatureReady ? "파일 첨부" : "채팅 첨부 SQL 적용 후 사용할 수 있습니다."}
+                    >
+                      첨부
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        multiple
+                        accept={CHAT_ATTACHMENT_ACCEPT}
+                        disabled={!attachmentFeatureReady || attachmentBusy}
+                        onChange={(event) => chooseAttachments(event.target.files)}
+                      />
+                    </label>
+                    <input
+                      value={messageBody}
+                      onChange={(event) => setMessageBody(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void sendMessage();
+                        }
+                      }}
+                      placeholder="메시지 입력"
+                      style={styles.input}
+                    />
+                    <button
+                      type="button"
+                      style={styles.sendButton}
+                      disabled={loading || attachmentBusy || (!messageBody.trim() && pendingAttachments.length === 0)}
+                      onClick={() => void sendMessage()}
+                    >
+                      {attachmentBusy ? "전송 중" : "전송"}
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
@@ -1986,9 +2296,8 @@ const styles: Record<string, CSSProperties> = {
   },
   inputRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 72px",
+    gridTemplateColumns: "auto minmax(0, 1fr) 72px",
     gap: "8px",
-    borderTop: "1px solid #e5eaf0",
     padding: "10px",
   },
   input: {
