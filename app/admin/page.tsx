@@ -783,6 +783,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    flexWrap: "wrap",
     gap: "16px",
     padding: "20px 22px",
   },
@@ -804,6 +805,8 @@ const styles: Record<string, CSSProperties> = {
     color: "#667085",
     fontSize: "13px",
     fontWeight: 600,
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
   },
   refreshButton: {
     height: "38px",
@@ -828,7 +831,7 @@ const styles: Record<string, CSSProperties> = {
   },
   summaryGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
     gap: "12px",
   },
   summaryCard: {
@@ -839,6 +842,7 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "12px",
     background: "#ffffff",
     padding: "16px",
+    minWidth: 0,
   },
   summaryLabel: {
     color: "#667085",
@@ -854,6 +858,8 @@ const styles: Record<string, CSSProperties> = {
     color: "#667085",
     fontSize: "12px",
     fontWeight: 600,
+    lineHeight: 1.45,
+    overflowWrap: "anywhere",
   },
   storageCard: {
     border: "1px solid #e5e7eb",
@@ -887,6 +893,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    flexWrap: "wrap",
     gap: "12px",
     marginBottom: "13px",
   },
@@ -901,6 +908,8 @@ const styles: Record<string, CSSProperties> = {
     color: "#667085",
     fontSize: "12px",
     fontWeight: 600,
+    lineHeight: 1.45,
+    wordBreak: "keep-all",
   },
   cardCount: {
     color: "#667085",
@@ -934,7 +943,7 @@ const styles: Record<string, CSSProperties> = {
   },
   twoColumn: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
     gap: "12px",
   },
   setupNotice: {
@@ -964,12 +973,14 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     fontWeight: 650,
     lineHeight: 1.55,
+    overflowWrap: "anywhere",
   },
   settingsRow: {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "flex-end",
     gap: "10px",
+    minWidth: 0,
   },
   settingField: {
     display: "flex",
@@ -1053,7 +1064,7 @@ const styles: Record<string, CSSProperties> = {
   },
   managementItem: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 92px auto",
+    gridTemplateColumns: "minmax(0, 1fr) minmax(78px, auto) auto",
     alignItems: "center",
     gap: "12px",
     border: "1px solid #edf0f3",
@@ -1063,6 +1074,8 @@ const styles: Record<string, CSSProperties> = {
   },
   itemActions: {
     display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
     gap: "6px",
   },
   secondaryButton: {
@@ -1105,6 +1118,8 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     fontSize: "13px",
     overflow: "hidden",
+    lineHeight: 1.45,
+    overflowWrap: "anywhere",
   },
   fileSize: {
     flexShrink: 0,
@@ -1141,6 +1156,8 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
     fontSize: "13px",
     fontWeight: 650,
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
   },
   deniedBox: {
     maxWidth: "520px",

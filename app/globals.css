@@ -63,6 +63,10 @@ textarea {
   font: inherit;
 }
 
+button {
+  line-height: 1.2;
+}
+
 .app-shell-content > main {
   min-height: auto !important;
   background: transparent !important;
@@ -147,8 +151,11 @@ textarea {
   .app-topbar-action-button {
     min-width: 0 !important;
     width: 100% !important;
+    min-height: 38px !important;
     padding: 0 6px !important;
     font-size: 12px !important;
+    white-space: normal !important;
+    word-break: keep-all !important;
   }
 
   .app-worklog-input-button {
@@ -171,7 +178,17 @@ textarea {
     font-size: 11px !important;
   }
 
+  .app-alert-button {
+    min-width: 0 !important;
+  }
+
   .app-topbar-identity img {
     width: 58px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-topbar-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 }

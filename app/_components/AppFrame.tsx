@@ -801,6 +801,9 @@ const styles: Record<string, CSSProperties> = {
     color: "#667085",
     fontSize: "11px",
     fontWeight: 750,
+    lineHeight: 1.18,
+    textAlign: "center",
+    wordBreak: "keep-all",
     cursor: "pointer",
   },
   iconNavItemActive: {
@@ -960,11 +963,13 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "22px",
     fontWeight: 850,
     lineHeight: 1.2,
+    wordBreak: "keep-all",
   },
   mobileTitleRow: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
+    minWidth: 0,
   },
   mobileMenuButton: {
     width: "40px",
@@ -1027,6 +1032,8 @@ const styles: Record<string, CSSProperties> = {
     padding: "0 12px",
     fontSize: "13px",
     fontWeight: 850,
+    lineHeight: 1.25,
+    wordBreak: "keep-all",
     cursor: "pointer",
   },
   mobileDrawerItemActive: {
@@ -1147,6 +1154,7 @@ const styles: Record<string, CSSProperties> = {
   },
   actionButton: {
     minWidth: "82px",
+    minHeight: "36px",
     height: "36px",
     borderRadius: "9px",
     border: "1px solid #cfd6df",
@@ -1154,10 +1162,15 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
     fontSize: "13px",
     fontWeight: 800,
+    lineHeight: 1.2,
+    padding: "0 10px",
+    whiteSpace: "normal",
+    wordBreak: "keep-all",
     cursor: "pointer",
   },
   primaryButton: {
     minWidth: "82px",
+    minHeight: "36px",
     height: "36px",
     borderRadius: "9px",
     border: "1px solid #0f8a56",
@@ -1165,6 +1178,10 @@ const styles: Record<string, CSSProperties> = {
     color: "#ffffff",
     fontSize: "13px",
     fontWeight: 850,
+    lineHeight: 1.2,
+    padding: "0 10px",
+    whiteSpace: "normal",
+    wordBreak: "keep-all",
     cursor: "pointer",
   },
   content: {
@@ -1236,6 +1253,8 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "left",
     cursor: "pointer",
     fontSize: "13px",
+    lineHeight: 1.45,
+    overflowWrap: "anywhere",
   },
   alertEmpty: {
     border: "1px dashed #d6dce5",

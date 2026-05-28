@@ -44,6 +44,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 11px;
 }
@@ -80,6 +81,8 @@
 .presenceControls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -115,6 +118,8 @@
 }
 
 .presenceIdentity strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: #111827;
   font-size: 14px;
   font-weight: 800;
@@ -129,7 +134,7 @@
 
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
 }
 
@@ -214,7 +219,7 @@
 
 .logItem {
   display: grid;
-  grid-template-columns: 104px 110px minmax(100px, 1fr) 110px 110px;
+  grid-template-columns: 104px 110px minmax(140px, 1fr) 110px 110px;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -224,6 +229,11 @@
   color: #344054;
   font-size: 13px;
   font-weight: 600;
+}
+
+.summaryIdentity,
+.logItem {
+  overflow-wrap: anywhere;
 }
 
 .path {
@@ -262,6 +272,7 @@
   }
 
   .summaryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 7px;
   }
 
