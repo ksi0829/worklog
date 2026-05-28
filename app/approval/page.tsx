@@ -597,6 +597,10 @@ function getFirstPendingLine(document: ApprovalDocumentRow) {
   return lines.find((line) => line.status === "pending") || null;
 }
 
+function getSortedApprovalLines(document: ApprovalDocumentRow) {
+  return [...(document.approval_lines || [])].sort((a, b) => a.step_order - b.step_order);
+}
+
 function formatExcelValue(value: unknown) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -2004,6 +2008,7 @@ export default function ApprovalPage() {
     const active = selectedDocument?.id === document.id;
     const pendingLine = getFirstPendingLine(document);
     const awaitingMyApproval = document.status === "pending" && isCurrentApprovalLine(pendingLine);
+    const approvalSteps = getSortedApprovalLines(document);
 
     return (
       <button
@@ -2023,7 +2028,7 @@ export default function ApprovalPage() {
           {awaitingMyApproval && <small style={styles.actionBadge}>내 결재 필요</small>}
         </span>
         <span style={styles.documentTopLine}>
-          <strong>{document.title}</strong>
+          <strong style={styles.documentTitleText}>{document.title}</strong>
           <em
             style={{
               ...styles.statusBadge,
@@ -2045,6 +2050,27 @@ export default function ApprovalPage() {
         <span style={styles.documentProgress}>
           {progressText(document)}
         </span>
+        {approvalSteps.length > 0 && (
+          <span style={styles.documentStepRow}>
+            {approvalSteps.map((line) => (
+              <small
+                key={line.id}
+                style={{
+                  ...styles.documentStepBadge,
+                  ...(line.status === "approved"
+                    ? styles.documentStepBadgeApproved
+                    : line.status === "rejected"
+                      ? styles.documentStepBadgeRejected
+                      : pendingLine?.id === line.id
+                        ? styles.documentStepBadgeCurrent
+                        : {}),
+                }}
+              >
+                {line.role_label} · {statusText(line.status)}
+              </small>
+            ))}
+          </span>
+        )}
       </button>
     );
   };
@@ -4607,22 +4633,24 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: "8px",
     border: "1px solid #e5e7eb",
-    borderRadius: "8px",
+    borderRadius: "12px",
     background: "#ffffff",
-    padding: "11px",
+    padding: "12px",
     textAlign: "left",
     cursor: "pointer",
   },
   documentButtonActive: {
     borderColor: "#0f8a56",
     background: "#f6fbf8",
+    boxShadow: "0 0 0 1px rgba(15, 138, 86, 0.08)",
   },
   documentTagRow: {
     display: "flex",
     alignItems: "center",
     gap: "5px",
+    flexWrap: "wrap",
   },
   relationBadge: {
     display: "inline-flex",
@@ -4678,19 +4706,61 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "13px",
     lineHeight: 1.35,
   },
+  documentTitleText: {
+    flex: 1,
+    minWidth: 0,
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 900,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
   documentMeta: {
     color: "#667085",
     fontSize: "12px",
     fontWeight: 500,
   },
   documentProgress: {
+    borderRadius: "9px",
+    background: "#f8fafc",
     color: "#344054",
     fontSize: "12px",
-    fontWeight: 750,
+    fontWeight: 800,
+    lineHeight: 1.35,
+    padding: "8px 9px",
+  },
+  documentStepRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "5px",
+  },
+  documentStepBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    background: "#f1f5f9",
+    color: "#64748b",
+    padding: "4px 7px",
+    fontSize: "10px",
+    fontWeight: 850,
+  },
+  documentStepBadgeApproved: {
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  documentStepBadgeRejected: {
+    background: "#fff1f2",
+    color: "#dc2626",
+  },
+  documentStepBadgeCurrent: {
+    background: "#fff7ed",
+    color: "#c2410c",
   },
   statusBadge: {
     display: "inline-flex",
     alignItems: "center",
+    flexShrink: 0,
     height: "22px",
     borderRadius: "999px",
     background: "#edf0f3",

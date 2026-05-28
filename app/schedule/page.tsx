@@ -126,6 +126,29 @@ function getScheduleDisplayLabel(
   );
 }
 
+function getScheduleMetaLabel(
+  item: ScheduleItem
+) {
+  const type = cleanScheduleText(item.type);
+  const company = cleanScheduleText(item.company);
+  const parts = [
+    type,
+    company && company !== "휴가"
+      ? company
+      : "",
+  ].filter(Boolean);
+
+  return parts.join(" / ");
+}
+
+function getScheduleSourceLabel(
+  item: ScheduleItem
+) {
+  return item.trip_id?.startsWith("vacation_")
+    ? "승인 휴가 자동 반영"
+    : "직접 등록 일정";
+}
+
 export default function SchedulePage() {
   const today = new Date();
 
@@ -730,7 +753,17 @@ export default function SchedulePage() {
                   }
                 >
                   {selectedSchedules.map(
-                    (item) => (
+                    (item) => {
+                      const label =
+                        getScheduleDisplayLabel(
+                          item
+                        );
+                      const meta =
+                        getScheduleMetaLabel(
+                          item
+                        );
+
+                      return (
                       <div
                         key={item.id}
                         style={
@@ -758,25 +791,25 @@ export default function SchedulePage() {
                               styles.company
                             }
                           >
-                            {item.writer ||
-                              "-"}
+                            {label}
                           </div>
 
-                          <div
-                            style={
-                              styles.taskMeta
-                            }
-                          >
-                            {item.company ||
-                              "-"}
-                          </div>
+                          {meta && (
+                            <div
+                              style={
+                                styles.taskMeta
+                              }
+                            >
+                              {meta}
+                            </div>
+                          )}
 
                           <div
                             style={
                               styles.task
                             }
                           >
-                            {getScheduleDisplayLabel(
+                            {getScheduleSourceLabel(
                               item
                             )}
                           </div>
@@ -815,7 +848,8 @@ export default function SchedulePage() {
                           )}
                         </div>
                       </div>
-                    )
+                      );
+                    }
                   )}
                 </div>
               )}

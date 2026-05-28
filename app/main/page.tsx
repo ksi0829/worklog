@@ -28,6 +28,60 @@ type ScheduleRow = {
   writer: string | null;
 };
 
+const vacationTypes = new Set([
+  "연차",
+  "반차",
+  "오전반차",
+  "오후반차",
+  "휴가",
+  "공가",
+  "경조",
+  "병가",
+]);
+
+function cleanScheduleText(value?: string | null) {
+  return (value || "").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripWriterFromTitle(title: string, writer?: string | null) {
+  const cleanWriter = cleanScheduleText(writer);
+
+  if (!cleanWriter) return title;
+
+  return title
+    .replace(new RegExp(`^${escapeRegExp(cleanWriter)}\\s*[-·:/]?\\s*`), "")
+    .trim();
+}
+
+function getScheduleDisplayLabel(item: ScheduleRow) {
+  const type = cleanScheduleText(item.type);
+  const title = cleanScheduleText(item.title);
+  const company = cleanScheduleText(item.company);
+  const titleWithoutWriter = stripWriterFromTitle(title, item.writer);
+
+  if (vacationTypes.has(type)) {
+    return titleWithoutWriter || type || "휴가";
+  }
+
+  return titleWithoutWriter || (company !== "휴가" ? company : "") || type || "일정";
+}
+
+function getScheduleMetaLabel(item: ScheduleRow) {
+  const type = cleanScheduleText(item.type);
+  const company = cleanScheduleText(item.company);
+
+  return [
+    type,
+    company && company !== "휴가" ? company : "",
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 type OrderCategory = "domestic" | "overseas" | "parts";
 type StageStatus = "done" | "pending" | "planned" | "waiting";
 
@@ -813,12 +867,10 @@ export default function MainPage() {
 
                 <div style={styles.scheduleBody}>
                   <div style={styles.scheduleTitle}>
-                    {item.title || item.company || "일정"}
+                    {getScheduleDisplayLabel(item)}
                   </div>
                   <div style={styles.scheduleMeta}>
-                    {[item.type, item.company, item.writer]
-                      .filter(Boolean)
-                      .join(" / ")}
+                    {getScheduleMetaLabel(item) || "내 일정"}
                   </div>
                 </div>
               </button>
