@@ -60,6 +60,72 @@ const TYPE_STYLE: Record<string, CSSProperties> = {
   },
 };
 
+const VACATION_TYPES = new Set([
+  "연차",
+  "반차",
+  "오전반차",
+  "오후반차",
+  "휴가",
+  "공가",
+  "경조",
+  "병가",
+]);
+
+function cleanScheduleText(value?: string | null) {
+  return (value || "").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripWriterFromTitle(
+  title: string,
+  writer?: string
+) {
+  const cleanWriter =
+    cleanScheduleText(writer);
+
+  if (!cleanWriter) {
+    return title;
+  }
+
+  return title
+    .replace(
+      new RegExp(
+        `^${escapeRegExp(cleanWriter)}\\s*[-·:/]?\\s*`
+      ),
+      ""
+    )
+    .trim();
+}
+
+function getScheduleDisplayLabel(
+  item: ScheduleItem
+) {
+  const type = cleanScheduleText(item.type);
+  const title = cleanScheduleText(item.title);
+  const company = cleanScheduleText(item.company);
+  const writer = cleanScheduleText(item.writer);
+  const titleWithoutWriter =
+    stripWriterFromTitle(title, writer);
+
+  if (VACATION_TYPES.has(type)) {
+    return (
+      titleWithoutWriter ||
+      type ||
+      "휴가"
+    );
+  }
+
+  return (
+    titleWithoutWriter ||
+    (company !== "휴가" ? company : "") ||
+    type ||
+    "일정"
+  );
+}
+
 export default function SchedulePage() {
   const today = new Date();
 
@@ -557,17 +623,24 @@ export default function SchedulePage() {
                 >
                   {events
                     .slice(0, 3)
-                    .map((event) => (
-                      <div
-                        key={event.id}
-                        style={styles.event(
-                          event.type
-                        )}
-                      >
-                        {event.writer ||
-                          "이름없음"}
-                      </div>
-                    ))}
+                    .map((event) => {
+                      const label =
+                        getScheduleDisplayLabel(
+                          event
+                        );
+
+                      return (
+                        <div
+                          key={event.id}
+                          style={styles.event(
+                            event.type
+                          )}
+                          title={label}
+                        >
+                          {label}
+                        </div>
+                      );
+                    })}
 
                   {events.length >
                     3 && (
@@ -703,9 +776,9 @@ export default function SchedulePage() {
                               styles.task
                             }
                           >
-                            {
-                              item.title
-                            }
+                            {getScheduleDisplayLabel(
+                              item
+                            )}
                           </div>
                         </div>
 
@@ -1132,8 +1205,10 @@ const styles = {
     justifyContent: "center",
     width: "fit-content",
     maxWidth: "100%",
+    minWidth: 0,
     fontSize: "10px",
     fontWeight: 700,
+    lineHeight: 1.2,
     borderRadius: "999px",
     padding: "4px 8px",
     whiteSpace: "nowrap",
