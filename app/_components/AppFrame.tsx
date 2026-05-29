@@ -26,6 +26,7 @@ type IconName =
   | "activity"
   | "logout"
   | "notice"
+  | "idea"
   | "admin";
 
 type MenuItem = {
@@ -71,6 +72,7 @@ const MENU_ITEMS: MenuItem[] = [
   { title: "영업관리", path: "/sales", icon: "sales", description: "국내 · 해외 영업" },
   { title: "일정관리", path: "/schedule", icon: "schedule", description: "나의 개인 일정" },
   { title: "고객사", path: "/customer", icon: "customer", description: "거래처 · 담당자" },
+  { title: "아이디어", path: "/ideas", icon: "idea", description: "제안 · 개선 공유" },
 ];
 
 const ADMIN_MENU_ITEM: MenuItem = {
@@ -95,6 +97,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/sales": "영업관리",
   "/schedule": "일정관리",
   "/customer": "고객사 DB",
+  "/ideas": "아이디어 공유",
   "/organization": "조직도",
   "/change-password": "계정관리",
   "/activity": "접속현황",
@@ -109,6 +112,7 @@ const SUBMENU_BY_PATH: Record<string, string[]> = {
   "/sales": ["국내영업", "해외영업", "활동 이력"],
   "/schedule": ["월간 일정", "일정 등록", "승인 휴가 반영"],
   "/customer": ["고객사", "가공업체", "후처리", "담당자"],
+  "/ideas": ["아이디어 목록", "작성", "첨부"],
   "/organization": ["조직 현황", "부서 구성"],
   "/change-password": ["계정 정보", "비밀번호 변경"],
   "/activity": ["접속 요약", "활동 로그"],
@@ -144,6 +148,8 @@ function iconPath(name: IconName) {
       return "M10 5H5v14h5M14 8l4 4-4 4M18 12H9";
     case "notice":
       return "M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2ZM18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2Z";
+    case "idea":
+      return "M9 18h6M10 22h4M8.5 14.5A6 6 0 1 1 15.5 14c-.8.7-1.5 1.5-1.5 2.5h-4c0-1-.7-1.8-1.5-2Z";
     case "admin":
       return "M4 19h16M6 16V9h4v7H6Zm8 0V5h4v11h-4ZM7 5h3M15 9h3";
     default:
@@ -208,6 +214,7 @@ export function AppFrame({ children }: AppFrameProps) {
   );
   const utilityItems = useMemo(() => UTILITY_ITEMS, []);
   const title = TITLE_BY_PATH[pathname] || "ZETA";
+  const normalizedTitle = pathname.startsWith("/ideas/") ? "아이디어 공유" : title;
   const canUseWorklogInput = !isExecutiveAccount(name, team, role);
 
   const approvalAlerts = useMemo(() => {
@@ -474,7 +481,10 @@ export function AppFrame({ children }: AppFrameProps) {
 
         <nav style={styles.iconNav} aria-label="주요 메뉴">
           {menuItems.map((item) => {
-            const active = pathname === item.path || (item.path === "/view" && pathname === "/");
+            const active =
+              pathname === item.path ||
+              (item.path === "/view" && pathname === "/") ||
+              (item.path === "/ideas" && pathname.startsWith("/ideas/"));
 
             return (
               <button
@@ -525,7 +535,7 @@ export function AppFrame({ children }: AppFrameProps) {
                 <span />
                 <span />
               </button>
-              <h1 style={styles.title}>{title}</h1>
+              <h1 style={styles.title}>{normalizedTitle}</h1>
             </div>
             {mobileInputNotice && (
               <div style={styles.mobileNotice}>
@@ -615,7 +625,10 @@ export function AppFrame({ children }: AppFrameProps) {
               </div>
               <nav style={styles.mobileDrawerNav}>
                 {menuItems.map((item) => {
-                  const active = pathname === item.path || (pathname === "/" && item.path === "/view");
+                  const active =
+                    pathname === item.path ||
+                    (pathname === "/" && item.path === "/view") ||
+                    (item.path === "/ideas" && pathname.startsWith("/ideas/"));
 
                   return (
                     <button
