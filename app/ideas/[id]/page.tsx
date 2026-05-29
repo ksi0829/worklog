@@ -348,47 +348,56 @@ export default function IdeaDetailPage() {
         <section style={styles.card}>게시글이 없습니다.</section>
       ) : (
         <section style={styles.card}>
-          <div style={styles.header}>
-            <div>
-              {editMode ? (
-                <input value={title} onChange={(event) => setTitle(event.target.value)} style={styles.titleInput} />
-              ) : (
-                <h2 style={styles.title}>{post.title}</h2>
-              )}
-              <div style={styles.meta}>
-                {post.author_name} / {post.author_team || "부서 미입력"} / {formatDateTime(post.created_at)} / 조회 {(post.view_count || 0).toLocaleString("ko-KR")}
-              </div>
-            </div>
-            {isOwner && (
-              <div style={styles.actions}>
+          <div style={styles.titlePanel}>
+            <div style={styles.header}>
+              <div style={styles.titleArea}>
+                <span style={styles.boardLabel}>아이디어 공유</span>
                 {editMode ? (
-                  <>
-                    <button type="button" style={styles.primaryButton} onClick={() => void savePost()} disabled={busy}>
-                      저장
-                    </button>
-                    <button type="button" style={styles.secondaryButton} onClick={() => setEditMode(false)} disabled={busy}>
-                      취소
-                    </button>
-                  </>
+                  <input value={title} onChange={(event) => setTitle(event.target.value)} style={styles.titleInput} />
                 ) : (
-                  <>
-                    <button type="button" style={styles.secondaryButton} onClick={() => setEditMode(true)}>
-                      수정
-                    </button>
-                    <button type="button" style={styles.dangerButton} onClick={() => void deletePost()} disabled={busy}>
-                      삭제
-                    </button>
-                  </>
+                  <h2 style={styles.title}>{post.title}</h2>
                 )}
+                <div style={styles.metaGrid}>
+                  <span>글쓴이 <strong>{post.author_name}</strong></span>
+                  <span>부서 <strong>{post.author_team || "부서 미입력"}</strong></span>
+                  <span>작성일 <strong>{formatDateTime(post.created_at)}</strong></span>
+                  <span>조회 <strong>{(post.view_count || 0).toLocaleString("ko-KR")}</strong></span>
+                </div>
               </div>
-            )}
+              {isOwner && (
+                <div style={styles.actions}>
+                  {editMode ? (
+                    <>
+                      <button type="button" style={styles.primaryButton} onClick={() => void savePost()} disabled={busy}>
+                        저장
+                      </button>
+                      <button type="button" style={styles.secondaryButton} onClick={() => setEditMode(false)} disabled={busy}>
+                        취소
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" style={styles.secondaryButton} onClick={() => setEditMode(true)}>
+                        수정
+                      </button>
+                      <button type="button" style={styles.dangerButton} onClick={() => void deletePost()} disabled={busy}>
+                        삭제
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {editMode ? (
-            <textarea value={body} onChange={(event) => setBody(event.target.value)} style={styles.textarea} />
-          ) : (
-            <div style={styles.body}>{post.body}</div>
-          )}
+          <div style={styles.contentPanel}>
+            <div style={styles.panelTitle}>내용</div>
+            {editMode ? (
+              <textarea value={body} onChange={(event) => setBody(event.target.value)} style={styles.textarea} />
+            ) : (
+              <div style={styles.body}>{post.body}</div>
+            )}
+          </div>
 
           {editMode && (
             <div style={styles.fileRow}>
@@ -473,22 +482,39 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
   },
   card: {
-    border: "1px solid #e5e7eb",
-    borderRadius: "16px",
+    display: "grid",
+    gap: "16px",
+  },
+  titlePanel: {
+    border: "1px solid #d6dde8",
+    borderRadius: "14px",
     background: "#ffffff",
-    padding: "22px",
+    padding: "22px 24px",
   },
   header: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: "16px",
-    marginBottom: "18px",
+  },
+  titleArea: {
+    minWidth: 0,
+  },
+  boardLabel: {
+    display: "inline-flex",
+    marginBottom: "10px",
+    borderRadius: "999px",
+    background: "#ecfdf3",
+    color: "#047857",
+    padding: "5px 9px",
+    fontSize: "11px",
+    fontWeight: 900,
   },
   title: {
-    margin: "0 0 8px",
-    fontSize: "25px",
+    margin: "0 0 14px",
+    fontSize: "27px",
     fontWeight: 900,
+    lineHeight: 1.25,
   },
   titleInput: {
     width: "100%",
@@ -499,10 +525,25 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "18px",
     fontWeight: 900,
   },
-  meta: {
+  metaGrid: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
     color: "#64748b",
     fontSize: "12px",
     fontWeight: 800,
+  },
+  contentPanel: {
+    border: "1px solid #d6dde8",
+    borderRadius: "14px",
+    background: "#ffffff",
+    padding: "22px 24px",
+  },
+  panelTitle: {
+    marginBottom: "14px",
+    color: "#0f172a",
+    fontSize: "15px",
+    fontWeight: 900,
   },
   actions: {
     display: "flex",
@@ -510,10 +551,11 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: "wrap",
   },
   body: {
-    minHeight: "180px",
-    borderTop: "1px solid #e5e7eb",
-    borderBottom: "1px solid #e5e7eb",
-    padding: "18px 0",
+    minHeight: "210px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    background: "#fbfdff",
+    padding: "20px",
     color: "#111827",
     fontSize: "14px",
     fontWeight: 650,
@@ -594,7 +636,10 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
   },
   attachmentBox: {
-    marginTop: "18px",
+    border: "1px solid #d6dde8",
+    borderRadius: "14px",
+    background: "#ffffff",
+    padding: "18px 20px",
   },
   attachmentHeader: {
     display: "flex",

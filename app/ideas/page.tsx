@@ -1,20 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
 const supabase = createSupabaseBrowser();
-const IDEA_ATTACHMENT_BUCKET = "idea-attachments";
-const MAX_ATTACHMENT_COUNT = 5;
-const MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024;
-const ATTACHMENT_ACCEPT =
-  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.xlsx,.xls,.csv,.docx,.doc,.pptx,.ppt,.dwg,.dxf,.zip";
-const ALLOWED_EXTENSIONS = new Set([
-  "pdf", "png", "jpg", "jpeg", "gif", "webp", "bmp",
-  "xlsx", "xls", "csv", "docx", "doc", "pptx", "ppt",
-  "dwg", "dxf", "zip",
-]);
 
 type IdeaPostRow = {
   id: number;
@@ -27,11 +17,6 @@ type IdeaPostRow = {
   created_at: string;
   updated_at: string;
   idea_attachments?: { id: number }[];
-};
-
-type ProfileRow = {
-  name: string | null;
-  team: string | null;
 };
 
 type IdeaPost = {
@@ -55,48 +40,13 @@ function formatBoardDate(value?: string | null) {
   }).format(new Date(value));
 }
 
-function getExtension(fileName: string) {
-  return fileName.split(".").pop()?.toLocaleLowerCase() || "";
-}
-
-function getAttachmentError(files: File[]) {
-  if (files.length > MAX_ATTACHMENT_COUNT) {
-    return `파일은 한 번에 최대 ${MAX_ATTACHMENT_COUNT}개까지 첨부할 수 있습니다.`;
-  }
-
-  for (const file of files) {
-    if (!ALLOWED_EXTENSIONS.has(getExtension(file.name))) {
-      return `${file.name}: 이미지, PDF, Office, 엑셀, DWG/DXF, ZIP 파일만 첨부할 수 있습니다.`;
-    }
-    if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) {
-      return `${file.name}: 파일 크기는 30MB 이하만 첨부할 수 있습니다.`;
-    }
-  }
-
-  return "";
-}
-
 export default function IdeasPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [posts, setPosts] = useState<IdeaPost[]>([]);
-  const [currentUserId, setCurrentUserId] = useState("");
-  const [currentName, setCurrentName] = useState("");
-  const [currentTeam, setCurrentTeam] = useState("");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  const [writeOpen, setWriteOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
-  const canSubmit = useMemo(
-    () => Boolean(currentUserId && title.trim() && body.trim() && !saving),
-    [body, currentUserId, saving, title]
-  );
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -144,126 +94,8 @@ export default function IdeasPage() {
   }, []);
 
   useEffect(() => {
-    void Promise.resolve().then(async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const userId = user?.id || "";
-      setCurrentUserId(userId);
-
-      if (userId) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("name,team")
-          .eq("id", userId)
-          .maybeSingle();
-        const profile = data as ProfileRow | null;
-        setCurrentName(profile?.name || localStorage.getItem("name") || "");
-        setCurrentTeam(profile?.team || localStorage.getItem("team") || "");
-      }
-
-      await loadPosts();
-    });
+    void Promise.resolve().then(loadPosts);
   }, [loadPosts]);
-
-  function handleFiles(nextFiles: FileList | null) {
-    const selected = Array.from(nextFiles || []);
-    const error = getAttachmentError(selected);
-    if (error) {
-      setMessage(error);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-    setFiles(selected);
-    setMessage("");
-  }
-
-  async function uploadAttachments(postId: number, selectedFiles: File[]) {
-    const rows = [];
-
-    for (const file of selectedFiles) {
-      const extension = getExtension(file.name) || "bin";
-      const storagePath = `${currentUserId}/${postId}/${crypto.randomUUID()}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from(IDEA_ATTACHMENT_BUCKET)
-        .upload(storagePath, file, {
-          contentType: file.type || "application/octet-stream",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw new Error(`${file.name} 업로드 실패`);
-      }
-
-      rows.push({
-        post_id: postId,
-        storage_path: storagePath,
-        original_name: file.name,
-        mime_type: file.type || null,
-        size_bytes: file.size,
-        uploaded_by: currentUserId,
-      });
-    }
-
-    if (rows.length === 0) return;
-
-    const { error } = await supabase.from("idea_attachments").insert(rows);
-    if (error) {
-      await supabase.storage
-        .from(IDEA_ATTACHMENT_BUCKET)
-        .remove(rows.map((row) => row.storage_path));
-      throw new Error("첨부파일 정보를 저장하지 못했습니다.");
-    }
-  }
-
-  async function createPost() {
-    const cleanTitle = title.trim();
-    const cleanBody = body.trim();
-    if (!currentUserId) {
-      setMessage("로그인 정보를 확인할 수 없습니다.");
-      return;
-    }
-    if (!cleanTitle || !cleanBody) {
-      setMessage("제목과 내용을 입력해 주세요.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-
-    const { data, error } = await supabase
-      .from("idea_posts")
-      .insert({
-        title: cleanTitle,
-        body: cleanBody,
-        author_id: currentUserId,
-        author_name: currentName || "작성자",
-        author_team: currentTeam || null,
-      })
-      .select("id")
-      .single();
-
-    if (error || !data) {
-      setMessage("아이디어를 등록하지 못했습니다. SQL 적용 상태를 확인해 주세요.");
-      setSaving(false);
-      return;
-    }
-
-    try {
-      await uploadAttachments((data as { id: number }).id, files);
-      setTitle("");
-      setBody("");
-      setFiles([]);
-      setWriteOpen(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      setMessage("아이디어가 등록되었습니다.");
-      await loadPosts();
-    } catch (uploadError) {
-      setMessage(uploadError instanceof Error ? uploadError.message : "첨부파일 업로드에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   const filteredPosts = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -308,8 +140,8 @@ export default function IdeasPage() {
               <tr>
                 <th style={{ ...styles.th, ...styles.boardColumn }}>게시판</th>
                 <th style={{ ...styles.th, ...styles.titleColumn }}>제목</th>
-                <th style={styles.th}>글쓴이</th>
-                <th style={styles.th}>날짜</th>
+                <th style={{ ...styles.th, ...styles.authorColumn }}>글쓴이</th>
+                <th style={{ ...styles.th, ...styles.dateColumn }}>날짜</th>
                 <th style={{ ...styles.th, ...styles.viewColumn }}>조회</th>
               </tr>
             </thead>
@@ -338,11 +170,11 @@ export default function IdeasPage() {
                       </button>
                       {post.attachmentCount > 0 && <span style={styles.fileBadge}>파일 {post.attachmentCount}</span>}
                     </td>
-                    <td style={styles.td}>
+                    <td style={{ ...styles.td, ...styles.authorCell }}>
                       <span style={styles.authorName}>{post.authorName}</span>
                       {post.authorTeam && <span style={styles.authorTeam}>{post.authorTeam}</span>}
                     </td>
-                    <td style={styles.td}>{formatBoardDate(post.createdAt)}</td>
+                    <td style={{ ...styles.td, ...styles.dateCell }}>{formatBoardDate(post.createdAt)}</td>
                     <td style={{ ...styles.td, ...styles.viewCell }}>{post.viewCount.toLocaleString("ko-KR")}</td>
                   </tr>
                 ))
@@ -352,8 +184,8 @@ export default function IdeasPage() {
         </div>
 
         <div style={styles.bottomBar}>
-          <button type="button" style={styles.primaryButton} onClick={() => setWriteOpen((current) => !current)}>
-            {writeOpen ? "작성 닫기" : "작성"}
+          <button type="button" style={styles.primaryButton} onClick={() => router.push("/ideas/new")}>
+            작성
           </button>
           <div style={styles.searchBox}>
             <input
@@ -373,49 +205,6 @@ export default function IdeasPage() {
         </div>
       </section>
 
-      {writeOpen && (
-        <section style={styles.formCard}>
-          <h3 style={styles.sectionTitle}>아이디어 작성</h3>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="제목"
-            style={styles.input}
-          />
-          <textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="내용을 입력해 주세요."
-            style={{ ...styles.input, ...styles.textarea }}
-          />
-          <div style={styles.fileRow}>
-            <label style={styles.fileButton}>
-              파일 첨부
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={ATTACHMENT_ACCEPT}
-                onChange={(event) => handleFiles(event.target.files)}
-                style={styles.hiddenInput}
-              />
-            </label>
-            <span style={styles.fileHint}>
-              {files.length > 0 ? `${files.length}개 선택됨` : "이미지, PDF, 엑셀, CAD, ZIP 등 최대 5개"}
-            </span>
-          </div>
-          {files.length > 0 && (
-            <div style={styles.selectedFiles}>
-              {files.map((file) => (
-                <span key={`${file.name}-${file.size}`}>{file.name}</span>
-              ))}
-            </div>
-          )}
-          <button type="button" style={styles.submitButton} onClick={() => void createPost()} disabled={!canSubmit}>
-            {saving ? "등록 중" : "아이디어 등록"}
-          </button>
-        </section>
-      )}
     </main>
   );
 }
@@ -493,8 +282,14 @@ const styles: Record<string, CSSProperties> = {
   titleColumn: {
     width: "auto",
   },
+  authorColumn: {
+    width: "150px",
+  },
+  dateColumn: {
+    width: "145px",
+  },
   viewColumn: {
-    width: "90px",
+    width: "72px",
   },
   tr: {
     borderBottom: "1px solid #e5e7eb",
@@ -513,6 +308,12 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "left",
     overflow: "hidden",
     textOverflow: "ellipsis",
+  },
+  authorCell: {
+    textAlign: "right",
+  },
+  dateCell: {
+    textAlign: "right",
   },
   titleButton: {
     border: 0,
@@ -590,71 +391,6 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
     outline: "none",
   },
-  formCard: {
-    display: "grid",
-    gap: "10px",
-    border: "1px solid #d6dde8",
-    borderRadius: "12px",
-    background: "#ffffff",
-    padding: "18px",
-    marginTop: "16px",
-  },
-  sectionTitle: {
-    margin: 0,
-    fontSize: "17px",
-    fontWeight: 900,
-  },
-  input: {
-    width: "100%",
-    border: "1px solid #d1d5db",
-    borderRadius: "9px",
-    background: "#ffffff",
-    color: "#111827",
-    padding: "0 13px",
-    minHeight: "42px",
-    fontSize: "13px",
-    fontWeight: 700,
-    outline: "none",
-  },
-  textarea: {
-    minHeight: "150px",
-    padding: "13px",
-    lineHeight: 1.55,
-    resize: "vertical",
-  },
-  fileRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    flexWrap: "wrap",
-  },
-  fileButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "38px",
-    border: "1px solid #d1d5db",
-    borderRadius: "9px",
-    background: "#ffffff",
-    color: "#111827",
-    padding: "0 13px",
-    fontSize: "12px",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  hiddenInput: {
-    display: "none",
-  },
-  fileHint: {
-    color: "#64748b",
-    fontSize: "12px",
-    fontWeight: 700,
-  },
-  selectedFiles: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "6px",
-  },
   primaryButton: {
     minHeight: "38px",
     border: 0,
@@ -662,18 +398,6 @@ const styles: Record<string, CSSProperties> = {
     background: "#0f8a56",
     color: "#ffffff",
     padding: "0 15px",
-    fontSize: "13px",
-    fontWeight: 900,
-    cursor: "pointer",
-  },
-  submitButton: {
-    justifySelf: "start",
-    minHeight: "40px",
-    border: 0,
-    borderRadius: "9px",
-    background: "#0f8a56",
-    color: "#ffffff",
-    padding: "0 16px",
     fontSize: "13px",
     fontWeight: 900,
     cursor: "pointer",
