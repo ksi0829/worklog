@@ -1956,12 +1956,6 @@ export default function ApprovalPage() {
   const currentPendingLine = selectedDocument ? getFirstPendingLine(selectedDocument) : null;
   const canAct =
     selectedDocument?.status === "pending" && isCurrentApprovalLine(currentPendingLine);
-  const getDocumentRelationText = (document: ApprovalDocumentRow) => {
-    if (isCurrentRequester(document)) return "작성 문서";
-    if (isCurrentApprover(document)) return "결재 문서";
-    if (isCurrentReference(document)) return "참조 문서";
-    return "관리 열람";
-  };
   const renderProgressNotice = (document: ApprovalDocumentRow) => {
     const pendingLine = getFirstPendingLine(document);
     const awaitingMyApproval = document.status === "pending" && isCurrentApprovalLine(pendingLine);
@@ -2031,9 +2025,8 @@ export default function ApprovalPage() {
                     ...(current ? styles.approvalFlowStepCurrent : {}),
                   }}
                 >
-                  <span>{index + 1}차 결재</span>
+                  <span>{index + 1}차</span>
                   <strong>{line.approver_name}</strong>
-                  <small>{line.role_label}</small>
                   <em style={styles.approvalFlowStatus}>
                     {approved ? "승인" : rejected ? "반려" : current ? "진행중" : "대기"}
                   </em>
@@ -2050,7 +2043,6 @@ export default function ApprovalPage() {
     const active = selectedDocument?.id === document.id;
     const pendingLine = getFirstPendingLine(document);
     const awaitingMyApproval = document.status === "pending" && isCurrentApprovalLine(pendingLine);
-    const approvalSteps = getSortedApprovalLines(document);
 
     return (
       <button
@@ -2065,10 +2057,6 @@ export default function ApprovalPage() {
           setDetailModalDocumentId(document.id);
         }}
       >
-        <span style={styles.documentTagRow}>
-          <small style={styles.relationBadge}>{getDocumentRelationText(document)}</small>
-          {awaitingMyApproval && <small style={styles.actionBadge}>내 결재 필요</small>}
-        </span>
         <span style={styles.documentTopLine}>
           <strong style={styles.documentTitleText}>{document.title}</strong>
           <em
@@ -2087,32 +2075,8 @@ export default function ApprovalPage() {
           </em>
         </span>
         <span style={styles.documentMeta}>
-          {document.requester_name} · {formatDate(document.submitted_at)}
+          {document.requester_name}
         </span>
-        <span style={styles.documentProgress}>
-          {progressText(document)}
-        </span>
-        {approvalSteps.length > 0 && (
-          <span style={styles.documentStepRow}>
-            {approvalSteps.map((line) => (
-              <small
-                key={line.id}
-                style={{
-                  ...styles.documentStepBadge,
-                  ...(line.status === "approved"
-                    ? styles.documentStepBadgeApproved
-                    : line.status === "rejected"
-                      ? styles.documentStepBadgeRejected
-                      : pendingLine?.id === line.id
-                        ? styles.documentStepBadgeCurrent
-                        : {}),
-                }}
-              >
-                {line.role_label} · {statusText(line.status)}
-              </small>
-            ))}
-          </span>
-        )}
       </button>
     );
   };
@@ -4590,8 +4554,8 @@ const styles: Record<string, CSSProperties> = {
   documentList: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    maxHeight: "390px",
+    gap: "6px",
+    maxHeight: "560px",
     overflowY: "auto",
   },
   documentListMobile: {
@@ -4602,11 +4566,11 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "6px",
     border: "1px solid #e5e7eb",
-    borderRadius: "12px",
+    borderRadius: "10px",
     background: "#ffffff",
-    padding: "12px",
+    padding: "10px 11px",
     textAlign: "left",
     cursor: "pointer",
   },
@@ -4670,16 +4634,16 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: "10px",
+    gap: "8px",
     color: "#111827",
-    fontSize: "13px",
+    fontSize: "12px",
     lineHeight: 1.35,
   },
   documentTitleText: {
     flex: 1,
     minWidth: 0,
     color: "#0f172a",
-    fontSize: "14px",
+    fontSize: "13px",
     fontWeight: 900,
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -4687,7 +4651,7 @@ const styles: Record<string, CSSProperties> = {
   },
   documentMeta: {
     color: "#667085",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 500,
   },
   documentProgress: {
@@ -4819,11 +4783,11 @@ const styles: Record<string, CSSProperties> = {
     color: "#047857",
   },
   approvalFlowBox: {
-    marginTop: "14px",
+    marginTop: "12px",
     border: "1px solid #e5e7eb",
     borderRadius: "10px",
     background: "#ffffff",
-    padding: "12px",
+    padding: "10px",
   },
   approvalFlowHeader: {
     display: "flex",
@@ -4831,7 +4795,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: "10px",
     flexWrap: "wrap",
-    marginBottom: "10px",
+    marginBottom: "8px",
     color: "#334155",
     fontSize: "12px",
     fontWeight: 800,
@@ -4839,7 +4803,7 @@ const styles: Record<string, CSSProperties> = {
   approvalFlow: {
     display: "flex",
     alignItems: "stretch",
-    gap: "8px",
+    gap: "6px",
     overflowX: "auto",
     paddingBottom: "2px",
   },
@@ -4849,17 +4813,17 @@ const styles: Record<string, CSSProperties> = {
   approvalFlowStepWrap: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: "6px",
     flexShrink: 0,
   },
   approvalFlowStep: {
     display: "grid",
-    gap: "4px",
-    minWidth: "118px",
+    gap: "3px",
+    minWidth: "96px",
     border: "1px solid #e5e7eb",
-    borderRadius: "10px",
+    borderRadius: "9px",
     background: "#f8fafc",
-    padding: "10px",
+    padding: "8px",
     textAlign: "center",
     color: "#475569",
   },
@@ -4881,7 +4845,7 @@ const styles: Record<string, CSSProperties> = {
   approvalFlowArrow: {
     alignSelf: "center",
     color: "#94a3b8",
-    fontSize: "15px",
+    fontSize: "13px",
     fontStyle: "normal",
     fontWeight: 900,
   },
@@ -4889,8 +4853,8 @@ const styles: Record<string, CSSProperties> = {
     justifySelf: "center",
     borderRadius: "999px",
     background: "rgba(255, 255, 255, 0.72)",
-    padding: "3px 7px",
-    fontSize: "11px",
+    padding: "2px 6px",
+    fontSize: "10px",
     fontStyle: "normal",
     fontWeight: 900,
   },
