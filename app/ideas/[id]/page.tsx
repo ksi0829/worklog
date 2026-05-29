@@ -59,6 +59,14 @@ type IdeaReactionRow = {
   created_at: string;
 };
 
+type IdeaCommentReactionRow = {
+  id: number;
+  comment_id: number;
+  user_id: string;
+  user_name: string;
+  created_at: string;
+};
+
 type ProfileRow = {
   name: string | null;
   team: string | null;
@@ -111,6 +119,7 @@ export default function IdeaDetailPage() {
   const [attachments, setAttachments] = useState<IdeaAttachmentRow[]>([]);
   const [comments, setComments] = useState<IdeaCommentRow[]>([]);
   const [reactions, setReactions] = useState<IdeaReactionRow[]>([]);
+  const [commentReactions, setCommentReactions] = useState<IdeaCommentReactionRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [currentName, setCurrentName] = useState("");
   const [currentTeam, setCurrentTeam] = useState("");
@@ -190,13 +199,24 @@ export default function IdeaDetailPage() {
     }
 
     const row = postData;
+    const loadedComments = commentResult.error ? [] : (commentResult.data || []) as IdeaCommentRow[];
+    const commentIds = loadedComments.map((comment) => comment.id);
+    const commentReactionResult = commentIds.length > 0
+      ? await supabase
+        .from("idea_comment_reactions")
+        .select("id,comment_id,user_id,user_name,created_at")
+        .in("comment_id", commentIds)
+        .order("created_at", { ascending: true })
+      : { data: [], error: null };
+
     setPost(row);
     setTitle(row.title);
     setBody(row.body);
     setAttachments((attachmentResult.data || []) as IdeaAttachmentRow[]);
-    setComments(commentResult.error ? [] : (commentResult.data || []) as IdeaCommentRow[]);
+    setComments(loadedComments);
     setReactions(reactionResult.error ? [] : (reactionResult.data || []) as IdeaReactionRow[]);
-    setInteractionReady(!commentResult.error && !reactionResult.error);
+    setCommentReactions(commentReactionResult.error ? [] : (commentReactionResult.data || []) as IdeaCommentReactionRow[]);
+    setInteractionReady(!commentResult.error && !reactionResult.error && !commentReactionResult.error);
     setLoading(false);
 
     if (!viewIncrementedRef.current) {
@@ -478,6 +498,50 @@ export default function IdeaDetailPage() {
       setMessage("댓글을 삭제하지 못했습니다.");
     } else {
       setComments((current) => current.filter((item) => item.id !== comment.id && item.parent_id !== comment.id));
+      setCommentReactions((current) => current.filter((reaction) => reaction.comment_id !== comment.id));
+    }
+    setBusy(false);
+  }
+
+  async function toggleCommentReaction(comment: IdeaCommentRow) {
+    if (!currentUserId || busy || !interactionReady) return;
+    const existing = commentReactions.find(
+      (reaction) => reaction.comment_id === comment.id && reaction.user_id === currentUserId
+    );
+
+    setBusy(true);
+    setMessage("");
+
+    if (existing) {
+      const { error } = await supabase
+        .from("idea_comment_reactions")
+        .delete()
+        .eq("comment_id", comment.id)
+        .eq("user_id", currentUserId);
+
+      if (error) {
+        setMessage("댓글 공감을 취소하지 못했습니다.");
+      } else {
+        setCommentReactions((current) => current.filter((reaction) => reaction.id !== existing.id));
+      }
+      setBusy(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("idea_comment_reactions")
+      .insert({
+        comment_id: comment.id,
+        user_id: currentUserId,
+        user_name: currentName || "사용자",
+      })
+      .select("id,comment_id,user_id,user_name,created_at")
+      .single();
+
+    if (error || !data) {
+      setMessage("댓글 공감을 등록하지 못했습니다.");
+    } else {
+      setCommentReactions((current) => [...current, data as IdeaCommentReactionRow]);
     }
     setBusy(false);
   }
@@ -632,7 +696,7 @@ export default function IdeaDetailPage() {
                     placeholder="댓글을 입력해 주세요."
                     style={styles.commentTextarea}
                   />
-                  <button type="button" style={styles.primaryButton} onClick={() => void addComment()} disabled={busy || !commentBody.trim()}>
+                  <button type="button" style={styles.commentSubmitButton} onClick={() => void addComment()} disabled={busy || !commentBody.trim()}>
                     댓글 등록
                   </button>
                 </div>
@@ -647,8 +711,10 @@ export default function IdeaDetailPage() {
                           <CommentItem
                             comment={comment}
                             currentUserId={currentUserId}
+                            reactions={commentReactions.filter((reaction) => reaction.comment_id === comment.id)}
                             onReply={() => setReplyTargetId(comment.id)}
                             onDelete={() => void deleteComment(comment)}
+                            onToggleReaction={() => void toggleCommentReaction(comment)}
                           />
                           {replies.length > 0 && (
                             <div style={styles.replyList}>
@@ -657,8 +723,10 @@ export default function IdeaDetailPage() {
                                   key={reply.id}
                                   comment={reply}
                                   currentUserId={currentUserId}
+                                  reactions={commentReactions.filter((reaction) => reaction.comment_id === reply.id)}
                                   onReply={() => setReplyTargetId(comment.id)}
                                   onDelete={() => void deleteComment(reply)}
+                                  onToggleReaction={() => void toggleCommentReaction(reply)}
                                   isReply
                                 />
                               ))}
@@ -681,16 +749,22 @@ export default function IdeaDetailPage() {
 function CommentItem({
   comment,
   currentUserId,
+  reactions,
   onReply,
   onDelete,
+  onToggleReaction,
   isReply = false,
 }: {
   comment: IdeaCommentRow;
   currentUserId: string;
+  reactions: IdeaCommentReactionRow[];
   onReply: () => void;
   onDelete: () => void;
+  onToggleReaction: () => void;
   isReply?: boolean;
 }) {
+  const hasReacted = reactions.some((reaction) => reaction.user_id === currentUserId);
+
   return (
     <div style={{ ...styles.commentItem, ...(isReply ? styles.replyItem : {}) }}>
       <div style={styles.commentMeta}>
@@ -699,6 +773,13 @@ function CommentItem({
       </div>
       <div style={styles.commentBody}>{comment.body}</div>
       <div style={styles.commentActions}>
+        <button
+          type="button"
+          style={{ ...styles.inlineButton, ...(hasReacted ? styles.inlineButtonActive : {}) }}
+          onClick={onToggleReaction}
+        >
+          공감 {reactions.length}
+        </button>
         {!isReply && (
           <button type="button" style={styles.inlineButton} onClick={onReply}>
             답글
@@ -982,17 +1063,29 @@ const styles: Record<string, CSSProperties> = {
   },
   commentTextarea: {
     width: "100%",
-    minHeight: "86px",
+    minHeight: "48px",
     border: "1px solid #d1d5db",
     borderRadius: "11px",
     background: "#ffffff",
     color: "#111827",
-    padding: "12px 13px",
+    padding: "10px 12px",
     fontSize: "13px",
     fontWeight: 700,
-    lineHeight: 1.55,
+    lineHeight: 1.45,
     resize: "vertical",
     outline: "none",
+  },
+  commentSubmitButton: {
+    justifySelf: "flex-end",
+    minHeight: "34px",
+    border: 0,
+    borderRadius: "9px",
+    background: "#0f8a56",
+    color: "#ffffff",
+    padding: "0 13px",
+    fontSize: "12px",
+    fontWeight: 900,
+    cursor: "pointer",
   },
   replyTarget: {
     display: "flex",
@@ -1054,6 +1147,9 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "12px",
     fontWeight: 900,
     cursor: "pointer",
+  },
+  inlineButtonActive: {
+    color: "#c2410c",
   },
   inlineDangerButton: {
     border: 0,
