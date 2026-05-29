@@ -31,7 +31,7 @@ const CHAT_ATTACHMENT_EXTENSIONS = new Set([
 ]);
 const CHAT_ATTACHMENT_ACCEPT =
   ".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.xlsx,.xls,.csv,.docx,.doc,.pptx,.ppt,.dwg,.dxf,.zip";
-const DIVISION_HEAD_NAMES = ["정대용", "서중석", "장동철"];
+const DIVISION_HEAD_NAMES = ["서중석", "장동철"];
 const CHAT_TEAM_ORDER = [
   "재무/인사",
   "구매/총무",

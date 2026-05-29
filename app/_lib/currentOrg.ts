@@ -11,11 +11,6 @@ export type OrgMemberInfo = {
 
 export const CURRENT_ORG: CurrentOrgTeam[] = [
   {
-    team: "관리본부",
-    leader: "정대용",
-    members: [],
-  },
-  {
     team: "재무/인사",
     leader: "김혜정",
     members: ["최인혜"],
@@ -72,7 +67,7 @@ export const TEAM_ORDER = CURRENT_ORG.map(
   (team) => team.team
 );
 
-export const EXECUTIVE_NAMES = ["신영호", "신상민"];
+export const EXECUTIVE_NAMES = ["신상민", "신영호", "정대용"];
 
 export const ORG_MEMBER_MAP = new Map<
   string,

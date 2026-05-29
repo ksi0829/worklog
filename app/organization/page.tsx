@@ -35,12 +35,16 @@ const executive = {
   name: "신영호",
 };
 
+const advisor = {
+  title: "고문",
+  name: "정대용",
+};
+
 const divisions: Division[] = [
   {
     name: "관리본부",
     english: "Administration Division",
     tone: "orange",
-    head: { name: "정대용", rank: "상무", leader: true, leaderLabel: "본부장" },
     departments: [
       {
         name: "재무/인사",
@@ -56,12 +60,6 @@ const divisions: Division[] = [
           { name: "최하영", rank: "대리" },
         ],
       },
-      {
-        name: "국내영업부",
-        members: [
-          { name: "김선일", rank: "과장" },
-        ],
-      },
     ],
   },
   {
@@ -69,6 +67,12 @@ const divisions: Division[] = [
     english: "Sales & Marketing Division",
     tone: "yellow",
     departments: [
+      {
+        name: "국내영업부",
+        members: [
+          { name: "김선일", rank: "과장" },
+        ],
+      },
       {
         name: "해외영업부",
         members: [
@@ -242,6 +246,7 @@ export default function OrganizationPage() {
             <div style={styles.mobileExecutiveStack}>
               <PersonCard title={chairman.title} name={chairman.name} />
               <PersonCard title={executive.title} name={executive.name} />
+              <PersonCard title={advisor.title} name={advisor.name} />
             </div>
 
             <div style={styles.mobileDivisionList}>
@@ -300,11 +305,16 @@ export default function OrganizationPage() {
           <section style={styles.tree}>
             <div style={styles.chartInner}>
               <div style={styles.topArea}>
-                <PersonNode title={chairman.title} name={chairman.name} tone="soft" />
-                <div style={styles.ceoBox}>
-                  <PersonNode title={executive.title} name={executive.name} tone="soft" />
+                <div style={styles.topExecutiveRow}>
+                  <PersonNode title={chairman.title} name={chairman.name} tone="dark" inline />
+                  <PersonNode title={executive.title} name={executive.name} tone="dark" inline />
                 </div>
-                <div style={styles.topVerticalLine} />
+
+                <div style={styles.topCenterLine} />
+                <div style={styles.advisorBranchLine} />
+                <div style={styles.advisorBox}>
+                  <PersonNode title={advisor.title} name={advisor.name} tone="soft" inline />
+                </div>
                 <div style={styles.lowerVerticalLine} />
               </div>
 
@@ -378,10 +388,12 @@ function PersonNode({
   title,
   name,
   tone,
+  inline = false,
 }: {
   title: string;
   name: string;
   tone: "dark" | "soft";
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const email = getRegisteredEmail(name);
@@ -391,7 +403,10 @@ function PersonNode({
     <div
       title={tooltip}
       tabIndex={0}
-      style={tone === "dark" ? styles.executiveNode : styles.advisorNode}
+      style={{
+        ...(tone === "dark" ? styles.executiveNode : styles.advisorNode),
+        ...(inline ? styles.inlinePersonNode : {}),
+      }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -514,7 +529,7 @@ const styles: Record<string, CSSProperties> = {
   },
   mobileExecutiveStack: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "10px",
   },
   mobileExecutiveCard: {
@@ -597,48 +612,50 @@ const styles: Record<string, CSSProperties> = {
 
   topArea: {
     position: "relative",
-    width: "620px",
-    height: "246px",
+    width: "760px",
+    height: "220px",
     margin: "0 auto",
   },
-  ceoBox: {
+  topExecutiveRow: {
     position: "absolute",
     left: "50%",
-    top: "100px",
-    width: "220px",
-    height: "76px",
+    top: 0,
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 220px)",
+    gap: "28px",
     transform: "translateX(-50%)",
   },
-  topVerticalLine: {
+  topCenterLine: {
     position: "absolute",
     left: "50%",
     top: "76px",
     width: "1px",
-    height: "24px",
+    height: "34px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
   lowerVerticalLine: {
     position: "absolute",
     left: "50%",
-    top: "181px",
+    top: "110px",
     width: "1px",
-    height: "65px",
+    height: "110px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
   advisorBranchLine: {
     position: "absolute",
     left: "50%",
-    top: "138px",
-    width: "150px",
+    top: "110px",
+    width: "168px",
     height: "1px",
     background: "#cbd5e1",
   },
   advisorBox: {
     position: "absolute",
-    left: "calc(50% + 150px)",
-    top: "102px",
+    left: "calc(50% + 278px)",
+    top: "72px",
+    transform: "translateX(-50%)",
   },
 
   divisionRailArea: {
@@ -792,6 +809,12 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
     transform: "translateX(-50%)",
     zIndex: 2,
+  },
+  inlinePersonNode: {
+    position: "relative",
+    left: "auto",
+    top: "auto",
+    transform: "none",
   },
   nodeTitle: {
     fontSize: "12px",

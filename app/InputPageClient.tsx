@@ -119,7 +119,7 @@ function mapDBToRow(x: ItemRowDB): Row {
 
 function isExecutive(team?: string | null) {
   const t = team ?? "";
-  return t.includes("대표이사") || t.includes("고문");
+  return t.includes("경영진") || t.includes("회장") || t.includes("대표이사") || t.includes("고문");
 }
 
 function getViewport(): Viewport {
