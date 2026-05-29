@@ -69,6 +69,25 @@ export const TEAM_ORDER = CURRENT_ORG.map(
 
 export const EXECUTIVE_NAMES = ["신상민", "신영호", "정대용"];
 
+export function isExecutiveAccount(
+  name?: string | null,
+  team?: string | null,
+  role?: string | null
+) {
+  const currentName = name || "";
+  const currentTeam = team || "";
+  const currentRole = role || "";
+
+  return (
+    currentRole === "executive" ||
+    EXECUTIVE_NAMES.includes(currentName) ||
+    currentTeam.includes("경영진") ||
+    currentTeam.includes("회장") ||
+    currentTeam.includes("대표이사") ||
+    currentTeam.includes("고문")
+  );
+}
+
 export const ORG_MEMBER_MAP = new Map<
   string,
   OrgMemberInfo

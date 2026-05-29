@@ -310,6 +310,7 @@ export default function OrganizationPage() {
                   <PersonNode title={executive.title} name={executive.name} tone="dark" inline />
                 </div>
 
+                <div style={styles.executiveBridgeLine} />
                 <div style={styles.topCenterLine} />
                 <div style={styles.advisorBranchLine} />
                 <div style={styles.advisorBox}>
@@ -612,7 +613,7 @@ const styles: Record<string, CSSProperties> = {
 
   topArea: {
     position: "relative",
-    width: "760px",
+    width: "900px",
     height: "220px",
     margin: "0 auto",
   },
@@ -625,36 +626,44 @@ const styles: Record<string, CSSProperties> = {
     gap: "28px",
     transform: "translateX(-50%)",
   },
+  executiveBridgeLine: {
+    position: "absolute",
+    left: "calc(50% - 14px)",
+    top: "38px",
+    width: "28px",
+    height: "1px",
+    background: "#cbd5e1",
+  },
   topCenterLine: {
     position: "absolute",
     left: "50%",
     top: "76px",
     width: "1px",
-    height: "34px",
+    height: "48px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
   lowerVerticalLine: {
     position: "absolute",
     left: "50%",
-    top: "110px",
+    top: "124px",
     width: "1px",
-    height: "110px",
+    height: "96px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
   advisorBranchLine: {
     position: "absolute",
     left: "50%",
-    top: "110px",
-    width: "168px",
+    top: "124px",
+    width: "270px",
     height: "1px",
     background: "#cbd5e1",
   },
   advisorBox: {
     position: "absolute",
-    left: "calc(50% + 278px)",
-    top: "72px",
+    left: "calc(50% + 380px)",
+    top: "86px",
     transform: "translateX(-50%)",
   },
 

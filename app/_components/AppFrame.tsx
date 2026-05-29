@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
-import { getCurrentOrgTeam } from "@/app/_lib/currentOrg";
+import { getCurrentOrgTeam, isExecutiveAccount } from "@/app/_lib/currentOrg";
 import { ChatPanel } from "@/app/_components/ChatPanel";
 
 const supabase = createSupabaseBrowser();
@@ -180,9 +180,17 @@ export function AppFrame({ children }: AppFrameProps) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [name, setName] = useState("");
-  const [team, setTeam] = useState("");
-  const [role, setRole] = useState("");
+  const [name, setName] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem("name") || ""
+  );
+  const [team, setTeam] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : getCurrentOrgTeam(localStorage.getItem("name") || "", localStorage.getItem("team") || "")
+  );
+  const [role, setRole] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem("role") || ""
+  );
   const [currentUserId, setCurrentUserId] = useState("");
   const [approvalDocuments, setApprovalDocuments] = useState<ApprovalDocumentRow[]>([]);
   const [asWorkOrderAlerts, setAsWorkOrderAlerts] = useState<AsWorkOrderAlertRow[]>([]);
@@ -200,6 +208,7 @@ export function AppFrame({ children }: AppFrameProps) {
   );
   const utilityItems = useMemo(() => UTILITY_ITEMS, []);
   const title = TITLE_BY_PATH[pathname] || "ZETA";
+  const canUseWorklogInput = !isExecutiveAccount(name, team, role);
 
   const approvalAlerts = useMemo(() => {
     return approvalDocuments.filter((document) => {
@@ -526,7 +535,7 @@ export function AppFrame({ children }: AppFrameProps) {
           </div>
 
           <div className="app-topbar-actions" style={styles.actions}>
-            {pathname === "/view" && (
+            {pathname === "/view" && canUseWorklogInput && (
               <button
                 type="button"
                 className="app-topbar-action-button app-worklog-input-button"

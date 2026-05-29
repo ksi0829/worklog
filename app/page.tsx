@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import InputPageClient from "./InputPageClient";
+import { isExecutiveAccount } from "@/app/_lib/currentOrg";
 
 function detectRealMobile() {
   if (typeof window === "undefined") return false;
@@ -23,14 +24,21 @@ export default function Page() {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isBlockedFromInput, setIsBlockedFromInput] = useState(false);
 
   useEffect(() => {
     const update = () => {
       const mobile = detectRealMobile();
+      const name = localStorage.getItem("name") || "";
+      const team = localStorage.getItem("team") || "";
+      const role = localStorage.getItem("role") || "";
+      const executive = isExecutiveAccount(name, team, role);
+
       setIsMobile(mobile);
+      setIsBlockedFromInput(executive);
       setChecked(true);
 
-      if (mobile) {
+      if (mobile || executive) {
         router.replace("/view");
       }
     };
@@ -78,7 +86,7 @@ export default function Page() {
     );
   }
 
-  if (isMobile) {
+  if (isMobile || isBlockedFromInput) {
     return null;
   }
 
