@@ -2004,6 +2004,48 @@ export default function ApprovalPage() {
       </div>
     );
   };
+  const renderApprovalFlow = (document: ApprovalDocumentRow) => {
+    const lines = getSortedApprovalLines(document);
+    const pendingLine = getFirstPendingLine(document);
+    if (lines.length === 0) return null;
+
+    return (
+      <div style={styles.approvalFlowBox}>
+        <div style={styles.approvalFlowHeader}>
+          <strong>결재 진행 라인</strong>
+          <span>{progressText(document)}</span>
+        </div>
+        <div style={{ ...styles.approvalFlow, ...(isMobile ? styles.approvalFlowMobile : {}) }}>
+          {lines.map((line, index) => {
+            const current = document.status === "pending" && pendingLine?.id === line.id;
+            const approved = line.status === "approved";
+            const rejected = line.status === "rejected";
+
+            return (
+              <div key={line.id} style={styles.approvalFlowStepWrap}>
+                <div
+                  style={{
+                    ...styles.approvalFlowStep,
+                    ...(approved ? styles.approvalFlowStepApproved : {}),
+                    ...(rejected ? styles.approvalFlowStepRejected : {}),
+                    ...(current ? styles.approvalFlowStepCurrent : {}),
+                  }}
+                >
+                  <span>{index + 1}차 결재</span>
+                  <strong>{line.approver_name}</strong>
+                  <small>{line.role_label}</small>
+                  <em style={styles.approvalFlowStatus}>
+                    {approved ? "승인" : rejected ? "반려" : current ? "진행중" : "대기"}
+                  </em>
+                </div>
+                {index < lines.length - 1 && <i style={styles.approvalFlowArrow}>→</i>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
   const renderDocumentButton = (document: ApprovalDocumentRow) => {
     const active = selectedDocument?.id === document.id;
     const pendingLine = getFirstPendingLine(document);
@@ -2822,104 +2864,6 @@ export default function ApprovalPage() {
             )}
           </div>
 
-          {selectedDocument && (
-            <section style={styles.detailBox}>
-              <div
-                style={{
-                  ...styles.detailHeader,
-                  ...(isMobile ? styles.detailHeaderMobile : {}),
-                }}
-              >
-                <div>
-                  <span style={styles.templateCategory}>{selectedDocument.template_title}</span>
-                  <h3 style={styles.detailTitle}>{selectedDocument.title}</h3>
-                </div>
-                <span style={styles.statusBadge}>{statusText(selectedDocument.status)}</span>
-              </div>
-
-              <div
-                style={{
-                  ...styles.detailMetaGrid,
-                  ...(isMobile ? styles.detailMetaGridMobile : {}),
-                }}
-              >
-                <div>
-                  <span>작성자</span>
-                  <strong>{selectedDocument.requester_name}</strong>
-                </div>
-                <div>
-                  <span>작성일</span>
-                  <strong>{formatDate(selectedDocument.submitted_at)}</strong>
-                </div>
-              </div>
-
-              {renderProgressNotice(selectedDocument)}
-
-              <div style={styles.lineStatusList}>
-                {(selectedDocument.approval_lines || []).map((line) => (
-                  <div
-                    key={line.id}
-                    style={{
-                      ...styles.lineStatusItem,
-                      ...(isMobile ? styles.lineStatusItemMobile : {}),
-                    }}
-                  >
-                    <span>{line.role_label}</span>
-                    <strong>{line.approver_name}</strong>
-                    <em>{statusText(line.status)}</em>
-                  </div>
-                ))}
-              </div>
-
-              {getReferenceInfos(selectedDocument.form_data).length > 0 && (
-                <div style={styles.referenceDetailBox}>
-                  <span style={styles.referenceDetailLabel}>참조</span>
-                  <div style={styles.referenceChipRow}>
-                    {getReferenceInfos(selectedDocument.form_data).map((reference) => (
-                      <span key={reference.id} style={styles.referenceChip}>
-                        {reference.name} / {reference.team || "-"}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {renderAttachments(selectedDocument)}
-
-              {canAct && (
-                <div style={styles.actionRow}>
-                  <button
-                    type="button"
-                    style={styles.primaryButton}
-                    onClick={approveSelectedDocument}
-                    disabled={saving}
-                  >
-                    승인
-                  </button>
-                  <button
-                    type="button"
-                    style={styles.dangerButton}
-                    onClick={rejectSelectedDocument}
-                    disabled={saving}
-                  >
-                    반려
-                  </button>
-                </div>
-              )}
-              {isAdmin && (
-                <div style={styles.actionRow}>
-                  <button
-                    type="button"
-                    style={styles.dangerButton}
-                    onClick={deleteSelectedDocument}
-                    disabled={saving}
-                  >
-                    관리자 삭제
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
         </aside>
       </div>
 
@@ -2974,15 +2918,7 @@ export default function ApprovalPage() {
 
             {renderProgressNotice(detailModalDocument)}
 
-            <div style={styles.lineStatusList}>
-              {(detailModalDocument.approval_lines || []).map((line) => (
-                <div key={line.id} style={styles.lineStatusItem}>
-                  <span>{line.role_label}</span>
-                  <strong>{line.approver_name}</strong>
-                  <em>{statusText(line.status)}</em>
-                </div>
-              ))}
-            </div>
+            {renderApprovalFlow(detailModalDocument)}
 
             <div style={{ ...styles.documentFieldGrid, ...(isMobile ? styles.documentFieldGridMobile : {}) }}>
               {(templateMap[detailModalDocument.template_key]?.fields || []).map((field) => (
@@ -3000,6 +2936,39 @@ export default function ApprovalPage() {
             </div>
 
             {renderAttachments(detailModalDocument)}
+
+            {canAct && detailModalDocument.id === selectedDocument?.id && (
+              <div style={styles.actionRow}>
+                <button
+                  type="button"
+                  style={styles.primaryButton}
+                  onClick={approveSelectedDocument}
+                  disabled={saving}
+                >
+                  승인
+                </button>
+                <button
+                  type="button"
+                  style={styles.dangerButton}
+                  onClick={rejectSelectedDocument}
+                  disabled={saving}
+                >
+                  반려
+                </button>
+              </div>
+            )}
+            {isAdmin && detailModalDocument.id === selectedDocument?.id && (
+              <div style={styles.actionRow}>
+                <button
+                  type="button"
+                  style={styles.dangerButton}
+                  onClick={deleteSelectedDocument}
+                  disabled={saving}
+                >
+                  관리자 삭제
+                </button>
+              </div>
+            )}
 
             {(templateMap[detailModalDocument.template_key]?.tables || []).map((table) => {
               const rows = getRows(detailModalDocument.form_data[table.key]);
@@ -4848,6 +4817,82 @@ const styles: Record<string, CSSProperties> = {
     borderColor: "#86efac",
     background: "#f0fdf4",
     color: "#047857",
+  },
+  approvalFlowBox: {
+    marginTop: "14px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#ffffff",
+    padding: "12px",
+  },
+  approvalFlowHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    flexWrap: "wrap",
+    marginBottom: "10px",
+    color: "#334155",
+    fontSize: "12px",
+    fontWeight: 800,
+  },
+  approvalFlow: {
+    display: "flex",
+    alignItems: "stretch",
+    gap: "8px",
+    overflowX: "auto",
+    paddingBottom: "2px",
+  },
+  approvalFlowMobile: {
+    alignItems: "stretch",
+  },
+  approvalFlowStepWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexShrink: 0,
+  },
+  approvalFlowStep: {
+    display: "grid",
+    gap: "4px",
+    minWidth: "118px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "10px",
+    background: "#f8fafc",
+    padding: "10px",
+    textAlign: "center",
+    color: "#475569",
+  },
+  approvalFlowStepApproved: {
+    borderColor: "#86efac",
+    background: "#ecfdf3",
+    color: "#047857",
+  },
+  approvalFlowStepRejected: {
+    borderColor: "#fecdd3",
+    background: "#fff1f2",
+    color: "#be123c",
+  },
+  approvalFlowStepCurrent: {
+    borderColor: "#fbbf24",
+    background: "#fffbeb",
+    color: "#b45309",
+  },
+  approvalFlowArrow: {
+    alignSelf: "center",
+    color: "#94a3b8",
+    fontSize: "15px",
+    fontStyle: "normal",
+    fontWeight: 900,
+  },
+  approvalFlowStatus: {
+    justifySelf: "center",
+    borderRadius: "999px",
+    background: "rgba(255, 255, 255, 0.72)",
+    padding: "3px 7px",
+    fontSize: "11px",
+    fontStyle: "normal",
+    fontWeight: 900,
   },
   lineStatusList: {
     display: "flex",
