@@ -17,6 +17,8 @@ type IdeaPostRow = {
   created_at: string;
   updated_at: string;
   idea_attachments?: { id: number }[];
+  idea_comments?: { id: number }[];
+  idea_reactions?: { id: number }[];
 };
 
 type IdeaPost = {
@@ -29,6 +31,8 @@ type IdeaPost = {
   createdAt: string;
   updatedAt: string;
   attachmentCount: number;
+  commentCount: number;
+  reactionCount: number;
 };
 
 function formatBoardDate(value?: string | null) {
@@ -54,13 +58,13 @@ export default function IdeasPage() {
 
     let { data, error } = await supabase
       .from("idea_posts")
-      .select("id,title,body,author_id,author_name,author_team,view_count,created_at,updated_at,idea_attachments(id)")
+      .select("id,title,body,author_id,author_name,author_team,view_count,created_at,updated_at,idea_attachments(id),idea_comments(id),idea_reactions(id)")
       .order("created_at", { ascending: false });
 
     if (error) {
       const fallback = await supabase
         .from("idea_posts")
-        .select("id,title,body,author_id,author_name,author_team,created_at,updated_at,idea_attachments(id)")
+        .select("id,title,body,author_id,author_name,author_team,view_count,created_at,updated_at,idea_attachments(id)")
         .order("created_at", { ascending: false });
 
       data = fallback.data as typeof data;
@@ -88,6 +92,8 @@ export default function IdeasPage() {
         createdAt: post.created_at,
         updatedAt: post.updated_at,
         attachmentCount: post.idea_attachments?.length || 0,
+        commentCount: post.idea_comments?.length || 0,
+        reactionCount: post.idea_reactions?.length || 0,
       }))
     );
     setLoading(false);
@@ -168,7 +174,11 @@ export default function IdeasPage() {
                       >
                         {post.title}
                       </button>
-                      {post.attachmentCount > 0 && <span style={styles.fileBadge}>파일 {post.attachmentCount}</span>}
+                      <span style={styles.badgeGroup}>
+                        {post.attachmentCount > 0 && <span style={styles.fileBadge}>파일 {post.attachmentCount}</span>}
+                        {post.commentCount > 0 && <span style={styles.commentBadge}>댓글 {post.commentCount}</span>}
+                        {post.reactionCount > 0 && <span style={styles.reactionBadge}>공감 {post.reactionCount}</span>}
+                      </span>
                     </td>
                     <td style={{ ...styles.td, ...styles.authorCell }}>
                       <span style={styles.authorName}>{post.authorName}</span>
@@ -342,6 +352,35 @@ const styles: Record<string, CSSProperties> = {
     fontSize: "11px",
     fontWeight: 900,
     verticalAlign: "middle",
+  },
+  badgeGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    marginLeft: "8px",
+    verticalAlign: "middle",
+  },
+  commentBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "6px",
+    background: "#f1f5f9",
+    color: "#475569",
+    padding: "2px 6px",
+    fontSize: "11px",
+    fontWeight: 900,
+  },
+  reactionBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "6px",
+    background: "#fff7ed",
+    color: "#c2410c",
+    padding: "2px 6px",
+    fontSize: "11px",
+    fontWeight: 900,
   },
   authorName: {
     display: "block",

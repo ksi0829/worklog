@@ -39,6 +39,31 @@ type IdeaAttachmentRow = {
   created_at: string;
 };
 
+type IdeaCommentRow = {
+  id: number;
+  post_id: number;
+  parent_id: number | null;
+  body: string;
+  author_id: string;
+  author_name: string;
+  author_team: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type IdeaReactionRow = {
+  id: number;
+  post_id: number;
+  user_id: string;
+  user_name: string;
+  created_at: string;
+};
+
+type ProfileRow = {
+  name: string | null;
+  team: string | null;
+};
+
 function formatDateTime(value?: string | null) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("ko-KR", {
@@ -84,16 +109,25 @@ export default function IdeaDetailPage() {
   const postId = Number(params.id);
   const [post, setPost] = useState<IdeaPostRow | null>(null);
   const [attachments, setAttachments] = useState<IdeaAttachmentRow[]>([]);
+  const [comments, setComments] = useState<IdeaCommentRow[]>([]);
+  const [reactions, setReactions] = useState<IdeaReactionRow[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentName, setCurrentName] = useState("");
+  const [currentTeam, setCurrentTeam] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [commentBody, setCommentBody] = useState("");
+  const [replyTargetId, setReplyTargetId] = useState<number | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [interactionReady, setInteractionReady] = useState(true);
 
   const isOwner = Boolean(post && currentUserId && post.author_id === currentUserId);
+  const hasReacted = reactions.some((reaction) => reaction.user_id === currentUserId);
+  const topLevelComments = comments.filter((comment) => !comment.parent_id);
 
   const loadPost = useCallback(async () => {
     if (!Number.isFinite(postId)) {
@@ -105,7 +139,7 @@ export default function IdeaDetailPage() {
     setLoading(true);
     setMessage("");
 
-    const [postResult, attachmentResult] = await Promise.all([
+    const [postResult, attachmentResult, commentResult, reactionResult] = await Promise.all([
       supabase
         .from("idea_posts")
         .select("id,title,body,author_id,author_name,author_team,view_count,created_at,updated_at")
@@ -114,6 +148,16 @@ export default function IdeaDetailPage() {
       supabase
         .from("idea_attachments")
         .select("id,post_id,storage_path,original_name,mime_type,size_bytes,uploaded_by,created_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("idea_comments")
+        .select("id,post_id,parent_id,body,author_id,author_name,author_team,created_at,updated_at")
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("idea_reactions")
+        .select("id,post_id,user_id,user_name,created_at")
         .eq("post_id", postId)
         .order("created_at", { ascending: true }),
     ]);
@@ -150,6 +194,9 @@ export default function IdeaDetailPage() {
     setTitle(row.title);
     setBody(row.body);
     setAttachments((attachmentResult.data || []) as IdeaAttachmentRow[]);
+    setComments(commentResult.error ? [] : (commentResult.data || []) as IdeaCommentRow[]);
+    setReactions(reactionResult.error ? [] : (reactionResult.data || []) as IdeaReactionRow[]);
+    setInteractionReady(!commentResult.error && !reactionResult.error);
     setLoading(false);
 
     if (!viewIncrementedRef.current) {
@@ -171,7 +218,18 @@ export default function IdeaDetailPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      setCurrentUserId(user?.id || "");
+      const userId = user?.id || "";
+      setCurrentUserId(userId);
+      if (userId) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("name,team")
+          .eq("id", userId)
+          .maybeSingle();
+        const profile = data as ProfileRow | null;
+        setCurrentName(profile?.name || localStorage.getItem("name") || "");
+        setCurrentTeam(profile?.team || localStorage.getItem("team") || "");
+      }
       await loadPost();
     });
   }, [loadPost]);
@@ -334,6 +392,96 @@ export default function IdeaDetailPage() {
     router.push("/ideas");
   }
 
+  async function toggleReaction() {
+    if (!post || !currentUserId || busy || !interactionReady) return;
+    setBusy(true);
+    setMessage("");
+
+    if (hasReacted) {
+      const { error } = await supabase
+        .from("idea_reactions")
+        .delete()
+        .eq("post_id", post.id)
+        .eq("user_id", currentUserId);
+
+      if (error) {
+        setMessage("공감을 취소하지 못했습니다.");
+      } else {
+        setReactions((current) => current.filter((reaction) => reaction.user_id !== currentUserId));
+      }
+      setBusy(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("idea_reactions")
+      .insert({
+        post_id: post.id,
+        user_id: currentUserId,
+        user_name: currentName || "사용자",
+      })
+      .select("id,post_id,user_id,user_name,created_at")
+      .single();
+
+    if (error || !data) {
+      setMessage("공감을 등록하지 못했습니다.");
+    } else {
+      setReactions((current) => [...current, data as IdeaReactionRow]);
+    }
+    setBusy(false);
+  }
+
+  async function addComment() {
+    if (!post || !currentUserId || !interactionReady) return;
+    const cleanBody = commentBody.trim();
+    if (!cleanBody) {
+      setMessage("댓글 내용을 입력해 주세요.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+    const { data, error } = await supabase
+      .from("idea_comments")
+      .insert({
+        post_id: post.id,
+        parent_id: replyTargetId,
+        body: cleanBody,
+        author_id: currentUserId,
+        author_name: currentName || "사용자",
+        author_team: currentTeam || null,
+      })
+      .select("id,post_id,parent_id,body,author_id,author_name,author_team,created_at,updated_at")
+      .single();
+
+    if (error || !data) {
+      setMessage("댓글을 등록하지 못했습니다.");
+    } else {
+      setComments((current) => [...current, data as IdeaCommentRow]);
+      setCommentBody("");
+      setReplyTargetId(null);
+    }
+    setBusy(false);
+  }
+
+  async function deleteComment(comment: IdeaCommentRow) {
+    if (comment.author_id !== currentUserId || !confirm("댓글을 삭제할까요? 답글이 있으면 함께 삭제됩니다.")) return;
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabase
+      .from("idea_comments")
+      .delete()
+      .eq("id", comment.id)
+      .eq("author_id", currentUserId);
+
+    if (error) {
+      setMessage("댓글을 삭제하지 못했습니다.");
+    } else {
+      setComments((current) => current.filter((item) => item.id !== comment.id && item.parent_id !== comment.id));
+    }
+    setBusy(false);
+  }
+
   return (
     <main style={styles.page}>
       <button type="button" style={styles.backButton} onClick={() => router.push("/ideas")}>
@@ -362,6 +510,8 @@ export default function IdeaDetailPage() {
                   <span>부서 <strong>{post.author_team || "부서 미입력"}</strong></span>
                   <span>작성일 <strong>{formatDateTime(post.created_at)}</strong></span>
                   <span>조회 <strong>{(post.view_count || 0).toLocaleString("ko-KR")}</strong></span>
+                  <span>공감 <strong>{reactions.length.toLocaleString("ko-KR")}</strong></span>
+                  <span>댓글 <strong>{comments.length.toLocaleString("ko-KR")}</strong></span>
                 </div>
               </div>
               {isOwner && (
@@ -387,6 +537,17 @@ export default function IdeaDetailPage() {
                   )}
                 </div>
               )}
+            </div>
+            <div style={styles.reactionBar}>
+              <button
+                type="button"
+                style={{ ...styles.reactionButton, ...(hasReacted ? styles.reactionButtonActive : {}) }}
+                onClick={() => void toggleReaction()}
+                disabled={busy || !interactionReady}
+              >
+                {hasReacted ? "공감 취소" : "공감"} {reactions.length}
+              </button>
+              {!interactionReady && <span style={styles.interactionNotice}>댓글/공감 SQL 적용 후 사용할 수 있습니다.</span>}
             </div>
           </div>
 
@@ -446,9 +607,110 @@ export default function IdeaDetailPage() {
               </div>
             )}
           </div>
+
+          <section style={styles.commentBox}>
+            <div style={styles.attachmentHeader}>
+              <strong>댓글</strong>
+              <span>{comments.length}개</span>
+            </div>
+            {!interactionReady ? (
+              <div style={styles.empty}>댓글 기능은 `project-docs/supabase-idea-board.sql` 실행 후 사용할 수 있습니다.</div>
+            ) : (
+              <>
+                <div style={styles.commentEditor}>
+                  {replyTargetId && (
+                    <div style={styles.replyTarget}>
+                      답글 작성 중
+                      <button type="button" style={styles.inlineButton} onClick={() => setReplyTargetId(null)}>
+                        취소
+                      </button>
+                    </div>
+                  )}
+                  <textarea
+                    value={commentBody}
+                    onChange={(event) => setCommentBody(event.target.value)}
+                    placeholder="댓글을 입력해 주세요."
+                    style={styles.commentTextarea}
+                  />
+                  <button type="button" style={styles.primaryButton} onClick={() => void addComment()} disabled={busy || !commentBody.trim()}>
+                    댓글 등록
+                  </button>
+                </div>
+                {comments.length === 0 ? (
+                  <div style={styles.empty}>등록된 댓글이 없습니다.</div>
+                ) : (
+                  <div style={styles.commentList}>
+                    {topLevelComments.map((comment) => {
+                      const replies = comments.filter((reply) => reply.parent_id === comment.id);
+                      return (
+                        <div key={comment.id} style={styles.commentThread}>
+                          <CommentItem
+                            comment={comment}
+                            currentUserId={currentUserId}
+                            onReply={() => setReplyTargetId(comment.id)}
+                            onDelete={() => void deleteComment(comment)}
+                          />
+                          {replies.length > 0 && (
+                            <div style={styles.replyList}>
+                              {replies.map((reply) => (
+                                <CommentItem
+                                  key={reply.id}
+                                  comment={reply}
+                                  currentUserId={currentUserId}
+                                  onReply={() => setReplyTargetId(comment.id)}
+                                  onDelete={() => void deleteComment(reply)}
+                                  isReply
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
         </section>
       )}
     </main>
+  );
+}
+
+function CommentItem({
+  comment,
+  currentUserId,
+  onReply,
+  onDelete,
+  isReply = false,
+}: {
+  comment: IdeaCommentRow;
+  currentUserId: string;
+  onReply: () => void;
+  onDelete: () => void;
+  isReply?: boolean;
+}) {
+  return (
+    <div style={{ ...styles.commentItem, ...(isReply ? styles.replyItem : {}) }}>
+      <div style={styles.commentMeta}>
+        <strong>{comment.author_name}</strong>
+        <span>{comment.author_team || "부서 미입력"} / {formatDateTime(comment.created_at)}</span>
+      </div>
+      <div style={styles.commentBody}>{comment.body}</div>
+      <div style={styles.commentActions}>
+        {!isReply && (
+          <button type="button" style={styles.inlineButton} onClick={onReply}>
+            답글
+          </button>
+        )}
+        {comment.author_id === currentUserId && (
+          <button type="button" style={styles.inlineDangerButton} onClick={onDelete}>
+            삭제
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -490,6 +752,36 @@ const styles: Record<string, CSSProperties> = {
     borderRadius: "14px",
     background: "#ffffff",
     padding: "22px 24px",
+  },
+  reactionBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap",
+    marginTop: "16px",
+    paddingTop: "16px",
+    borderTop: "1px solid #e5e7eb",
+  },
+  reactionButton: {
+    minHeight: "38px",
+    border: "1px solid #fed7aa",
+    borderRadius: "999px",
+    background: "#fff7ed",
+    color: "#c2410c",
+    padding: "0 15px",
+    fontSize: "13px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  reactionButtonActive: {
+    background: "#c2410c",
+    color: "#ffffff",
+    borderColor: "#c2410c",
+  },
+  interactionNotice: {
+    color: "#9a3412",
+    fontSize: "12px",
+    fontWeight: 800,
   },
   header: {
     display: "flex",
@@ -641,6 +933,12 @@ const styles: Record<string, CSSProperties> = {
     background: "#ffffff",
     padding: "18px 20px",
   },
+  commentBox: {
+    border: "1px solid #d6dde8",
+    borderRadius: "14px",
+    background: "#ffffff",
+    padding: "18px 20px",
+  },
   attachmentHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -676,5 +974,94 @@ const styles: Record<string, CSSProperties> = {
     textAlign: "center",
     fontSize: "13px",
     fontWeight: 800,
+  },
+  commentEditor: {
+    display: "grid",
+    gap: "9px",
+    marginBottom: "14px",
+  },
+  commentTextarea: {
+    width: "100%",
+    minHeight: "86px",
+    border: "1px solid #d1d5db",
+    borderRadius: "11px",
+    background: "#ffffff",
+    color: "#111827",
+    padding: "12px 13px",
+    fontSize: "13px",
+    fontWeight: 700,
+    lineHeight: 1.55,
+    resize: "vertical",
+    outline: "none",
+  },
+  replyTarget: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    color: "#475569",
+    fontSize: "12px",
+    fontWeight: 850,
+  },
+  commentList: {
+    display: "grid",
+    gap: "10px",
+  },
+  commentThread: {
+    display: "grid",
+    gap: "8px",
+  },
+  commentItem: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    background: "#fbfdff",
+    padding: "13px 14px",
+  },
+  replyList: {
+    display: "grid",
+    gap: "8px",
+    marginLeft: "28px",
+  },
+  replyItem: {
+    background: "#f8fafc",
+  },
+  commentMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 750,
+    marginBottom: "8px",
+  },
+  commentBody: {
+    color: "#111827",
+    fontSize: "13px",
+    fontWeight: 650,
+    lineHeight: 1.65,
+    whiteSpace: "pre-wrap",
+  },
+  commentActions: {
+    display: "flex",
+    gap: "8px",
+    marginTop: "8px",
+  },
+  inlineButton: {
+    border: 0,
+    background: "transparent",
+    color: "#2563eb",
+    padding: 0,
+    fontSize: "12px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  inlineDangerButton: {
+    border: 0,
+    background: "transparent",
+    color: "#dc2626",
+    padding: 0,
+    fontSize: "12px",
+    fontWeight: 900,
+    cursor: "pointer",
   },
 };

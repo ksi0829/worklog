@@ -71,6 +71,13 @@ type IdeaAttachmentSummaryRow = {
   total_bytes: number;
 };
 
+type IdeaBoardSummaryRow = {
+  post_count: number;
+  comment_count: number;
+  reaction_count: number;
+  recent_post_count: number;
+};
+
 function formatBytes(sizeBytes: number) {
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   if (sizeBytes < 1024 * 1024 * 1024) return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -123,6 +130,11 @@ export default function AdminPage() {
   const [ideaAttachmentSummaryReady, setIdeaAttachmentSummaryReady] = useState(false);
   const [ideaAttachmentCount, setIdeaAttachmentCount] = useState(0);
   const [ideaAttachmentBytes, setIdeaAttachmentBytes] = useState(0);
+  const [ideaBoardSummaryReady, setIdeaBoardSummaryReady] = useState(false);
+  const [ideaPostCount, setIdeaPostCount] = useState(0);
+  const [ideaCommentCount, setIdeaCommentCount] = useState(0);
+  const [ideaReactionCount, setIdeaReactionCount] = useState(0);
+  const [recentIdeaPostCount, setRecentIdeaPostCount] = useState(0);
 
   const loadDashboard = useCallback(async (preserveMessage = false) => {
     setLoading(true);
@@ -163,6 +175,7 @@ export default function AdminPage() {
       deletionLogResult,
       chatAttachmentSummaryResult,
       ideaAttachmentSummaryResult,
+      ideaBoardSummaryResult,
     ] = await Promise.all([
       supabase
         .from("approval_attachments")
@@ -190,6 +203,7 @@ export default function AdminPage() {
         .limit(20),
       supabase.rpc("get_chat_attachment_admin_summary"),
       supabase.rpc("get_idea_attachment_admin_summary"),
+      supabase.rpc("get_idea_board_admin_summary"),
     ]);
 
     const errors = [
@@ -243,6 +257,20 @@ export default function AdminPage() {
       setIdeaAttachmentSummaryReady(true);
       setIdeaAttachmentCount(Number(summary.attachment_count));
       setIdeaAttachmentBytes(Number(summary.total_bytes));
+    }
+    if (ideaBoardSummaryResult.error || !ideaBoardSummaryResult.data?.[0]) {
+      setIdeaBoardSummaryReady(false);
+      setIdeaPostCount(0);
+      setIdeaCommentCount(0);
+      setIdeaReactionCount(0);
+      setRecentIdeaPostCount(0);
+    } else {
+      const summary = ideaBoardSummaryResult.data[0] as IdeaBoardSummaryRow;
+      setIdeaBoardSummaryReady(true);
+      setIdeaPostCount(Number(summary.post_count));
+      setIdeaCommentCount(Number(summary.comment_count));
+      setIdeaReactionCount(Number(summary.reaction_count));
+      setRecentIdeaPostCount(Number(summary.recent_post_count));
     }
     setDashboardAsOf(Date.now());
     setLoading(false);
@@ -494,6 +522,17 @@ export default function AdminPage() {
             {ideaAttachmentSummaryReady
               ? `${ideaAttachmentCount}개 파일 / 아이디어 게시판 첨부`
               : "아이디어 게시판 SQL 적용 후 집계"}
+          </span>
+        </div>
+        <div style={styles.summaryCard}>
+          <span style={styles.summaryLabel}>아이디어 게시판 현황</span>
+          <strong style={styles.summaryValue}>
+            {ideaBoardSummaryReady ? `${ideaPostCount}건` : "-"}
+          </strong>
+          <span style={styles.summaryHint}>
+            {ideaBoardSummaryReady
+              ? `댓글 ${ideaCommentCount}개 / 공감 ${ideaReactionCount}개 / 최근 30일 ${recentIdeaPostCount}건`
+              : "댓글/공감 SQL 적용 후 집계"}
           </span>
         </div>
         <div style={styles.summaryCard}>
