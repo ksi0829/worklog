@@ -192,50 +192,52 @@ export default function IdeaNewPage() {
 
         {message && <div style={styles.message}>{message}</div>}
 
-        <div style={styles.fieldGroup}>
-          <label style={styles.label}>제목</label>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="제목을 입력해 주세요."
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.fieldGroup}>
-          <label style={styles.label}>내용</label>
-          <textarea
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            placeholder="내용을 입력해 주세요."
-            style={{ ...styles.input, ...styles.textarea }}
-          />
-        </div>
-
-        <div style={styles.fileRow}>
-          <label style={styles.fileButton}>
-            파일 첨부
+        <div style={styles.formBody}>
+          <div style={styles.fieldGroup}>
+            <label style={styles.label}>제목</label>
             <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ATTACHMENT_ACCEPT}
-              onChange={(event) => handleFiles(event.target.files)}
-              style={styles.hiddenInput}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="제목을 입력해 주세요."
+              style={styles.input}
             />
-          </label>
-          <span style={styles.fileHint}>
-            {files.length > 0 ? `${files.length}개 선택됨` : "이미지, PDF, 엑셀, CAD, ZIP 등 최대 5개"}
-          </span>
-        </div>
-
-        {files.length > 0 && (
-          <div style={styles.selectedFiles}>
-            {files.map((file) => (
-              <span key={`${file.name}-${file.size}`}>{file.name}</span>
-            ))}
           </div>
-        )}
+
+          <div style={styles.fieldGroup}>
+            <label style={styles.label}>내용</label>
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder="내용을 입력해 주세요."
+              style={{ ...styles.input, ...styles.textarea }}
+            />
+          </div>
+
+          <div style={styles.fileRow}>
+            <label style={styles.fileButton}>
+              파일 첨부
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ATTACHMENT_ACCEPT}
+                onChange={(event) => handleFiles(event.target.files)}
+                style={styles.hiddenInput}
+              />
+            </label>
+            <span style={styles.fileHint}>
+              {files.length > 0 ? `${files.length}개 선택됨` : "이미지, PDF, 엑셀, CAD, ZIP 등 최대 5개"}
+            </span>
+          </div>
+
+          {files.length > 0 && (
+            <div style={styles.selectedFiles}>
+              {files.map((file) => (
+                <span key={`${file.name}-${file.size}`}>{file.name}</span>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div style={styles.actions}>
           <button type="button" style={styles.secondaryButton} onClick={() => router.push("/ideas")} disabled={saving}>
@@ -275,7 +277,7 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #d6dde8",
     borderRadius: "14px",
     background: "#ffffff",
-    padding: "24px",
+    overflow: "hidden",
   },
   header: {
     display: "flex",
@@ -283,8 +285,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "flex-start",
     gap: "16px",
     borderBottom: "1px solid #e5e7eb",
-    paddingBottom: "18px",
-    marginBottom: "18px",
+    padding: "24px 28px 20px",
   },
   title: {
     margin: "0 0 7px",
@@ -312,9 +313,12 @@ const styles: Record<string, CSSProperties> = {
     background: "#ecfdf3",
     color: "#047857",
     padding: "11px 13px",
-    marginBottom: "14px",
+    margin: "18px 28px 0",
     fontSize: "13px",
     fontWeight: 800,
+  },
+  formBody: {
+    padding: "22px 28px 18px",
   },
   fieldGroup: {
     display: "grid",
@@ -384,8 +388,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "flex-end",
     gap: "8px",
     borderTop: "1px solid #e5e7eb",
-    marginTop: "20px",
-    paddingTop: "18px",
+    padding: "18px 28px",
   },
   primaryButton: {
     minHeight: "40px",
