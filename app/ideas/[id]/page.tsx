@@ -23,6 +23,7 @@ type IdeaPostRow = {
   author_id: string;
   author_name: string;
   author_team: string | null;
+  view_count: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -79,6 +80,7 @@ export default function IdeaDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const viewIncrementedRef = useRef(false);
   const postId = Number(params.id);
   const [post, setPost] = useState<IdeaPostRow | null>(null);
   const [attachments, setAttachments] = useState<IdeaAttachmentRow[]>([]);
@@ -106,7 +108,7 @@ export default function IdeaDetailPage() {
     const [postResult, attachmentResult] = await Promise.all([
       supabase
         .from("idea_posts")
-        .select("id,title,body,author_id,author_name,author_team,created_at,updated_at")
+        .select("id,title,body,author_id,author_name,author_team,view_count,created_at,updated_at")
         .eq("id", postId)
         .maybeSingle(),
       supabase
@@ -116,25 +118,52 @@ export default function IdeaDetailPage() {
         .order("created_at", { ascending: true }),
     ]);
 
+    let postData = postResult.data as IdeaPostRow | null;
+    let postError = postResult.error;
+
     if (postResult.error) {
+      const fallbackPostResult = await supabase
+        .from("idea_posts")
+        .select("id,title,body,author_id,author_name,author_team,created_at,updated_at")
+        .eq("id", postId)
+        .maybeSingle();
+
+      postData = fallbackPostResult.data as IdeaPostRow | null;
+      postError = fallbackPostResult.error;
+    }
+
+    if (postError) {
       setMessage("아이디어 게시판 SQL 적용 후 사용할 수 있습니다. project-docs/supabase-idea-board.sql을 실행해 주세요.");
       setLoading(false);
       return;
     }
 
-    if (!postResult.data) {
+    if (!postData) {
       setPost(null);
       setMessage("게시글을 찾을 수 없습니다.");
       setLoading(false);
       return;
     }
 
-    const row = postResult.data as IdeaPostRow;
+    const row = postData;
     setPost(row);
     setTitle(row.title);
     setBody(row.body);
     setAttachments((attachmentResult.data || []) as IdeaAttachmentRow[]);
     setLoading(false);
+
+    if (!viewIncrementedRef.current) {
+      viewIncrementedRef.current = true;
+      void supabase
+        .rpc("increment_idea_post_view", { target_post_id: postId })
+        .then(({ error }) => {
+          if (!error) {
+            setPost((current) => (
+              current ? { ...current, view_count: (current.view_count || 0) + 1 } : current
+            ));
+          }
+        });
+    }
   }, [postId]);
 
   useEffect(() => {
@@ -327,7 +356,7 @@ export default function IdeaDetailPage() {
                 <h2 style={styles.title}>{post.title}</h2>
               )}
               <div style={styles.meta}>
-                {post.author_name} / {post.author_team || "부서 미입력"} / {formatDateTime(post.created_at)}
+                {post.author_name} / {post.author_team || "부서 미입력"} / {formatDateTime(post.created_at)} / 조회 {(post.view_count || 0).toLocaleString("ko-KR")}
               </div>
             </div>
             {isOwner && (
