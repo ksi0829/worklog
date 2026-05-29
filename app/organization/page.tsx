@@ -306,8 +306,8 @@ export default function OrganizationPage() {
             <div style={styles.chartInner}>
               <div style={styles.topArea}>
                 <div style={styles.topExecutiveRow}>
-                  <PersonNode title={chairman.title} name={chairman.name} tone="dark" inline />
-                  <PersonNode title={executive.title} name={executive.name} tone="dark" inline />
+                  <PersonNode title={chairman.title} name={chairman.name} tone="soft" inline />
+                  <PersonNode title={executive.title} name={executive.name} tone="soft" inline />
                 </div>
 
                 <div style={styles.executiveBridgeLine} />
@@ -637,9 +637,9 @@ const styles: Record<string, CSSProperties> = {
   topCenterLine: {
     position: "absolute",
     left: "50%",
-    top: "76px",
+    top: "38px",
     width: "1px",
-    height: "48px",
+    height: "86px",
     background: "#cbd5e1",
     transform: "translateX(-50%)",
   },
@@ -793,8 +793,9 @@ const styles: Record<string, CSSProperties> = {
     width: "220px",
     minHeight: "76px",
     borderRadius: "10px",
-    background: "#111827",
-    color: "#ffffff",
+    border: "1px solid #111827",
+    background: "#ffffff",
+    color: "#111827",
     padding: "13px 12px",
     display: "grid",
     gap: "8px",
