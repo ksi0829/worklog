@@ -223,8 +223,8 @@ export default function IdeaDetailPage() {
       viewIncrementedRef.current = true;
       void supabase
         .rpc("increment_idea_post_view", { target_post_id: postId })
-        .then(({ error }) => {
-          if (!error) {
+        .then(({ data, error }) => {
+          if (!error && data === true) {
             setPost((current) => (
               current ? { ...current, view_count: (current.view_count || 0) + 1 } : current
             ));
