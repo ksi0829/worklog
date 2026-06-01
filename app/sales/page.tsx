@@ -1008,11 +1008,11 @@ export default function SalesPage() {
               flex-direction: column;
               gap: 6px;
               margin-bottom: 14px;
-              max-width: 360px;
+              width: 100%;
             }
             .box {
               display: grid;
-              grid-template-columns: 84px 1fr;
+              grid-template-columns: 88px 1fr;
               align-items: center;
               border: 1px solid #d9e0ea;
               border-radius: 8px;
