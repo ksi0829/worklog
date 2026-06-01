@@ -752,6 +752,30 @@ export default function SalesPage() {
     setActivityForm(emptyActivityForm);
   }
 
+  async function removeActivity(activityId: number) {
+    if (!selectedOpportunity) return;
+    if (!canManageSelectedOpportunity) {
+      alert("작성자 또는 관리자만 활동 이력을 삭제할 수 있습니다.");
+      return;
+    }
+    if (!confirm("선택한 활동 이력만 삭제할까요?")) return;
+
+    const { error } = await supabase
+      .from("sales_activities")
+      .delete()
+      .eq("id", activityId)
+      .eq("opportunity_id", selectedOpportunity.id);
+
+    if (error) {
+      alert(error.message || "활동 이력 삭제에 실패했습니다.");
+      return;
+    }
+
+    setActivities((current) =>
+      current.filter((activity) => activity.id !== activityId)
+    );
+  }
+
   async function changeStage(nextStage: Stage) {
     if (!selectedOpportunity) return;
     if (!canManageSelectedOpportunity) {
@@ -884,23 +908,24 @@ export default function SalesPage() {
       ? `
             <section class="section">
               <h2>최근 활동</h2>
-              <div class="recent-card">
-                <div>
-                  <span class="label">일자</span>
-                  <strong>${escapeHtml(formatReportDate(latestActivity.date))}</strong>
+              <div class="activity-report">
+                <div class="activity-report-head">
+                  <div>
+                    <span class="label">활동 제목</span>
+                    <strong>${escapeHtml(latestActivity.title)}</strong>
+                  </div>
+                  <div class="activity-report-meta">
+                    <span>${escapeHtml(formatReportDate(latestActivity.date))}</span>
+                    <b>${escapeHtml(latestActivity.type)}</b>
+                  </div>
                 </div>
-                <div>
-                  <span class="label">구분</span>
-                  <strong>${escapeHtml(latestActivity.type)}</strong>
-                </div>
-                <div class="recent-content">
-                  <span class="label">내용</span>
-                  <strong>${escapeHtml(latestActivity.title)}</strong>
-                  ${
+                <div class="activity-report-body">
+                  <span class="label">상세 내용</span>
+                  <p>${
                     latestActivity.memo
-                      ? `<p>${escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")}</p>`
-                      : ""
-                  }
+                      ? escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")
+                      : "상세 메모가 등록되지 않았습니다."
+                  }</p>
                 </div>
               </div>
             </section>
@@ -1153,6 +1178,54 @@ export default function SalesPage() {
               margin: 5px 0 0;
               color: #64748b;
               font-size: 12px;
+              white-space: pre-wrap;
+            }
+            .activity-report {
+              border: 1px solid #cbd5e1;
+              border-radius: 14px;
+              background: #fff;
+              overflow: hidden;
+            }
+            .activity-report-head {
+              display: flex;
+              justify-content: space-between;
+              gap: 14px;
+              align-items: flex-start;
+              background: #f8fafc;
+              border-bottom: 1px solid #e5e7eb;
+              padding: 12px 14px;
+            }
+            .activity-report-head strong {
+              display: block;
+              font-size: 15px;
+              line-height: 1.45;
+              margin-top: 3px;
+            }
+            .activity-report-meta {
+              display: flex;
+              gap: 7px;
+              align-items: center;
+              color: #475569;
+              font-size: 12px;
+              font-weight: 800;
+              white-space: nowrap;
+            }
+            .activity-report-meta b {
+              border-radius: 999px;
+              background: #111827;
+              color: #fff;
+              padding: 4px 8px;
+              font-size: 11px;
+            }
+            .activity-report-body {
+              padding: 13px 14px;
+            }
+            .activity-report-body p {
+              margin: 4px 0 0;
+              color: #111827;
+              font-size: 13px;
+              font-weight: 700;
+              line-height: 1.75;
               white-space: pre-wrap;
             }
             .footer {
@@ -1609,7 +1682,7 @@ export default function SalesPage() {
                   <textarea
                     value={activityForm.memo}
                     onChange={(event) => updateActivity("memo", event.target.value)}
-                    placeholder="미팅 내용, 고객 요청사항, 다음 확인 사항"
+                    placeholder={"미팅/통화 내용:\n고객 요청사항:\n우리 대응/전달 내용:\n다음 확인 사항:"}
                     style={{ ...styles.input, ...styles.textarea }}
                   />
                 </Field>
@@ -1628,8 +1701,18 @@ export default function SalesPage() {
                   selectedActivities.map((activity) => (
                     <article key={activity.id} style={styles.activityItem}>
                       <div style={styles.activityTop}>
-                        <span style={styles.activityType}>{activity.type}</span>
-                        <span style={styles.activityDate}>{activity.date}</span>
+                        <div style={styles.activityMetaGroup}>
+                          <span style={styles.activityType}>{activity.type}</span>
+                          <span style={styles.activityDate}>{activity.date}</span>
+                        </div>
+                        {canManageSelectedOpportunity && (
+                          <button
+                            style={styles.activityDeleteButton}
+                            onClick={() => removeActivity(activity.id)}
+                          >
+                            이력 삭제
+                          </button>
+                        )}
                       </div>
                       <div style={styles.activityTitle}>{activity.title}</div>
                       {activity.memo && (
