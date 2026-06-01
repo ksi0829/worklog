@@ -1007,14 +1007,14 @@ export default function SalesPage() {
               display: grid;
               grid-template-columns: repeat(4, 1fr);
               gap: 8px;
-              margin-bottom: 12px;
+              margin-bottom: 14px;
             }
             .box {
               border: 1px solid #d9e0ea;
-              border-radius: 10px;
+              border-radius: 9px;
               background: #f8fafc;
-              padding: 10px 11px;
-              min-height: 62px;
+              padding: 8px 10px;
+              min-height: 50px;
             }
             .box.strong {
               border-color: #c7d2fe;
@@ -1023,13 +1023,13 @@ export default function SalesPage() {
             .label {
               display: block;
               color: #64748b;
-              font-size: 11px;
+              font-size: 10.5px;
               font-weight: 800;
-              margin-bottom: 5px;
+              margin-bottom: 3px;
             }
             .value {
               color: #111827;
-              font-size: 14px;
+              font-size: 13px;
               font-weight: 900;
               word-break: keep-all;
             }
@@ -1090,57 +1090,6 @@ export default function SalesPage() {
             }
             .step.muted {
               opacity: .55;
-            }
-            .report-grid {
-              display: grid;
-              grid-template-columns: 1.2fr .8fr;
-              gap: 10px;
-              margin-top: 14px;
-            }
-            .panel {
-              border: 1px solid #d9e0ea;
-              border-radius: 14px;
-              background: #fff;
-              padding: 13px;
-            }
-            .panel.accent {
-              border-color: #bbf7d0;
-              background: #f7fffb;
-            }
-            .panel-title {
-              color: #0f8a56;
-              font-size: 12px;
-              font-weight: 900;
-              margin-bottom: 8px;
-            }
-            .report-sentence {
-              font-size: 15px;
-              font-weight: 900;
-              line-height: 1.7;
-              word-break: keep-all;
-            }
-            .todo-list {
-              margin: 0;
-              padding: 0;
-              list-style: none;
-            }
-            .todo-list li {
-              display: flex;
-              gap: 8px;
-              align-items: flex-start;
-              border-top: 1px solid #e5e7eb;
-              padding: 8px 0;
-              color: #334155;
-              font-size: 12px;
-              font-weight: 700;
-            }
-            .todo-list li:first-child {
-              border-top: 0;
-              padding-top: 0;
-            }
-            .todo-list b {
-              flex: 0 0 auto;
-              color: #0f8a56;
             }
             .section {
               margin-top: 16px;
@@ -1290,25 +1239,6 @@ export default function SalesPage() {
               <div class="box">
                 <span class="label">품목/내용</span>
                 <span class="value">${escapeHtml(selectedOpportunity.item)}</span>
-              </div>
-            </section>
-
-            <section class="report-grid">
-              <div class="panel accent">
-                <div class="panel-title">보고 문장</div>
-                <div class="report-sentence">
-                  ${escapeHtml(selectedOpportunity.company)} 건은 현재
-                  ${escapeHtml(stageLabel[selectedOpportunity.stage])} 단계이며,
-                  ${escapeHtml(selectedOpportunity.nextAction || "후속 액션 확인")}을 다음 조치로 진행할 예정입니다.
-                </div>
-              </div>
-              <div class="panel">
-                <div class="panel-title">다음 확인 사항</div>
-                <ul class="todo-list">
-                  <li><b>1</b><span>고객사 요청사항 및 일정 확인</span></li>
-                  <li><b>2</b><span>필요 시 견적/자료 전달</span></li>
-                  <li><b>3</b><span>진행 결과 활동 이력 등록</span></li>
-                </ul>
               </div>
             </section>
 
