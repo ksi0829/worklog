@@ -1025,14 +1025,14 @@ export default function SalesPage() {
 
                 {canManageSelectedOpportunity && (
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {!selectedOpportunity.customerId && (
-                      <button
-                        style={styles.exportButton}
-                        onClick={linkSelectedOpportunityToCustomerDb}
-                      >
-                        고객사 DB 연결
-                      </button>
-                    )}
+                    <button
+                      style={styles.exportButton}
+                      onClick={linkSelectedOpportunityToCustomerDb}
+                    >
+                      {selectedOpportunity.customerId
+                        ? "고객사 DB 확인"
+                        : "고객사 DB 연결"}
+                    </button>
                     <button style={styles.deleteButton} onClick={removeOpportunity}>
                       삭제
                     </button>
