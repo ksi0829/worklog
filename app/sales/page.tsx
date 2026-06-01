@@ -203,6 +203,20 @@ function parseContactInput(value: string) {
   return { name: normalized, position: "" };
 }
 
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatReportDate(value: string) {
+  if (!value) return "-";
+  return value.replaceAll("-", ". ");
+}
+
 function createSalesSummarySheet(
   opportunities: Opportunity[],
   canViewAmount: boolean
@@ -807,6 +821,336 @@ export default function SalesPage() {
     ]);
   }
 
+  function printSelectedSalesReport() {
+    if (!selectedOpportunity) {
+      alert("보고서를 만들 영업 건을 선택해주세요.");
+      return;
+    }
+
+    const reportWindow = window.open("", "zeta-sales-report", "width=900,height=900");
+
+    if (!reportWindow) {
+      alert("팝업이 차단되었습니다. 브라우저 팝업 허용 후 다시 시도해주세요.");
+      return;
+    }
+
+    const sortedActivities = [...selectedActivities].sort((a, b) =>
+      b.date.localeCompare(a.date) || b.id - a.id
+    );
+    const latestActivity = sortedActivities[0] || null;
+    const activityRows = sortedActivities.length
+      ? sortedActivities
+          .map(
+            (activity) => `
+              <tr>
+                <td>${escapeHtml(formatReportDate(activity.date))}</td>
+                <td>${escapeHtml(activity.type)}</td>
+                <td>
+                  <strong>${escapeHtml(activity.title)}</strong>
+                  ${
+                    activity.memo
+                      ? `<p>${escapeHtml(activity.memo).replaceAll("\n", "<br />")}</p>`
+                      : ""
+                  }
+                </td>
+              </tr>
+            `
+          )
+          .join("")
+      : `<tr><td colspan="3" class="empty">등록된 영업 활동 이력이 없습니다.</td></tr>`;
+    const amountText = canViewAmount
+      ? formatAmount(selectedOpportunity.amount, selectedOpportunity.currency)
+      : "권한 제한";
+
+    reportWindow.document.open();
+    reportWindow.document.write(`
+      <!doctype html>
+      <html lang="ko">
+        <head>
+          <meta charset="utf-8" />
+          <title>영업 보고 - ${escapeHtml(selectedOpportunity.company)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              background: #f3f4f6;
+              color: #111827;
+              font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif;
+              line-height: 1.55;
+            }
+            .page {
+              width: 210mm;
+              min-height: 297mm;
+              margin: 0 auto;
+              background: #fff;
+              padding: 18mm 17mm;
+            }
+            .top {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 18px;
+              border-bottom: 2px solid #111827;
+              padding-bottom: 14px;
+              margin-bottom: 18px;
+            }
+            .kicker {
+              color: #0f8a56;
+              font-size: 12px;
+              font-weight: 900;
+              letter-spacing: .04em;
+            }
+            h1 {
+              margin: 4px 0 0;
+              font-size: 25px;
+              line-height: 1.25;
+            }
+            .meta {
+              color: #475569;
+              font-size: 12px;
+              font-weight: 700;
+              text-align: right;
+              white-space: nowrap;
+            }
+            .summary {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 8px;
+              margin-bottom: 14px;
+            }
+            .box {
+              border: 1px solid #d9e0ea;
+              border-radius: 10px;
+              background: #f8fafc;
+              padding: 10px 11px;
+              min-height: 62px;
+            }
+            .label {
+              display: block;
+              color: #64748b;
+              font-size: 11px;
+              font-weight: 800;
+              margin-bottom: 5px;
+            }
+            .value {
+              color: #111827;
+              font-size: 14px;
+              font-weight: 900;
+              word-break: keep-all;
+            }
+            .notice {
+              border: 1px solid #bbf7d0;
+              border-radius: 10px;
+              background: #f0fdf4;
+              padding: 12px;
+              margin-bottom: 15px;
+            }
+            .notice strong {
+              display: block;
+              color: #047857;
+              font-size: 12px;
+              margin-bottom: 4px;
+            }
+            .section {
+              margin-top: 16px;
+            }
+            h2 {
+              margin: 0 0 8px;
+              color: #111827;
+              font-size: 15px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #cbd5e1;
+            }
+            th, td {
+              border: 1px solid #dce3ec;
+              padding: 8px 9px;
+              vertical-align: top;
+              font-size: 12px;
+            }
+            th {
+              background: #eef2f7;
+              color: #334155;
+              font-weight: 900;
+              text-align: left;
+            }
+            td p {
+              margin: 4px 0 0;
+              color: #475569;
+              font-size: 11.5px;
+              white-space: pre-wrap;
+            }
+            .empty {
+              color: #64748b;
+              text-align: center;
+              padding: 18px;
+            }
+            .footer {
+              margin-top: 20px;
+              border-top: 1px solid #d9e0ea;
+              padding-top: 10px;
+              color: #64748b;
+              font-size: 11px;
+              display: flex;
+              justify-content: space-between;
+            }
+            .actions {
+              position: sticky;
+              bottom: 0;
+              display: flex;
+              justify-content: flex-end;
+              gap: 8px;
+              width: 210mm;
+              margin: 0 auto;
+              padding: 10px 0;
+              background: #f3f4f6;
+            }
+            button {
+              height: 36px;
+              border-radius: 8px;
+              border: 1px solid #cbd5e1;
+              background: #fff;
+              color: #111827;
+              padding: 0 14px;
+              font-weight: 800;
+              cursor: pointer;
+            }
+            .primary {
+              border-color: #111827;
+              background: #111827;
+              color: #fff;
+            }
+            @media print {
+              body { background: #fff; }
+              .page { width: auto; min-height: auto; margin: 0; padding: 0; }
+              .actions { display: none; }
+              @page { size: A4; margin: 15mm; }
+            }
+          </style>
+        </head>
+        <body>
+          <main class="page">
+            <header class="top">
+              <div>
+                <div class="kicker">ZETA SALES REPORT</div>
+                <h1>${escapeHtml(selectedOpportunity.company)} 영업 보고</h1>
+              </div>
+              <div class="meta">
+                보고일 ${escapeHtml(formatReportDate(today))}<br />
+                작성 ${escapeHtml(currentName || "-")} / ${escapeHtml(currentOrgTeam || currentTeam || "-")}
+              </div>
+            </header>
+
+            <section class="summary">
+              <div class="box">
+                <span class="label">구분</span>
+                <span class="value">${escapeHtml(divisionLabel[selectedOpportunity.division])}</span>
+              </div>
+              <div class="box">
+                <span class="label">현재 단계</span>
+                <span class="value">${escapeHtml(stageLabel[selectedOpportunity.stage])}</span>
+              </div>
+              <div class="box">
+                <span class="label">담당자</span>
+                <span class="value">${escapeHtml(selectedOpportunity.contact || "-")}</span>
+              </div>
+              <div class="box">
+                <span class="label">예상 금액</span>
+                <span class="value">${escapeHtml(amountText)}</span>
+              </div>
+            </section>
+
+            <section class="notice">
+              <strong>보고 요약</strong>
+              <div>
+                ${escapeHtml(selectedOpportunity.item)}<br />
+                다음 액션: ${escapeHtml(selectedOpportunity.nextAction || "-")}
+                ${
+                  selectedOpportunity.dueDate
+                    ? `<br />예정일: ${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}`
+                    : ""
+                }
+              </div>
+            </section>
+
+            <section class="summary">
+              <div class="box">
+                <span class="label">고객사</span>
+                <span class="value">${escapeHtml(selectedOpportunity.company)}</span>
+              </div>
+              <div class="box">
+                <span class="label">품목/내용</span>
+                <span class="value">${escapeHtml(selectedOpportunity.item)}</span>
+              </div>
+              <div class="box">
+                <span class="label">예정일</span>
+                <span class="value">${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}</span>
+              </div>
+              <div class="box">
+                <span class="label">등록일</span>
+                <span class="value">${escapeHtml(formatReportDate(selectedOpportunity.createdAt))}</span>
+              </div>
+            </section>
+
+            <section class="section">
+              <h2>최근 활동</h2>
+              <table>
+                <tbody>
+                  <tr>
+                    <th style="width: 22%;">일자</th>
+                    <td>${escapeHtml(latestActivity ? formatReportDate(latestActivity.date) : "-")}</td>
+                  </tr>
+                  <tr>
+                    <th>구분</th>
+                    <td>${escapeHtml(latestActivity?.type || "-")}</td>
+                  </tr>
+                  <tr>
+                    <th>내용</th>
+                    <td>
+                      <strong>${escapeHtml(latestActivity?.title || "최근 활동 기록 없음")}</strong>
+                      ${
+                        latestActivity?.memo
+                          ? `<p>${escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")}</p>`
+                          : ""
+                      }
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="section">
+              <h2>활동 이력</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 18%;">일자</th>
+                    <th style="width: 14%;">구분</th>
+                    <th>활동 내용</th>
+                  </tr>
+                </thead>
+                <tbody>${activityRows}</tbody>
+              </table>
+            </section>
+
+            <footer class="footer">
+              <span>ZETA 업무통합시스템 영업관리</span>
+              <span>카카오톡 보고용 PDF 출력</span>
+            </footer>
+          </main>
+          <div class="actions">
+            <button type="button" onclick="window.close()">닫기</button>
+            <button type="button" class="primary" onclick="window.print()">PDF 저장 / 인쇄</button>
+          </div>
+        </body>
+      </html>
+    `);
+    reportWindow.document.close();
+    reportWindow.focus();
+  }
+
   return (
     <main style={styles.page}>
       <section style={styles.container}>
@@ -1042,6 +1386,12 @@ export default function SalesPage() {
 
                 {canManageSelectedOpportunity && (
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      style={styles.exportButton}
+                      onClick={printSelectedSalesReport}
+                    >
+                      보고 PDF
+                    </button>
                     {canSyncCustomerDb && (
                       <button
                         style={styles.exportButton}
