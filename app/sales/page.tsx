@@ -838,7 +838,8 @@ export default function SalesPage() {
       b.date.localeCompare(a.date) || b.id - a.id
     );
     const latestActivity = sortedActivities[0] || null;
-    const activityRows = sortedActivities.length
+    const hasActivities = sortedActivities.length > 0;
+    const activityRows = hasActivities
       ? sortedActivities
           .map(
             (activity) => `
@@ -857,7 +858,55 @@ export default function SalesPage() {
             `
           )
           .join("")
-      : `<tr><td colspan="3" class="empty">등록된 영업 활동 이력이 없습니다.</td></tr>`;
+      : "";
+    const recentActivitySection = latestActivity
+      ? `
+            <section class="section">
+              <h2>최근 활동</h2>
+              <div class="recent-card">
+                <div>
+                  <span class="label">일자</span>
+                  <strong>${escapeHtml(formatReportDate(latestActivity.date))}</strong>
+                </div>
+                <div>
+                  <span class="label">구분</span>
+                  <strong>${escapeHtml(latestActivity.type)}</strong>
+                </div>
+                <div class="recent-content">
+                  <span class="label">내용</span>
+                  <strong>${escapeHtml(latestActivity.title)}</strong>
+                  ${
+                    latestActivity.memo
+                      ? `<p>${escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")}</p>`
+                      : ""
+                  }
+                </div>
+              </div>
+            </section>
+        `
+      : "";
+    const activityHistorySection = hasActivities
+      ? `
+            <section class="section">
+              <h2>활동 이력</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 18%;">일자</th>
+                    <th style="width: 14%;">구분</th>
+                    <th>활동 내용</th>
+                  </tr>
+                </thead>
+                <tbody>${activityRows}</tbody>
+              </table>
+            </section>
+        `
+      : `
+            <section class="section">
+              <h2>활동 이력</h2>
+              <div class="empty-panel">등록된 영업 활동 이력이 없습니다.</div>
+            </section>
+        `;
     const amountText = canViewAmount
       ? formatAmount(selectedOpportunity.amount, selectedOpportunity.currency)
       : "권한 제한";
@@ -916,7 +965,7 @@ export default function SalesPage() {
               display: grid;
               grid-template-columns: repeat(4, 1fr);
               gap: 8px;
-              margin-bottom: 14px;
+              margin-bottom: 12px;
             }
             .box {
               border: 1px solid #d9e0ea;
@@ -924,6 +973,10 @@ export default function SalesPage() {
               background: #f8fafc;
               padding: 10px 11px;
               min-height: 62px;
+            }
+            .box.strong {
+              border-color: #c7d2fe;
+              background: #f5f7ff;
             }
             .label {
               display: block;
@@ -939,17 +992,31 @@ export default function SalesPage() {
               word-break: keep-all;
             }
             .notice {
-              border: 1px solid #bbf7d0;
-              border-radius: 10px;
-              background: #f0fdf4;
-              padding: 12px;
-              margin-bottom: 15px;
+              border: 2px solid #0f8a56;
+              border-radius: 14px;
+              background: #f7fffb;
+              padding: 15px 16px;
+              margin-bottom: 14px;
             }
             .notice strong {
               display: block;
-              color: #047857;
-              font-size: 12px;
-              margin-bottom: 4px;
+              color: #0f8a56;
+              font-size: 13px;
+              margin-bottom: 8px;
+            }
+            .notice .main {
+              font-size: 17px;
+              font-weight: 900;
+              margin-bottom: 8px;
+              word-break: keep-all;
+            }
+            .notice .sub {
+              color: #334155;
+              font-size: 13px;
+              font-weight: 700;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 6px 14px;
             }
             .section {
               margin-top: 16px;
@@ -982,10 +1049,34 @@ export default function SalesPage() {
               font-size: 11.5px;
               white-space: pre-wrap;
             }
-            .empty {
+            .empty-panel {
+              border: 1px dashed #cbd5e1;
+              border-radius: 10px;
               color: #64748b;
+              background: #f8fafc;
               text-align: center;
               padding: 18px;
+              font-size: 12px;
+              font-weight: 700;
+            }
+            .recent-card {
+              display: grid;
+              grid-template-columns: 1fr 1fr 2.2fr;
+              gap: 8px;
+              border: 1px solid #d9e0ea;
+              border-radius: 12px;
+              background: #fff;
+              padding: 12px;
+            }
+            .recent-card strong {
+              display: block;
+              font-size: 13px;
+            }
+            .recent-content p {
+              margin: 5px 0 0;
+              color: #64748b;
+              font-size: 12px;
+              white-space: pre-wrap;
             }
             .footer {
               margin-top: 20px;
@@ -994,7 +1085,7 @@ export default function SalesPage() {
               color: #64748b;
               font-size: 11px;
               display: flex;
-              justify-content: space-between;
+              justify-content: flex-start;
             }
             .actions {
               position: sticky;
@@ -1043,101 +1134,41 @@ export default function SalesPage() {
               </div>
             </header>
 
+            <section class="notice">
+              <strong>보고 요약</strong>
+              <div class="main">${escapeHtml(selectedOpportunity.item)}</div>
+              <div class="sub">
+                <span>현재 단계: ${escapeHtml(stageLabel[selectedOpportunity.stage])}</span>
+                <span>다음 액션: ${escapeHtml(selectedOpportunity.nextAction || "-")}</span>
+                <span>담당자: ${escapeHtml(selectedOpportunity.contact || "-")}</span>
+                <span>예정일: ${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}</span>
+              </div>
+            </section>
+
             <section class="summary">
-              <div class="box">
+              <div class="box strong">
+                <span class="label">고객사</span>
+                <span class="value">${escapeHtml(selectedOpportunity.company)}</span>
+              </div>
+              <div class="box strong">
                 <span class="label">구분</span>
                 <span class="value">${escapeHtml(divisionLabel[selectedOpportunity.division])}</span>
               </div>
-              <div class="box">
-                <span class="label">현재 단계</span>
-                <span class="value">${escapeHtml(stageLabel[selectedOpportunity.stage])}</span>
-              </div>
-              <div class="box">
-                <span class="label">담당자</span>
-                <span class="value">${escapeHtml(selectedOpportunity.contact || "-")}</span>
-              </div>
-              <div class="box">
+              <div class="box strong">
                 <span class="label">예상 금액</span>
                 <span class="value">${escapeHtml(amountText)}</span>
-              </div>
-            </section>
-
-            <section class="notice">
-              <strong>보고 요약</strong>
-              <div>
-                ${escapeHtml(selectedOpportunity.item)}<br />
-                다음 액션: ${escapeHtml(selectedOpportunity.nextAction || "-")}
-                ${
-                  selectedOpportunity.dueDate
-                    ? `<br />예정일: ${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}`
-                    : ""
-                }
-              </div>
-            </section>
-
-            <section class="summary">
-              <div class="box">
-                <span class="label">고객사</span>
-                <span class="value">${escapeHtml(selectedOpportunity.company)}</span>
               </div>
               <div class="box">
                 <span class="label">품목/내용</span>
                 <span class="value">${escapeHtml(selectedOpportunity.item)}</span>
               </div>
-              <div class="box">
-                <span class="label">예정일</span>
-                <span class="value">${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}</span>
-              </div>
-              <div class="box">
-                <span class="label">등록일</span>
-                <span class="value">${escapeHtml(formatReportDate(selectedOpportunity.createdAt))}</span>
-              </div>
             </section>
 
-            <section class="section">
-              <h2>최근 활동</h2>
-              <table>
-                <tbody>
-                  <tr>
-                    <th style="width: 22%;">일자</th>
-                    <td>${escapeHtml(latestActivity ? formatReportDate(latestActivity.date) : "-")}</td>
-                  </tr>
-                  <tr>
-                    <th>구분</th>
-                    <td>${escapeHtml(latestActivity?.type || "-")}</td>
-                  </tr>
-                  <tr>
-                    <th>내용</th>
-                    <td>
-                      <strong>${escapeHtml(latestActivity?.title || "최근 활동 기록 없음")}</strong>
-                      ${
-                        latestActivity?.memo
-                          ? `<p>${escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")}</p>`
-                          : ""
-                      }
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-
-            <section class="section">
-              <h2>활동 이력</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th style="width: 18%;">일자</th>
-                    <th style="width: 14%;">구분</th>
-                    <th>활동 내용</th>
-                  </tr>
-                </thead>
-                <tbody>${activityRows}</tbody>
-              </table>
-            </section>
+            ${recentActivitySection}
+            ${activityHistorySection}
 
             <footer class="footer">
               <span>ZETA 업무통합시스템 영업관리</span>
-              <span>카카오톡 보고용 PDF 출력</span>
             </footer>
           </main>
           <div class="actions">
