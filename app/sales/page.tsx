@@ -97,6 +97,20 @@ type ContactOption = {
   position: string | null;
 };
 
+type CustomerInsertRow = {
+  id: number;
+  name: string;
+  category?: string | null;
+};
+
+type ContactInsertRow = {
+  id: number;
+  customer_id: number;
+  name: string;
+  department: string | null;
+  position: string | null;
+};
+
 const divisionLabel: Record<SalesDivision, string> = {
   domestic: "국내영업",
   overseas: "해외영업",
@@ -141,6 +155,51 @@ const emptyActivityForm: ActivityForm = {
   memo: "",
   date: today,
 };
+
+const positionKeywords = [
+  "회장",
+  "대표",
+  "대표이사",
+  "이사",
+  "상무",
+  "전무",
+  "부장",
+  "차장",
+  "과장",
+  "대리",
+  "주임",
+  "사원",
+  "실장",
+  "팀장",
+  "소장",
+  "공장장",
+  "본부장",
+  "매니저",
+];
+
+function normalizeText(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function parseContactInput(value: string) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+
+  if (!normalized) {
+    return { name: "", position: "" };
+  }
+
+  const parts = normalized.split(" ");
+  const lastPart = parts[parts.length - 1];
+
+  if (parts.length > 1 && positionKeywords.includes(lastPart)) {
+    return {
+      name: parts.slice(0, -1).join(" "),
+      position: lastPart,
+    };
+  }
+
+  return { name: normalized, position: "" };
+}
 
 function createSalesSummarySheet(
   opportunities: Opportunity[],
@@ -400,6 +459,98 @@ export default function SalesPage() {
     setActivityForm(emptyActivityForm);
   }
 
+  async function ensureCustomerDbLink(company: string, contact: string) {
+    const matchedCustomer =
+      customerOptions.find(
+        (customer) => normalizeText(customer.name) === normalizeText(company)
+      ) || null;
+
+    let customerId = matchedCustomer?.id || null;
+
+    if (!matchedCustomer) {
+      const shouldCreate = confirm(
+        `"${company}" 업체가 고객사 DB에 없습니다.\n신규 고객사로 등록하고 영업 건을 저장할까요?`
+      );
+
+      if (!shouldCreate) return null;
+
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({
+          name: company,
+          category: "customer",
+          phone: "",
+          address: "",
+          memo: "영업관리에서 자동 등록된 고객사입니다.",
+        })
+        .select("id,name,category")
+        .single();
+
+      if (error || !data) {
+        alert(error?.message || "고객사 DB 자동 등록에 실패했습니다.");
+        return null;
+      }
+
+      const row = data as CustomerInsertRow;
+      customerId = row.id;
+      setCustomerOptions((current) => [
+        ...current,
+        {
+          id: row.id,
+          name: row.name,
+          category: row.category || "customer",
+        },
+      ]);
+    }
+
+    if (!customerId || !contact.trim()) return customerId;
+
+    const parsedContact = parseContactInput(contact);
+
+    if (!parsedContact.name) return customerId;
+
+    const duplicateContact = contactOptions.some(
+      (item) =>
+        item.customer_id === customerId &&
+        normalizeText(item.name) === normalizeText(parsedContact.name)
+    );
+
+    if (duplicateContact) return customerId;
+
+    const { data: contactData, error: contactError } = await supabase
+      .from("customer_contacts")
+      .insert({
+        customer_id: customerId,
+        name: parsedContact.name,
+        department: "",
+        position: parsedContact.position,
+        phone: "",
+        email: "",
+        memo: "영업관리에서 자동 등록된 담당자입니다.",
+      })
+      .select("id,customer_id,name,department,position")
+      .single();
+
+    if (contactError || !contactData) {
+      alert(contactError?.message || "담당자 DB 자동 등록에 실패했습니다.");
+      return customerId;
+    }
+
+    const contactRow = contactData as ContactInsertRow;
+    setContactOptions((current) => [
+      ...current,
+      {
+        id: contactRow.id,
+        customer_id: contactRow.customer_id,
+        name: contactRow.name,
+        department: contactRow.department,
+        position: contactRow.position,
+      },
+    ]);
+
+    return customerId;
+  }
+
   async function addOpportunity() {
     const company = opportunityForm.company.trim();
     const contact = opportunityForm.contact.trim();
@@ -417,13 +568,15 @@ export default function SalesPage() {
       return;
     }
 
-    const matchedCustomer =
-      customerOptions.find((customer) => customer.name.trim() === company) || null;
+    const customerId = await ensureCustomerDbLink(company, contact);
+
+    if (!customerId) return;
+
     const { data, error } = await supabase
       .from("sales_opportunities")
       .insert({
         division,
-        customer_id: matchedCustomer?.id || null,
+        customer_id: customerId,
         company,
         contact,
         item,
@@ -631,6 +784,9 @@ export default function SalesPage() {
         <section style={styles.layout}>
           <div style={styles.panel}>
             <h2 style={styles.panelTitle}>영업 건 등록</h2>
+            <p style={styles.panelHint}>
+              신규 업체명은 확인 후 고객사 DB에 자동 등록되고, 담당자도 함께 연결됩니다.
+            </p>
 
             <div style={styles.formGrid}>
               <Field label="고객사">
