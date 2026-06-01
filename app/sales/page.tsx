@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/app/_components/BrandLogo";
-import { canAccessSales } from "@/app/_lib/currentOrg";
+import { canAccessSales, getCurrentOrgTeam } from "@/app/_lib/currentOrg";
 import {
   type ExcelSheet,
   exportDateStamp,
@@ -336,7 +336,10 @@ export default function SalesPage() {
     typeof window !== "undefined" ? localStorage.getItem("team") || "" : "";
   const currentRole =
     typeof window !== "undefined" ? localStorage.getItem("role") || "" : "";
+  const currentOrgTeam = getCurrentOrgTeam(currentName, currentTeam);
   const canViewAmount = canAccessSales(currentName, currentTeam);
+  const canSyncCustomerDb =
+    currentOrgTeam === "국내영업부" || currentOrgTeam === "해외영업부";
   const isAdmin = currentRole === "admin";
   const canManageSelectedOpportunity = Boolean(
     selectedOpportunity && (isAdmin || selectedOpportunity.createdBy === currentUserId)
@@ -471,6 +474,11 @@ export default function SalesPage() {
     let customerId = matchedCustomer?.id || null;
 
     if (!matchedCustomer) {
+      if (!canSyncCustomerDb) {
+        alert("신규 고객사 DB 등록은 영업본부 소속 인원만 가능합니다.");
+        return null;
+      }
+
       const shouldCreate = confirm(
         `"${company}" 업체가 고객사 DB에 없습니다.\n신규 고객사로 등록하고 영업 건을 저장할까요?`
       );
@@ -580,6 +588,10 @@ export default function SalesPage() {
       alert("작성자 또는 관리자만 고객사 DB에 연결할 수 있습니다.");
       return;
     }
+    if (!canSyncCustomerDb) {
+      alert("고객사 DB 연결은 영업본부 소속 인원만 가능합니다.");
+      return;
+    }
 
     const customerId = await ensureCustomerDbLink(
       selectedOpportunity.company,
@@ -605,7 +617,7 @@ export default function SalesPage() {
           : item
       )
     );
-    alert("고객사 DB 연결이 완료되었습니다.");
+    alert("고객사 DB에 저장/연결되었습니다.");
   }
 
   async function addOpportunity() {
@@ -671,6 +683,11 @@ export default function SalesPage() {
     setOpportunities((current) => [nextOpportunity, ...current]);
     setSelectedId(nextOpportunity.id);
     setOpportunityForm(emptyOpportunityForm);
+    alert(
+      customerId
+        ? "영업 건이 등록되고 고객사 DB에 연결되었습니다."
+        : "영업 건이 등록되었습니다."
+    );
   }
 
   async function addActivity() {
@@ -1025,14 +1042,16 @@ export default function SalesPage() {
 
                 {canManageSelectedOpportunity && (
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button
-                      style={styles.exportButton}
-                      onClick={linkSelectedOpportunityToCustomerDb}
-                    >
-                      {selectedOpportunity.customerId
-                        ? "고객사 DB 확인"
-                        : "고객사 DB 연결"}
-                    </button>
+                    {canSyncCustomerDb && (
+                      <button
+                        style={styles.exportButton}
+                        onClick={linkSelectedOpportunityToCustomerDb}
+                      >
+                        {selectedOpportunity.customerId
+                          ? "고객사 DB 확인"
+                          : "고객사 DB 연결"}
+                      </button>
+                    )}
                     <button style={styles.deleteButton} onClick={removeOpportunity}>
                       삭제
                     </button>
