@@ -1004,17 +1004,21 @@ export default function SalesPage() {
               background: #22c55e;
             }
             .summary {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 8px;
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
               margin-bottom: 14px;
+              max-width: 360px;
             }
             .box {
+              display: grid;
+              grid-template-columns: 84px 1fr;
+              align-items: center;
               border: 1px solid #d9e0ea;
-              border-radius: 9px;
+              border-radius: 8px;
               background: #f8fafc;
-              padding: 8px 10px;
-              min-height: 50px;
+              padding: 6px 9px;
+              min-height: 34px;
             }
             .box.strong {
               border-color: #c7d2fe;
@@ -1025,7 +1029,7 @@ export default function SalesPage() {
               color: #64748b;
               font-size: 10.5px;
               font-weight: 800;
-              margin-bottom: 3px;
+              margin-bottom: 0;
             }
             .value {
               color: #111827;
