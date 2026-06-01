@@ -297,6 +297,7 @@ export default function SalesPage() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [expandedCustomerKeys, setExpandedCustomerKeys] = useState<string[]>([]);
   const [opportunityForm, setOpportunityForm] =
     useState<OpportunityForm>(emptyOpportunityForm);
   const [activityForm, setActivityForm] =
@@ -311,6 +312,38 @@ export default function SalesPage() {
     () => opportunities.filter((item) => item.division === division),
     [division, opportunities]
   );
+
+  const customerGroups = useMemo(() => {
+    const groupMap = new Map<
+      string,
+      { key: string; company: string; contact: string; opportunities: Opportunity[] }
+    >();
+
+    currentOpportunities.forEach((item) => {
+      const key = normalizeText(item.company);
+      const current = groupMap.get(key);
+
+      if (current) {
+        current.opportunities.push(item);
+        if (!current.contact && item.contact) current.contact = item.contact;
+        return;
+      }
+
+      groupMap.set(key, {
+        key,
+        company: item.company,
+        contact: item.contact,
+        opportunities: [item],
+      });
+    });
+
+    return Array.from(groupMap.values()).map((group) => ({
+      ...group,
+      opportunities: group.opportunities.sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt) || b.id - a.id
+      ),
+    }));
+  }, [currentOpportunities]);
 
   const selectedOpportunity =
     opportunities.find((item) => item.id === selectedId) || null;
@@ -472,11 +505,20 @@ export default function SalesPage() {
   function changeDivision(nextDivision: SalesDivision) {
     setDivision(nextDivision);
     setSelectedId(null);
+    setExpandedCustomerKeys([]);
     setOpportunityForm({
       ...emptyOpportunityForm,
       currency: nextDivision === "overseas" ? "USD" : "KRW",
     });
     setActivityForm(emptyActivityForm);
+  }
+
+  function toggleCustomerGroup(customerKey: string) {
+    setExpandedCustomerKeys((current) =>
+      current.includes(customerKey)
+        ? current.filter((key) => key !== customerKey)
+        : [...current, customerKey]
+    );
   }
 
   async function ensureCustomerDbLink(company: string, contact: string) {
@@ -1499,28 +1541,77 @@ export default function SalesPage() {
                 엑셀
               </button>
             </div>
-            <p style={styles.panelHint}>업체명과 담당자만 빠르게 확인하고, 클릭하면 상세가 열립니다.</p>
+            <p style={styles.panelHint}>고객사를 펼치면 해당 업체의 영업 건이 가지 형태로 표시됩니다.</p>
 
             <div style={styles.list}>
-              {currentOpportunities.length === 0 ? (
+              {customerGroups.length === 0 ? (
                 <div style={styles.empty}>아직 등록된 영업기회가 없습니다.</div>
               ) : (
-                currentOpportunities.map((item) => (
-                  <button
-                    key={item.id}
-                    style={
-                      selectedOpportunity?.id === item.id
-                        ? styles.selectedCard
-                        : styles.card
-                    }
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <div style={styles.simpleCardRow}>
-                      <span style={styles.company}>{item.company}</span>
-                      <span style={styles.contact}>{item.contact || "담당자 미입력"}</span>
+                customerGroups.map((group) => {
+                  const selectedInGroup = group.opportunities.some(
+                    (item) => item.id === selectedOpportunity?.id
+                  );
+                  const isExpanded =
+                    expandedCustomerKeys.includes(group.key) || selectedInGroup;
+                  const activeOpportunities = group.opportunities.filter(
+                    (item) => item.stage !== "WON" && item.stage !== "LOST"
+                  ).length;
+
+                  return (
+                    <div key={group.key} style={styles.customerGroup}>
+                      <button
+                        style={
+                          selectedInGroup
+                            ? styles.selectedCustomerHeader
+                            : styles.customerHeader
+                        }
+                        onClick={() => toggleCustomerGroup(group.key)}
+                      >
+                        <div>
+                          <div style={styles.customerHeaderName}>{group.company}</div>
+                          <div style={styles.customerHeaderMeta}>
+                            담당 {group.contact || "미입력"} · 영업 건 {group.opportunities.length}건
+                          </div>
+                        </div>
+                        <div style={styles.customerHeaderRight}>
+                          <span style={styles.customerHeaderCount}>
+                            진행 {activeOpportunities}
+                          </span>
+                          <span>{isExpanded ? "접기" : "펼치기"}</span>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div style={styles.opportunityBranchList}>
+                          {group.opportunities.map((item) => (
+                            <button
+                              key={item.id}
+                              style={
+                                selectedOpportunity?.id === item.id
+                                  ? styles.selectedOpportunityBranch
+                                  : styles.opportunityBranch
+                              }
+                              onClick={() => setSelectedId(item.id)}
+                            >
+                              <span style={styles.branchLine} />
+                              <div style={styles.branchContent}>
+                                <div style={styles.branchTitle}>{item.item}</div>
+                                <div style={styles.branchMeta}>
+                                  {stageLabel[item.stage]} · 다음 액션 {item.nextAction || "-"}
+                                </div>
+                              </div>
+                              <span style={styles.branchAmount}>
+                                {canViewAmount
+                                  ? formatAmount(item.amount, item.currency)
+                                  : "권한 제한"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
