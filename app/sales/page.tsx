@@ -322,6 +322,16 @@ export default function SalesPage() {
     [currentOpportunities]
   );
 
+  const filteredLinkableOpportunities = useMemo(() => {
+    const companyFilter = normalizeText(opportunityForm.company);
+
+    if (!companyFilter) return linkableOpportunities;
+
+    return linkableOpportunities.filter(
+      (item) => normalizeText(item.company) === companyFilter
+    );
+  }, [linkableOpportunities, opportunityForm.company]);
+
   const customerGroups = useMemo(() => {
     const groupMap = new Map<
       string,
@@ -1345,7 +1355,7 @@ export default function SalesPage() {
                 style={styles.input}
               >
                 <option value="">새 영업 건으로 등록</option>
-                {linkableOpportunities.map((item) => (
+                {filteredLinkableOpportunities.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.company} / {item.item}
                   </option>
