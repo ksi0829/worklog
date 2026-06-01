@@ -20,6 +20,7 @@ type ActivityType = "방문" | "전화" | "메일" | "견적" | "제안" | "후�
 type Opportunity = {
   id: number;
   division: SalesDivision;
+  customerId: number | null;
   company: string;
   contact: string;
   item: string;
@@ -62,6 +63,7 @@ type ActivityForm = {
 type OpportunityRow = {
   id: number;
   division: SalesDivision;
+  customer_id: number | null;
   company: string;
   contact: string | null;
   item: string;
@@ -351,13 +353,13 @@ export default function SalesPage() {
 
     let { data: opportunityRows, error: opportunityError } = await supabase
       .from("sales_opportunities")
-      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+      .select("id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
       .order("created_at", { ascending: false });
 
     if (opportunityError?.message?.includes("currency")) {
       const fallback = await supabase
         .from("sales_opportunities")
-        .select("id,division,company,contact,item,amount,stage,next_action,due_date,created_at,created_by")
+        .select("id,division,customer_id,company,contact,item,amount,stage,next_action,due_date,created_at,created_by")
         .order("created_at", { ascending: false });
 
       opportunityRows = fallback.data as OpportunityRow[] | null;
@@ -396,6 +398,7 @@ export default function SalesPage() {
       (item) => ({
         id: item.id,
         division: item.division,
+        customerId: item.customer_id || null,
         company: item.company,
         contact: item.contact || "",
         item: item.item,
@@ -487,20 +490,40 @@ export default function SalesPage() {
         .single();
 
       if (error || !data) {
-        alert(error?.message || "고객사 DB 자동 등록에 실패했습니다.");
-        return null;
-      }
+        const { data: existingRows } = await supabase
+          .from("customers")
+          .select("id,name,category")
+          .ilike("name", company)
+          .limit(1);
 
-      const row = data as CustomerInsertRow;
-      customerId = row.id;
-      setCustomerOptions((current) => [
-        ...current,
-        {
-          id: row.id,
-          name: row.name,
-          category: row.category || "customer",
-        },
-      ]);
+        const existingCustomer = (existingRows?.[0] || null) as CustomerInsertRow | null;
+
+        if (!existingCustomer) {
+          alert(error?.message || "고객사 DB 자동 등록에 실패했습니다.");
+          return null;
+        }
+
+        customerId = existingCustomer.id;
+        setCustomerOptions((current) => [
+          ...current,
+          {
+            id: existingCustomer.id,
+            name: existingCustomer.name,
+            category: existingCustomer.category || "customer",
+          },
+        ]);
+      } else {
+        const row = data as CustomerInsertRow;
+        customerId = row.id;
+        setCustomerOptions((current) => [
+          ...current,
+          {
+            id: row.id,
+            name: row.name,
+            category: row.category || "customer",
+          },
+        ]);
+      }
     }
 
     if (!customerId || !contact.trim()) return customerId;
@@ -551,6 +574,40 @@ export default function SalesPage() {
     return customerId;
   }
 
+  async function linkSelectedOpportunityToCustomerDb() {
+    if (!selectedOpportunity) return;
+    if (!canManageSelectedOpportunity) {
+      alert("작성자 또는 관리자만 고객사 DB에 연결할 수 있습니다.");
+      return;
+    }
+
+    const customerId = await ensureCustomerDbLink(
+      selectedOpportunity.company,
+      selectedOpportunity.contact
+    );
+
+    if (!customerId) return;
+
+    const { error } = await supabase
+      .from("sales_opportunities")
+      .update({ customer_id: customerId, updated_at: today })
+      .eq("id", selectedOpportunity.id);
+
+    if (error) {
+      alert(error.message || "영업 건 고객사 연결에 실패했습니다.");
+      return;
+    }
+
+    setOpportunities((current) =>
+      current.map((item) =>
+        item.id === selectedOpportunity.id
+          ? { ...item, customerId }
+          : item
+      )
+    );
+    alert("고객사 DB 연결이 완료되었습니다.");
+  }
+
   async function addOpportunity() {
     const company = opportunityForm.company.trim();
     const contact = opportunityForm.contact.trim();
@@ -586,7 +643,7 @@ export default function SalesPage() {
         next_action: nextAction,
         due_date: opportunityForm.dueDate || null,
       })
-      .select("id,division,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+      .select("id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
       .single();
 
     if (error || !data) {
@@ -598,6 +655,7 @@ export default function SalesPage() {
     const nextOpportunity: Opportunity = {
       id: row.id,
       division: row.division,
+      customerId,
       company: row.company,
       contact: row.contact || "",
       item: row.item,
@@ -966,9 +1024,19 @@ export default function SalesPage() {
                 </div>
 
                 {canManageSelectedOpportunity && (
-                  <button style={styles.deleteButton} onClick={removeOpportunity}>
-                    삭제
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {!selectedOpportunity.customerId && (
+                      <button
+                        style={styles.exportButton}
+                        onClick={linkSelectedOpportunityToCustomerDb}
+                      >
+                        고객사 DB 연결
+                      </button>
+                    )}
+                    <button style={styles.deleteButton} onClick={removeOpportunity}>
+                      삭제
+                    </button>
+                  </div>
                 )}
               </div>
 
