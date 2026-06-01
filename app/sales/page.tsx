@@ -21,6 +21,7 @@ type Opportunity = {
   id: number;
   division: SalesDivision;
   customerId: number | null;
+  parentId: number | null;
   company: string;
   contact: string;
   item: string;
@@ -43,6 +44,7 @@ type Activity = {
 };
 
 type OpportunityForm = {
+  parentId: string;
   company: string;
   contact: string;
   item: string;
@@ -53,17 +55,11 @@ type OpportunityForm = {
   dueDate: string;
 };
 
-type ActivityForm = {
-  type: ActivityType;
-  title: string;
-  memo: string;
-  date: string;
-};
-
 type OpportunityRow = {
   id: number;
   division: SalesDivision;
   customer_id: number | null;
+  parent_id?: number | null;
   company: string;
   contact: string | null;
   item: string;
@@ -113,6 +109,19 @@ type ContactInsertRow = {
   position: string | null;
 };
 
+type SalesInsertResult = {
+  data: unknown;
+  error: { message?: string } | null;
+};
+
+type SalesInsertClient = {
+  insert: (row: Record<string, unknown>) => {
+    select: (columns: string) => {
+      single: () => Promise<SalesInsertResult>;
+    };
+  };
+};
+
 const divisionLabel: Record<SalesDivision, string> = {
   domestic: "국내영업",
   overseas: "해외영업",
@@ -138,6 +147,7 @@ const stageOptions: Stage[] = [
 const currencyOptions: SalesCurrency[] = ["KRW", "USD", "EUR", "JPY", "CNY"];
 
 const emptyOpportunityForm: OpportunityForm = {
+  parentId: "",
   company: "",
   contact: "",
   item: "",
@@ -150,13 +160,6 @@ const emptyOpportunityForm: OpportunityForm = {
 
 const today = new Date().toISOString().slice(0, 10);
 const supabase = createSupabaseBrowser();
-
-const emptyActivityForm: ActivityForm = {
-  type: "후속",
-  title: "",
-  memo: "",
-  date: today,
-};
 
 const positionKeywords = [
   "회장",
@@ -300,8 +303,6 @@ export default function SalesPage() {
   const [expandedCustomerKeys, setExpandedCustomerKeys] = useState<string[]>([]);
   const [opportunityForm, setOpportunityForm] =
     useState<OpportunityForm>(emptyOpportunityForm);
-  const [activityForm, setActivityForm] =
-    useState<ActivityForm>(emptyActivityForm);
   const [customerOptions, setCustomerOptions] = useState<CustomerOption[]>([]);
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -311,6 +312,14 @@ export default function SalesPage() {
   const currentOpportunities = useMemo(
     () => opportunities.filter((item) => item.division === division),
     [division, opportunities]
+  );
+
+  const linkableOpportunities = useMemo(
+    () =>
+      currentOpportunities
+        .filter((item) => !item.parentId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id),
+    [currentOpportunities]
   );
 
   const customerGroups = useMemo(() => {
@@ -337,21 +346,27 @@ export default function SalesPage() {
       });
     });
 
-    return Array.from(groupMap.values()).map((group) => ({
-      ...group,
-      opportunities: group.opportunities.sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt) || b.id - a.id
-      ),
-    }));
+    return Array.from(groupMap.values()).map((group) => {
+      const parentIds = new Set(group.opportunities.map((item) => item.id));
+      return {
+        ...group,
+        opportunities: group.opportunities.sort(
+          (a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id
+        ),
+        rootOpportunities: group.opportunities.filter(
+          (item) => !item.parentId || !parentIds.has(item.parentId)
+        ),
+      };
+    });
   }, [currentOpportunities]);
 
   const selectedOpportunity =
     opportunities.find((item) => item.id === selectedId) || null;
 
-  const selectedActivities = useMemo(() => {
-    if (!selectedOpportunity) return [];
-    return activities.filter((item) => item.opportunityId === selectedOpportunity.id);
-  }, [activities, selectedOpportunity]);
+  const selectedParentOpportunity =
+    selectedOpportunity?.parentId
+      ? opportunities.find((item) => item.id === selectedOpportunity.parentId) || null
+      : null;
 
   const selectedCustomerOption = useMemo(
     () =>
@@ -401,12 +416,18 @@ export default function SalesPage() {
     } = await supabase.auth.getUser();
     setCurrentUserId(user?.id || "");
 
-    let { data: opportunityRows, error: opportunityError } = await supabase
+    const opportunityResult = await supabase
       .from("sales_opportunities")
-      .select("id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+      .select("id,division,customer_id,parent_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
       .order("created_at", { ascending: false });
 
-    if (opportunityError?.message?.includes("currency")) {
+    let opportunityRows = opportunityResult.data as OpportunityRow[] | null;
+    let opportunityError = opportunityResult.error;
+
+    if (
+      opportunityError?.message?.includes("currency") ||
+      opportunityError?.message?.includes("parent_id")
+    ) {
       const fallback = await supabase
         .from("sales_opportunities")
         .select("id,division,customer_id,company,contact,item,amount,stage,next_action,due_date,created_at,created_by")
@@ -449,6 +470,7 @@ export default function SalesPage() {
         id: item.id,
         division: item.division,
         customerId: item.customer_id || null,
+        parentId: item.parent_id || null,
         company: item.company,
         contact: item.contact || "",
         item: item.item,
@@ -495,11 +517,23 @@ export default function SalesPage() {
     setOpportunityForm((current) => ({ ...current, [key]: value }));
   }
 
-  function updateActivity<K extends keyof ActivityForm>(
-    key: K,
-    value: ActivityForm[K]
-  ) {
-    setActivityForm((current) => ({ ...current, [key]: value }));
+  function selectParentOpportunity(parentId: string) {
+    if (!parentId) {
+      setOpportunityForm((current) => ({ ...current, parentId: "" }));
+      return;
+    }
+
+    const parent = currentOpportunities.find(
+      (item) => item.id === Number(parentId)
+    );
+
+    setOpportunityForm((current) => ({
+      ...current,
+      parentId,
+      company: parent?.company || current.company,
+      contact: parent?.contact || current.contact,
+      currency: parent?.currency || current.currency,
+    }));
   }
 
   function changeDivision(nextDivision: SalesDivision) {
@@ -510,7 +544,6 @@ export default function SalesPage() {
       ...emptyOpportunityForm,
       currency: nextDivision === "overseas" ? "USD" : "KRW",
     });
-    setActivityForm(emptyActivityForm);
   }
 
   function toggleCustomerGroup(customerKey: string) {
@@ -677,8 +710,14 @@ export default function SalesPage() {
   }
 
   async function addOpportunity() {
-    const company = opportunityForm.company.trim();
-    const contact = opportunityForm.contact.trim();
+    const parentOpportunity =
+      opportunityForm.parentId
+        ? currentOpportunities.find(
+            (item) => item.id === Number(opportunityForm.parentId)
+          ) || null
+        : null;
+    const company = (parentOpportunity?.company || opportunityForm.company).trim();
+    const contact = (parentOpportunity?.contact || opportunityForm.contact).trim();
     const item = opportunityForm.item.trim();
     const amount = Number(opportunityForm.amount.replaceAll(",", ""));
     const nextAction = opportunityForm.nextAction.trim();
@@ -697,21 +736,33 @@ export default function SalesPage() {
 
     if (!customerId) return;
 
-    const { data, error } = await supabase
-      .from("sales_opportunities")
-      .insert({
-        division,
-        customer_id: customerId,
-        company,
-        contact,
-        item,
-        amount: canViewAmount ? amount || 0 : 0,
-        currency: canViewAmount ? opportunityForm.currency : "KRW",
-        stage: opportunityForm.stage,
-        next_action: nextAction,
-        due_date: opportunityForm.dueDate || null,
-      })
-      .select("id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+    const insertRow: Record<string, unknown> = {
+      division,
+      customer_id: customerId,
+      company,
+      contact,
+      item,
+      amount: canViewAmount ? amount || 0 : 0,
+      currency: canViewAmount ? opportunityForm.currency : "KRW",
+      stage: opportunityForm.stage,
+      next_action: nextAction,
+      due_date: opportunityForm.dueDate || null,
+    };
+
+    if (parentOpportunity) {
+      insertRow.parent_id = parentOpportunity.id;
+    }
+
+    const selectFields = parentOpportunity
+      ? "id,division,customer_id,parent_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by"
+      : "id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by";
+
+    const salesInsertClient = supabase.from(
+      "sales_opportunities"
+    ) as unknown as SalesInsertClient;
+    const { data, error } = await salesInsertClient
+      .insert(insertRow)
+      .select(selectFields)
       .single();
 
     if (error || !data) {
@@ -724,6 +775,7 @@ export default function SalesPage() {
       id: row.id,
       division: row.division,
       customerId,
+      parentId: row.parent_id || parentOpportunity?.id || null,
       company: row.company,
       contact: row.contact || "",
       item: row.item,
@@ -743,78 +795,6 @@ export default function SalesPage() {
       customerId
         ? "영업 건이 등록되고 고객사 DB에 연결되었습니다."
         : "영업 건이 등록되었습니다."
-    );
-  }
-
-  async function addActivity() {
-    if (!selectedOpportunity) {
-      alert("먼저 영업기회를 선택해주세요.");
-      return;
-    }
-    if (!canManageSelectedOpportunity) {
-      alert("작성자 또는 관리자만 활동 기록을 추가할 수 있습니다.");
-      return;
-    }
-
-    const title = activityForm.title.trim();
-
-    if (!title) {
-      alert("활동 제목은 필수입니다.");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("sales_activities")
-      .insert({
-        opportunity_id: selectedOpportunity.id,
-        type: activityForm.type,
-        title,
-        memo: activityForm.memo.trim(),
-        date: activityForm.date || today,
-      })
-      .select("id,opportunity_id,type,title,memo,date")
-      .single();
-
-    if (error || !data) {
-      alert(error?.message || "활동 기록 추가에 실패했습니다.");
-      return;
-    }
-
-    const row = data as ActivityRow;
-    const nextActivity: Activity = {
-      id: row.id,
-      opportunityId: row.opportunity_id,
-      type: row.type,
-      title: row.title,
-      memo: row.memo || "",
-      date: row.date || today,
-    };
-
-    setActivities((current) => [nextActivity, ...current]);
-    setActivityForm(emptyActivityForm);
-  }
-
-  async function removeActivity(activityId: number) {
-    if (!selectedOpportunity) return;
-    if (!canManageSelectedOpportunity) {
-      alert("작성자 또는 관리자만 활동 이력을 삭제할 수 있습니다.");
-      return;
-    }
-    if (!confirm("선택한 활동 이력만 삭제할까요?")) return;
-
-    const { error } = await supabase
-      .from("sales_activities")
-      .delete()
-      .eq("id", activityId)
-      .eq("opportunity_id", selectedOpportunity.id);
-
-    if (error) {
-      alert(error.message || "활동 이력 삭제에 실패했습니다.");
-      return;
-    }
-
-    setActivities((current) =>
-      current.filter((activity) => activity.id !== activityId)
     );
   }
 
@@ -900,14 +880,9 @@ export default function SalesPage() {
       return;
     }
 
-    const sortedActivities = [...selectedActivities].sort((a, b) =>
-      b.date.localeCompare(a.date) || b.id - a.id
-    );
-    const latestActivity = sortedActivities[0] || null;
-    const hasActivities = sortedActivities.length > 0;
-    const reportTitle = latestActivity?.title || selectedOpportunity.item;
-    const reportDate = latestActivity?.date || selectedOpportunity.dueDate;
-    const reportType = latestActivity?.type || stageLabel[selectedOpportunity.stage];
+    const reportTitle = selectedOpportunity.item;
+    const reportDate = selectedOpportunity.dueDate;
+    const reportType = stageLabel[selectedOpportunity.stage];
     const currentStageIndex = stageOptions.indexOf(selectedOpportunity.stage);
     const stageProgressItems = stageOptions
       .filter((stage) => stage !== "LOST")
@@ -929,44 +904,6 @@ export default function SalesPage() {
         `;
       })
       .join("");
-    const recentActivitySection = latestActivity
-      ? `
-            <section class="section">
-              <h2>보고 내용</h2>
-              <div class="activity-report">
-                <div class="activity-report-head">
-                  <div>
-                    <span class="label">이번 보고 건</span>
-                    <strong>${escapeHtml(latestActivity.title)}</strong>
-                  </div>
-                  <div class="activity-report-meta">
-                    <span>${escapeHtml(formatReportDate(latestActivity.date))}</span>
-                    <b>${escapeHtml(latestActivity.type)}</b>
-                  </div>
-                </div>
-                <div class="activity-report-body">
-                  <span class="label">상세 내용</span>
-                  <p>${
-                    latestActivity.memo
-                      ? escapeHtml(latestActivity.memo).replaceAll("\n", "<br />")
-                      : "상세 메모가 등록되지 않았습니다."
-                  }</p>
-                </div>
-              </div>
-            </section>
-        `
-      : "";
-    const activityHistorySection = hasActivities
-      ? ""
-      : `
-            <section class="section">
-              <h2>활동 이력</h2>
-              <div class="empty-panel">
-                아직 등록된 활동 이력은 없습니다.<br />
-                방문, 통화, 견적 발송 등 후속 내용을 기록하면 다음 보고서에 자동 반영됩니다.
-              </div>
-            </section>
-        `;
     const amountText = canViewAmount
       ? formatAmount(selectedOpportunity.amount, selectedOpportunity.currency)
       : "권한 제한";
@@ -1330,9 +1267,6 @@ export default function SalesPage() {
               </div>
             </section>
 
-            ${recentActivitySection}
-            ${activityHistorySection}
-
             <footer class="footer">
               <span>ZETA 업무통합시스템 영업관리</span>
             </footer>
@@ -1403,6 +1337,21 @@ export default function SalesPage() {
             <p style={styles.panelHint}>
               신규 업체명은 확인 후 고객사 DB에 자동 등록되고, 담당자도 함께 연결됩니다.
             </p>
+
+            <Field label="기존 영업 건 연결">
+              <select
+                value={opportunityForm.parentId}
+                onChange={(event) => selectParentOpportunity(event.target.value)}
+                style={styles.input}
+              >
+                <option value="">새 영업 건으로 등록</option>
+                {linkableOpportunities.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.company} / {item.item}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
             <div style={styles.formGrid}>
               <Field label="고객사">
@@ -1583,30 +1532,66 @@ export default function SalesPage() {
 
                       {isExpanded && (
                         <div style={styles.opportunityBranchList}>
-                          {group.opportunities.map((item) => (
-                            <button
-                              key={item.id}
-                              style={
-                                selectedOpportunity?.id === item.id
-                                  ? styles.selectedOpportunityBranch
-                                  : styles.opportunityBranch
-                              }
-                              onClick={() => setSelectedId(item.id)}
-                            >
-                              <span style={styles.branchLine} />
-                              <div style={styles.branchContent}>
-                                <div style={styles.branchTitle}>{item.item}</div>
-                                <div style={styles.branchMeta}>
-                                  {stageLabel[item.stage]} · 다음 액션 {item.nextAction || "-"}
-                                </div>
+                          {group.rootOpportunities.map((item) => {
+                            const childOpportunities = group.opportunities.filter(
+                              (child) => child.parentId === item.id
+                            );
+
+                            return (
+                              <div key={item.id} style={styles.branchGroup}>
+                                <button
+                                  style={
+                                    selectedOpportunity?.id === item.id
+                                      ? styles.selectedOpportunityBranch
+                                      : styles.opportunityBranch
+                                  }
+                                  onClick={() => setSelectedId(item.id)}
+                                >
+                                  <span style={styles.branchLine} />
+                                  <div style={styles.branchContent}>
+                                    <div style={styles.branchTitle}>{item.item}</div>
+                                    <div style={styles.branchMeta}>
+                                      {stageLabel[item.stage]} · 다음 액션 {item.nextAction || "-"}
+                                    </div>
+                                  </div>
+                                  <span style={styles.branchAmount}>
+                                    {canViewAmount
+                                      ? formatAmount(item.amount, item.currency)
+                                      : "권한 제한"}
+                                  </span>
+                                </button>
+
+                                {childOpportunities.length > 0 && (
+                                  <div style={styles.childBranchList}>
+                                    {childOpportunities.map((child) => (
+                                      <button
+                                        key={child.id}
+                                        style={
+                                          selectedOpportunity?.id === child.id
+                                            ? styles.selectedChildBranch
+                                            : styles.childBranch
+                                        }
+                                        onClick={() => setSelectedId(child.id)}
+                                      >
+                                        <span style={styles.childBranchMark}>└</span>
+                                        <div style={styles.branchContent}>
+                                          <div style={styles.branchTitle}>{child.item}</div>
+                                          <div style={styles.branchMeta}>
+                                            {stageLabel[child.stage]} · 다음 액션 {child.nextAction || "-"}
+                                          </div>
+                                        </div>
+                                        <span style={styles.branchAmount}>
+                                          {canViewAmount
+                                            ? formatAmount(child.amount, child.currency)
+                                            : "권한 제한"}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                              <span style={styles.branchAmount}>
-                                {canViewAmount
-                                  ? formatAmount(item.amount, item.currency)
-                                  : "권한 제한"}
-                              </span>
-                            </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1628,6 +1613,11 @@ export default function SalesPage() {
                     {divisionLabel[selectedOpportunity.division]} / {selectedOpportunity.company}
                   </div>
                   <h2 style={styles.detailTitle}>{selectedOpportunity.item}</h2>
+                  {selectedParentOpportunity && (
+                    <div style={styles.linkedParentInfo}>
+                      연결 원건: {selectedParentOpportunity.item}
+                    </div>
+                  )}
                 </div>
 
                 {canManageSelectedOpportunity && (
@@ -1697,90 +1687,12 @@ export default function SalesPage() {
                 </div>
               )}
 
-              {canManageSelectedOpportunity && (
-                <div style={styles.activityForm}>
-                  <h3 style={styles.sectionTitle}>영업 활동 기록</h3>
-                <div style={styles.formGrid}>
-                  <Field label="구분">
-                    <select
-                      value={activityForm.type}
-                      onChange={(event) =>
-                        updateActivity("type", event.target.value as ActivityType)
-                      }
-                      style={styles.input}
-                    >
-                      {(["방문", "전화", "메일", "견적", "제안", "후속"] as ActivityType[]).map(
-                        (type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </Field>
-
-                  <Field label="일자">
-                    <input
-                      type="date"
-                      value={activityForm.date}
-                      onChange={(event) => updateActivity("date", event.target.value)}
-                      style={styles.input}
-                    />
-                  </Field>
-                </div>
-
-                <Field label="활동 제목">
-                  <input
-                    value={activityForm.title}
-                    onChange={(event) => updateActivity("title", event.target.value)}
-                    placeholder="예: 견적서 발송, 방문 미팅, 회신 요청"
-                    style={styles.input}
-                  />
-                </Field>
-
-                <Field label="메모">
-                  <textarea
-                    value={activityForm.memo}
-                    onChange={(event) => updateActivity("memo", event.target.value)}
-                    placeholder={"미팅/통화 내용:\n고객 요청사항:\n우리 대응/전달 내용:\n다음 확인 사항:"}
-                    style={{ ...styles.input, ...styles.textarea }}
-                  />
-                </Field>
-
-                  <button style={styles.primaryButton} onClick={addActivity}>
-                    활동 기록 추가
-                  </button>
-                </div>
-              )}
-
-              <div style={styles.activityList}>
-                <h3 style={styles.sectionTitle}>활동 이력</h3>
-                {selectedActivities.length === 0 ? (
-                  <div style={styles.empty}>아직 기록된 활동이 없습니다.</div>
-                ) : (
-                  selectedActivities.map((activity) => (
-                    <article key={activity.id} style={styles.activityItem}>
-                      <div style={styles.activityTop}>
-                        <div style={styles.activityMetaGroup}>
-                          <span style={styles.activityType}>{activity.type}</span>
-                          <span style={styles.activityDate}>{activity.date}</span>
-                        </div>
-                        {canManageSelectedOpportunity && (
-                          <button
-                            style={styles.activityDeleteButton}
-                            onClick={() => removeActivity(activity.id)}
-                          >
-                            이력 삭제
-                          </button>
-                        )}
-                      </div>
-                      <div style={styles.activityTitle}>{activity.title}</div>
-                      {activity.memo && (
-                        <div style={styles.activityMemo}>{activity.memo}</div>
-                      )}
-                    </article>
-                  ))
-                )}
+              <div style={styles.linkGuideBox}>
+                <strong>후속 보고는 새 영업 건으로 등록합니다.</strong>
+                <span>
+                  상단의 기존 영업 건 연결에서 이 건을 선택하고 새 내용을 등록하면,
+                  고객사 목록에서 이 영업 건의 하위 가지로 이어집니다.
+                </span>
               </div>
             </>
           )}
