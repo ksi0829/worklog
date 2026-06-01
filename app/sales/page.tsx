@@ -776,6 +776,16 @@ export default function SalesPage() {
       .single();
 
     if (error || !data) {
+      if (
+        parentOpportunity &&
+        error?.message?.includes("parent_id")
+      ) {
+        alert(
+          "기존 영업 건 연결용 DB 컬럼이 아직 반영되지 않았습니다.\nSupabase SQL 실행 후 잠시 뒤 다시 등록해주세요."
+        );
+        return;
+      }
+
       alert(error?.message || "영업기회 등록에 실패했습니다.");
       return;
     }
