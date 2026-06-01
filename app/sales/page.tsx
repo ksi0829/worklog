@@ -863,6 +863,9 @@ export default function SalesPage() {
     );
     const latestActivity = sortedActivities[0] || null;
     const hasActivities = sortedActivities.length > 0;
+    const reportTitle = latestActivity?.title || selectedOpportunity.item;
+    const reportDate = latestActivity?.date || selectedOpportunity.dueDate;
+    const reportType = latestActivity?.type || stageLabel[selectedOpportunity.stage];
     const currentStageIndex = stageOptions.indexOf(selectedOpportunity.stage);
     const stageProgressItems = stageOptions
       .filter((stage) => stage !== "LOST")
@@ -884,34 +887,14 @@ export default function SalesPage() {
         `;
       })
       .join("");
-    const activityRows = hasActivities
-      ? sortedActivities
-          .map(
-            (activity) => `
-              <tr>
-                <td>${escapeHtml(formatReportDate(activity.date))}</td>
-                <td>${escapeHtml(activity.type)}</td>
-                <td>
-                  <strong>${escapeHtml(activity.title)}</strong>
-                  ${
-                    activity.memo
-                      ? `<p>${escapeHtml(activity.memo).replaceAll("\n", "<br />")}</p>`
-                      : ""
-                  }
-                </td>
-              </tr>
-            `
-          )
-          .join("")
-      : "";
     const recentActivitySection = latestActivity
       ? `
             <section class="section">
-              <h2>최근 활동</h2>
+              <h2>보고 내용</h2>
               <div class="activity-report">
                 <div class="activity-report-head">
                   <div>
-                    <span class="label">활동 제목</span>
+                    <span class="label">이번 보고 건</span>
                     <strong>${escapeHtml(latestActivity.title)}</strong>
                   </div>
                   <div class="activity-report-meta">
@@ -932,21 +915,7 @@ export default function SalesPage() {
         `
       : "";
     const activityHistorySection = hasActivities
-      ? `
-            <section class="section">
-              <h2>활동 이력</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th style="width: 18%;">일자</th>
-                    <th style="width: 14%;">구분</th>
-                    <th>활동 내용</th>
-                  </tr>
-                </thead>
-                <tbody>${activityRows}</tbody>
-              </table>
-            </section>
-        `
+      ? ""
       : `
             <section class="section">
               <h2>활동 이력</h2>
@@ -1287,12 +1256,12 @@ export default function SalesPage() {
 
             <section class="notice">
               <strong>보고 요약</strong>
-              <div class="main">${escapeHtml(selectedOpportunity.item)}</div>
+              <div class="main">${escapeHtml(reportTitle)}</div>
               <div class="sub">
-                <span>현재 단계: ${escapeHtml(stageLabel[selectedOpportunity.stage])}</span>
+                <span>보고 구분: ${escapeHtml(reportType)}</span>
                 <span>다음 액션: ${escapeHtml(selectedOpportunity.nextAction || "-")}</span>
                 <span>담당자: ${escapeHtml(selectedOpportunity.contact || "-")}</span>
-                <span>예정일: ${escapeHtml(formatReportDate(selectedOpportunity.dueDate))}</span>
+                <span>보고/예정일: ${escapeHtml(formatReportDate(reportDate))}</span>
               </div>
             </section>
 
@@ -1314,8 +1283,8 @@ export default function SalesPage() {
                 <span class="value">${escapeHtml(amountText)}</span>
               </div>
               <div class="box">
-                <span class="label">품목/내용</span>
-                <span class="value">${escapeHtml(selectedOpportunity.item)}</span>
+                <span class="label">보고 건</span>
+                <span class="value">${escapeHtml(reportTitle)}</span>
               </div>
             </section>
 
