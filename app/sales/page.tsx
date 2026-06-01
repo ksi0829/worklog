@@ -122,6 +122,15 @@ type SalesInsertClient = {
   };
 };
 
+type ScheduleSyncClient = {
+  select: (columns: string) => {
+    eq: (column: string, value: string) => {
+      limit: (count: number) => Promise<{ data: unknown[] | null; error: { message?: string } | null }>;
+    };
+  };
+  insert: (row: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>;
+};
+
 const divisionLabel: Record<SalesDivision, string> = {
   domestic: "국내영업",
   overseas: "해외영업",
@@ -719,6 +728,43 @@ export default function SalesPage() {
     alert("고객사 DB에 저장/연결되었습니다.");
   }
 
+  async function syncSalesSchedule(opportunity: Opportunity) {
+    if (!opportunity.dueDate || !currentName) {
+      return { synced: false, error: "" };
+    }
+
+    const tripId = `sales_${opportunity.id}`;
+    const scheduleClient = supabase.from("schedules") as unknown as ScheduleSyncClient;
+    const existing = await scheduleClient
+      .select("id")
+      .eq("trip_id", tripId)
+      .limit(1);
+
+    if (existing.error) {
+      return { synced: false, error: existing.error.message || "일정 중복 확인 실패" };
+    }
+
+    if (existing.data && existing.data.length > 0) {
+      return { synced: false, error: "" };
+    }
+
+    const { error } = await scheduleClient.insert({
+      date: opportunity.dueDate,
+      time: "",
+      type: "영업",
+      company: opportunity.company,
+      title: `[영업] ${opportunity.company} - ${opportunity.nextAction}`,
+      writer: currentName,
+      team: currentOrgTeam || currentTeam,
+      trip_id: tripId,
+    });
+
+    return {
+      synced: !error,
+      error: error?.message || "",
+    };
+  }
+
   async function addOpportunity() {
     const parentOpportunity =
       opportunityForm.parentId
@@ -811,10 +857,21 @@ export default function SalesPage() {
     setOpportunities((current) => [nextOpportunity, ...current]);
     setSelectedId(nextOpportunity.id);
     setOpportunityForm(emptyOpportunityForm);
+    const scheduleSync = await syncSalesSchedule(nextOpportunity);
+
+    if (scheduleSync.error) {
+      alert(
+        `영업 건은 등록됐지만 일정관리 자동 반영에 실패했습니다.\n${scheduleSync.error}`
+      );
+      return;
+    }
+
     alert(
-      customerId
-        ? "영업 건이 등록되고 고객사 DB에 연결되었습니다."
-        : "영업 건이 등록되었습니다."
+      scheduleSync.synced
+        ? "영업 건이 등록되고 개인 일정에 반영되었습니다."
+        : customerId
+          ? "영업 건이 등록되고 고객사 DB에 연결되었습니다."
+          : "영업 건이 등록되었습니다."
     );
   }
 

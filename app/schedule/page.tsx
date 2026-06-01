@@ -49,6 +49,11 @@ const TYPE_STYLE: Record<string, CSSProperties> = {
     color: "#d97706",
   },
 
+  영업: {
+    background: "#d1fae5",
+    color: "#047857",
+  },
+
   연차: {
     background: "#fee2e2",
     color: "#dc2626",
