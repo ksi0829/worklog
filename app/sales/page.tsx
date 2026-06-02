@@ -15,7 +15,6 @@ import { styles } from "@/app/_modules/sales/styles";
 type SalesDivision = "domestic" | "overseas";
 type SalesCurrency = "KRW" | "USD" | "EUR" | "JPY" | "CNY";
 type Stage = "LEAD" | "MEETING" | "QUOTE" | "NEGOTIATION" | "WON" | "LOST";
-type ActivityType = "방문" | "전화" | "메일" | "견적" | "제안" | "후속";
 
 type Opportunity = {
   id: number;
@@ -32,15 +31,6 @@ type Opportunity = {
   dueDate: string;
   createdAt: string;
   createdBy: string | null;
-};
-
-type Activity = {
-  id: number;
-  opportunityId: number;
-  type: ActivityType;
-  title: string;
-  memo: string;
-  date: string;
 };
 
 type OpportunityForm = {
@@ -70,15 +60,6 @@ type OpportunityRow = {
   due_date: string | null;
   created_at: string | null;
   created_by: string | null;
-};
-
-type ActivityRow = {
-  id: number;
-  opportunity_id: number;
-  type: ActivityType;
-  title: string;
-  memo: string | null;
-  date: string | null;
 };
 
 type CustomerOption = {
@@ -267,47 +248,11 @@ function createSalesSummarySheet(
   };
 }
 
-function createSalesDetailSheet(
-  opportunity: Opportunity,
-  activities: Activity[],
-  canViewAmount: boolean
-): ExcelSheet {
-  const rows = [
-    ["영업관리 상세"],
-    [""],
-    ["항목", "내용"],
-    ["구분", divisionLabel[opportunity.division]],
-    ["고객사", opportunity.company],
-    ["담당자", opportunity.contact],
-    ["품목/내용", opportunity.item],
-    ...(canViewAmount ? [["예상금액", formatAmount(opportunity.amount, opportunity.currency)]] : []),
-    ["단계", stageLabel[opportunity.stage]],
-    ["예정일", opportunity.dueDate],
-    ["다음 액션", opportunity.nextAction],
-    ["등록일", opportunity.createdAt],
-    [""],
-    ["일자", "구분", "활동 제목", "메모"],
-    ...activities.map((activity) => [
-      activity.date,
-      activity.type,
-      activity.title,
-      activity.memo,
-    ]),
-  ];
-
-  return {
-    name: `${opportunity.createdAt.slice(2).replaceAll("-", "")}_${opportunity.company}`,
-    widths: [110, 130, 220, 320],
-    rows,
-  };
-}
-
 export default function SalesPage() {
   const router = useRouter();
 
   const [division, setDivision] = useState<SalesDivision>("domestic");
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedCustomerKeys, setExpandedCustomerKeys] = useState<string[]>([]);
   const [opportunityForm, setOpportunityForm] =
@@ -462,17 +407,6 @@ export default function SalesPage() {
       return;
     }
 
-    const { data: activityRows, error: activityError } = await supabase
-      .from("sales_activities")
-      .select("id,opportunity_id,type,title,memo,date")
-      .order("date", { ascending: false });
-
-    if (activityError) {
-      setLoadError("영업 활동 이력을 불러오지 못했습니다.");
-      setLoading(false);
-      return;
-    }
-
     const { data: customerRows } = await supabase
       .from("customers")
       .select("id,name,category")
@@ -504,16 +438,6 @@ export default function SalesPage() {
     );
 
     setOpportunities(mappedOpportunities);
-    setActivities(
-      ((activityRows || []) as ActivityRow[]).map((item) => ({
-        id: item.id,
-        opportunityId: item.opportunity_id,
-        type: item.type,
-        title: item.title,
-        memo: item.memo || "",
-        date: item.date || today,
-      }))
-    );
     setCustomerOptions(((customerRows || []) as CustomerOption[]));
     setContactOptions(((contactRows || []) as ContactOption[]));
     setSelectedId((current) => {
@@ -940,9 +864,6 @@ export default function SalesPage() {
     setOpportunities((current) =>
       current.filter((item) => item.id !== selectedOpportunity.id)
     );
-    setActivities((current) =>
-      current.filter((item) => item.opportunityId !== selectedOpportunity.id)
-    );
     setSelectedId(null);
   }
 
@@ -954,13 +875,6 @@ export default function SalesPage() {
 
     exportExcelWorkbook(`${divisionLabel[division]}_${exportDateStamp()}.xls`, [
       createSalesSummarySheet(currentOpportunities, canViewAmount),
-      ...currentOpportunities.map((opportunity) =>
-        createSalesDetailSheet(
-          opportunity,
-          activities.filter((activity) => activity.opportunityId === opportunity.id),
-          canViewAmount
-        )
-      ),
     ]);
   }
 
@@ -1205,73 +1119,6 @@ export default function SalesPage() {
               padding: 22px 18px;
               font-size: 12px;
               font-weight: 700;
-            }
-            .recent-card {
-              display: grid;
-              grid-template-columns: 1fr 1fr 2.2fr;
-              gap: 8px;
-              border: 1px solid #d9e0ea;
-              border-radius: 12px;
-              background: #fff;
-              padding: 12px;
-            }
-            .recent-card strong {
-              display: block;
-              font-size: 13px;
-            }
-            .recent-content p {
-              margin: 5px 0 0;
-              color: #64748b;
-              font-size: 12px;
-              white-space: pre-wrap;
-            }
-            .activity-report {
-              border: 1px solid #cbd5e1;
-              border-radius: 14px;
-              background: #fff;
-              overflow: hidden;
-            }
-            .activity-report-head {
-              display: flex;
-              justify-content: space-between;
-              gap: 14px;
-              align-items: flex-start;
-              background: #f8fafc;
-              border-bottom: 1px solid #e5e7eb;
-              padding: 12px 14px;
-            }
-            .activity-report-head strong {
-              display: block;
-              font-size: 15px;
-              line-height: 1.45;
-              margin-top: 3px;
-            }
-            .activity-report-meta {
-              display: flex;
-              gap: 7px;
-              align-items: center;
-              color: #475569;
-              font-size: 12px;
-              font-weight: 800;
-              white-space: nowrap;
-            }
-            .activity-report-meta b {
-              border-radius: 999px;
-              background: #111827;
-              color: #fff;
-              padding: 4px 8px;
-              font-size: 11px;
-            }
-            .activity-report-body {
-              padding: 13px 14px;
-            }
-            .activity-report-body p {
-              margin: 4px 0 0;
-              color: #111827;
-              font-size: 13px;
-              font-weight: 700;
-              line-height: 1.75;
-              white-space: pre-wrap;
             }
             .footer {
               margin-top: 18px;
