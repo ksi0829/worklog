@@ -256,7 +256,7 @@ export const styles: Record<string, CSSProperties> = {
     fontWeight: 800,
     whiteSpace: "nowrap",
   },
-  customerHeaderCount: {
+  customerHeaderStage: {
     color: "#0f8a56",
   },
   opportunityBranchList: {

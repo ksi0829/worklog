@@ -1604,9 +1604,8 @@ export default function SalesPage() {
                   );
                   const isExpanded =
                     expandedCustomerKeys.includes(group.key) || selectedInGroup;
-                  const activeOpportunities = group.opportunities.filter(
-                    (item) => item.stage !== "WON" && item.stage !== "LOST"
-                  ).length;
+                  const representativeStage =
+                    group.rootOpportunities[0]?.stage || group.opportunities[0]?.stage;
 
                   return (
                     <div key={group.key} style={styles.customerGroup}>
@@ -1625,8 +1624,10 @@ export default function SalesPage() {
                           </div>
                         </div>
                         <div style={styles.customerHeaderRight}>
-                          <span style={styles.customerHeaderCount}>
-                            진행 {activeOpportunities}
+                          <span style={styles.customerHeaderStage}>
+                            {representativeStage
+                              ? stageLabel[representativeStage]
+                              : "-"}
                           </span>
                           <span>{isExpanded ? "접기" : "펼치기"}</span>
                         </div>
