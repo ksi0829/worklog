@@ -919,30 +919,6 @@ export default function SalesPage() {
     );
   }
 
-  async function changeStage(nextStage: Stage) {
-    if (!selectedOpportunity) return;
-    if (!canManageSelectedOpportunity) {
-      alert("작성자 또는 관리자만 단계를 변경할 수 있습니다.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("sales_opportunities")
-      .update({ stage: nextStage, updated_at: today })
-      .eq("id", selectedOpportunity.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setOpportunities((current) =>
-      current.map((item) =>
-        item.id === selectedOpportunity.id ? { ...item, stage: nextStage } : item
-      )
-    );
-  }
-
   async function removeOpportunity() {
     if (!selectedOpportunity) return;
     if (!canManageSelectedOpportunity) {
@@ -1792,34 +1768,6 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              {canManageSelectedOpportunity && (
-                <div style={styles.stageBox}>
-                  <span style={styles.label}>단계 변경</span>
-                  <div style={styles.stageButtons}>
-                    {stageOptions.map((stage) => (
-                      <button
-                        key={stage}
-                        style={
-                          selectedOpportunity.stage === stage
-                            ? styles.activeStageButton
-                            : styles.stageButton
-                        }
-                        onClick={() => changeStage(stage)}
-                      >
-                        {stageLabel[stage]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={styles.linkGuideBox}>
-                <strong>후속 보고는 새 영업 건으로 등록합니다.</strong>
-                <span>
-                  상단의 기존 영업 건 연결에서 이 건을 선택하고 새 내용을 등록하면,
-                  고객사 목록에서 이 영업 건의 하위 가지로 이어집니다.
-                </span>
-              </div>
             </>
           )}
         </section>
