@@ -134,6 +134,12 @@ export const styles: Record<string, CSSProperties> = {
     gap: "10px",
     marginBottom: "8px",
   },
+  panelActions: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+  },
   panelHint: {
     margin: "6px 0 14px",
     color: "#64748b",

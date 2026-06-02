@@ -730,7 +730,7 @@ export default function SalesPage() {
 
   async function syncSalesSchedule(opportunity: Opportunity) {
     if (!opportunity.dueDate || !currentName) {
-      return { synced: false, error: "" };
+      return { synced: false, skipped: true, error: "" };
     }
 
     const tripId = `sales_${opportunity.id}`;
@@ -741,11 +741,15 @@ export default function SalesPage() {
       .limit(1);
 
     if (existing.error) {
-      return { synced: false, error: existing.error.message || "일정 중복 확인 실패" };
+      return {
+        synced: false,
+        skipped: false,
+        error: existing.error.message || "일정 중복 확인 실패",
+      };
     }
 
     if (existing.data && existing.data.length > 0) {
-      return { synced: false, error: "" };
+      return { synced: false, skipped: true, error: "" };
     }
 
     const { error } = await scheduleClient.insert({
@@ -761,8 +765,48 @@ export default function SalesPage() {
 
     return {
       synced: !error,
+      skipped: false,
       error: error?.message || "",
     };
+  }
+
+  async function syncMissingSalesSchedules() {
+    const candidates = currentOpportunities.filter((item) => item.dueDate);
+
+    if (candidates.length === 0) {
+      alert("예정일이 등록된 영업 건이 없습니다.");
+      return;
+    }
+
+    let syncedCount = 0;
+    let skippedCount = 0;
+    const errors: string[] = [];
+
+    for (const opportunity of candidates) {
+      const result = await syncSalesSchedule(opportunity);
+
+      if (result.error) {
+        errors.push(`${opportunity.company} / ${opportunity.item}: ${result.error}`);
+        continue;
+      }
+
+      if (result.synced) {
+        syncedCount += 1;
+      } else if (result.skipped) {
+        skippedCount += 1;
+      }
+    }
+
+    if (errors.length > 0) {
+      alert(
+        `누락 일정 ${syncedCount}건을 반영했습니다.\n이미 반영된 ${skippedCount}건은 건너뛰었습니다.\n\n오류 ${errors.length}건:\n${errors.slice(0, 3).join("\n")}`
+      );
+      return;
+    }
+
+    alert(
+      `누락 일정 ${syncedCount}건을 개인 일정에 반영했습니다.\n이미 반영된 ${skippedCount}건은 건너뛰었습니다.`
+    );
   }
 
   async function addOpportunity() {
@@ -1563,9 +1607,14 @@ export default function SalesPage() {
           <div style={styles.panel}>
             <div style={styles.panelTopRow}>
               <h2 style={styles.panelTitle}>{divisionLabel[division]} 목록</h2>
-              <button style={styles.exportButton} onClick={exportCurrentSales}>
-                엑셀
-              </button>
+              <div style={styles.panelActions}>
+                <button style={styles.exportButton} onClick={syncMissingSalesSchedules}>
+                  누락 일정 반영
+                </button>
+                <button style={styles.exportButton} onClick={exportCurrentSales}>
+                  엑셀
+                </button>
+              </div>
             </div>
             <p style={styles.panelHint}>고객사를 펼치면 해당 업체의 영업 건이 가지 형태로 표시됩니다.</p>
 
