@@ -24,6 +24,7 @@ type Opportunity = {
   company: string;
   contact: string;
   item: string;
+  details: string;
   amount: number;
   currency: SalesCurrency;
   stage: Stage;
@@ -38,6 +39,7 @@ type OpportunityForm = {
   company: string;
   contact: string;
   item: string;
+  details: string;
   amount: string;
   currency: SalesCurrency;
   stage: Stage;
@@ -53,6 +55,7 @@ type OpportunityRow = {
   company: string;
   contact: string | null;
   item: string;
+  details?: string | null;
   amount: number | string | null;
   currency: SalesCurrency | null;
   stage: Stage;
@@ -141,6 +144,7 @@ const emptyOpportunityForm: OpportunityForm = {
   company: "",
   contact: "",
   item: "",
+  details: "",
   amount: "",
   currency: "KRW",
   stage: "LEAD",
@@ -218,7 +222,7 @@ function createSalesSummarySheet(
 
   return {
     name: "영업관리 히스토리",
-    widths: [95, 100, 160, 120, 220, 100, 120, 100, 220],
+    widths: [95, 100, 160, 120, 180, 320, 100, 120, 100, 220],
     rows: [
       ["영업관리 히스토리"],
       [""],
@@ -227,7 +231,8 @@ function createSalesSummarySheet(
         "구분",
         "고객사",
         "담당자",
-        "품목/내용",
+        "품목/건명",
+        "주요 내용",
         ...amountColumn,
         "단계",
         "예정일",
@@ -239,6 +244,7 @@ function createSalesSummarySheet(
         item.company,
         item.contact,
         item.item,
+        item.details,
         ...(canViewAmount ? [formatAmount(item.amount, item.currency)] : []),
         stageLabel[item.stage],
         item.dueDate,
@@ -382,11 +388,21 @@ export default function SalesPage() {
 
     const opportunityResult = await supabase
       .from("sales_opportunities")
-      .select("id,division,customer_id,parent_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+      .select("id,division,customer_id,parent_id,company,contact,item,details,amount,currency,stage,next_action,due_date,created_at,created_by")
       .order("created_at", { ascending: false });
 
     let opportunityRows = opportunityResult.data as OpportunityRow[] | null;
     let opportunityError = opportunityResult.error;
+
+    if (opportunityError?.message?.includes("details")) {
+      const detailsFallback = await supabase
+        .from("sales_opportunities")
+        .select("id,division,customer_id,parent_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by")
+        .order("created_at", { ascending: false });
+
+      opportunityRows = detailsFallback.data as OpportunityRow[] | null;
+      opportunityError = detailsFallback.error;
+    }
 
     if (
       opportunityError?.message?.includes("currency") ||
@@ -427,6 +443,7 @@ export default function SalesPage() {
         company: item.company,
         contact: item.contact || "",
         item: item.item,
+        details: item.details || "",
         amount: Number(item.amount || 0),
         currency: item.currency || "KRW",
         stage: item.stage,
@@ -743,11 +760,12 @@ export default function SalesPage() {
     const company = (parentOpportunity?.company || opportunityForm.company).trim();
     const contact = (parentOpportunity?.contact || opportunityForm.contact).trim();
     const item = opportunityForm.item.trim();
+    const details = opportunityForm.details.trim();
     const amount = Number(opportunityForm.amount.replaceAll(",", ""));
     const nextAction = opportunityForm.nextAction.trim();
 
     if (!company || !item || !nextAction) {
-      alert("고객사, 품목/내용, 다음 액션은 필수입니다.");
+      alert("고객사, 품목/건명, 다음 액션은 필수입니다.");
       return;
     }
 
@@ -766,6 +784,7 @@ export default function SalesPage() {
       company,
       contact,
       item,
+      details,
       amount: canViewAmount ? amount || 0 : 0,
       currency: canViewAmount ? opportunityForm.currency : "KRW",
       stage: opportunityForm.stage,
@@ -778,8 +797,8 @@ export default function SalesPage() {
     }
 
     const selectFields = parentOpportunity
-      ? "id,division,customer_id,parent_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by"
-      : "id,division,customer_id,company,contact,item,amount,currency,stage,next_action,due_date,created_at,created_by";
+      ? "id,division,customer_id,parent_id,company,contact,item,details,amount,currency,stage,next_action,due_date,created_at,created_by"
+      : "id,division,customer_id,company,contact,item,details,amount,currency,stage,next_action,due_date,created_at,created_by";
 
     const salesInsertClient = supabase.from(
       "sales_opportunities"
@@ -800,6 +819,13 @@ export default function SalesPage() {
         return;
       }
 
+      if (error?.message?.includes("details")) {
+        alert(
+          "주요 내용 저장용 DB 컬럼이 아직 반영되지 않았습니다.\nSupabase SQL 실행 후 잠시 뒤 다시 등록해주세요."
+        );
+        return;
+      }
+
       alert(error?.message || "영업기회 등록에 실패했습니다.");
       return;
     }
@@ -813,6 +839,7 @@ export default function SalesPage() {
       company: row.company,
       contact: row.contact || "",
       item: row.item,
+      details: row.details || details,
       amount: Number(row.amount || 0),
       currency: row.currency || "KRW",
       stage: row.stage,
@@ -1007,6 +1034,32 @@ export default function SalesPage() {
             .box.strong {
               border-color: #c7d2fe;
               background: #f5f7ff;
+            }
+            .report-details {
+              margin-top: 16px;
+              border: 1px solid #cbd5e1;
+              border-radius: 12px;
+              background: #fff;
+              min-height: 78mm;
+              padding: 16px 18px;
+            }
+            .report-details h2 {
+              margin: 0 0 12px;
+              padding-bottom: 9px;
+              border-bottom: 2px solid #111827;
+              color: #111827;
+              font-size: 15px;
+            }
+            .report-details p {
+              margin: 0;
+              color: #1e293b;
+              font-size: 13px;
+              line-height: 1.85;
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
+            .report-details .empty {
+              color: #94a3b8;
             }
             .label {
               display: block;
@@ -1211,6 +1264,13 @@ export default function SalesPage() {
               </div>
             </section>
 
+            <section class="report-details">
+              <h2>주요 내용</h2>
+              <p class="${selectedOpportunity.details ? "" : "empty"}">${escapeHtml(
+                selectedOpportunity.details || "등록된 주요 내용이 없습니다."
+              )}</p>
+            </section>
+
             <footer class="footer">
               <span>ZETA 업무통합시스템 영업관리</span>
             </footer>
@@ -1341,12 +1401,29 @@ export default function SalesPage() {
               ))}
             </datalist>
 
-            <Field label="품목/내용">
+            <Field label="품목/건명">
               <input
                 value={opportunityForm.item}
                 onChange={(event) => updateOpportunity("item", event.target.value)}
-                placeholder="예: 신규 장비 문의, 증설 검토, 정기 계약"
+                placeholder="예: SAIA-210 반자동 조립기 장비 개조 문의"
                 style={styles.input}
+              />
+            </Field>
+
+            <Field label="주요 내용">
+              <textarea
+                value={opportunityForm.details}
+                onChange={(event) => updateOpportunity("details", event.target.value)}
+                placeholder={"고객 요청사항, 상담·미팅 내용, 검토 결과 등 보고할 내용을 자세히 입력해주세요.\n예: 기존 디바이스 변경 요청에 따라 개조 범위와 납기를 협의함."}
+                rows={6}
+                style={{
+                  ...styles.input,
+                  minHeight: "132px",
+                  height: "auto",
+                  padding: "12px 14px",
+                  lineHeight: 1.65,
+                  resize: "vertical",
+                }}
               />
             </Field>
 
@@ -1613,6 +1690,31 @@ export default function SalesPage() {
                 <div style={styles.detailBox}>
                   <span style={styles.detailLabel}>예정일</span>
                   <strong>{selectedOpportunity.dueDate || "-"}</strong>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "14px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  background: "#f8fafc",
+                  padding: "14px 16px",
+                }}
+              >
+                <span style={styles.detailLabel}>주요 내용</span>
+                <div
+                  style={{
+                    marginTop: "8px",
+                    color: selectedOpportunity.details ? "#111827" : "#94a3b8",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    lineHeight: 1.75,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {selectedOpportunity.details || "등록된 주요 내용이 없습니다."}
                 </div>
               </div>
 

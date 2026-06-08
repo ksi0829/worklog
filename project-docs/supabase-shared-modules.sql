@@ -84,6 +84,7 @@ create table if not exists public.sales_opportunities (
   company text not null,
   contact text not null default '',
   item text not null,
+  details text not null default '',
   amount numeric not null default 0,
   stage text not null default 'LEAD'
     check (stage in ('LEAD', 'MEETING', 'QUOTE', 'NEGOTIATION', 'WON', 'LOST')),
