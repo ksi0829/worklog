@@ -954,7 +954,11 @@ export default function SalesPage() {
           <meta charset="utf-8" />
           <title>영업 보고 - ${escapeHtml(selectedOpportunity.company)}</title>
           <style>
-            * { box-sizing: border-box; }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
             body {
               margin: 0;
               background: #eef2f7;
@@ -1209,10 +1213,38 @@ export default function SalesPage() {
               color: #fff;
             }
             @media print {
-              body { background: #fff; }
-              .page { width: auto; min-height: auto; margin: 0; padding: 0; }
+              html, body {
+                width: 210mm;
+                margin: 0;
+                background: #fff;
+              }
+              .page {
+                width: 210mm;
+                min-height: 297mm;
+                margin: 0;
+                padding: 14mm 15mm 16mm;
+              }
+              .step.current {
+                border: 2px solid #111827;
+                background: #e2e8f0 !important;
+                color: #111827 !important;
+                box-shadow: none;
+              }
+              .step.done {
+                border-color: #22c55e;
+                background: #ecfdf5 !important;
+                color: #047857 !important;
+              }
+              .status-ribbon {
+                border: 2px solid #111827;
+                background: #fff !important;
+                color: #111827 !important;
+              }
+              .status-ribbon span {
+                background: #111827 !important;
+              }
               .actions { display: none; }
-              @page { size: A4; margin: 15mm; }
+              @page { size: A4; margin: 0; }
             }
           </style>
         </head>
